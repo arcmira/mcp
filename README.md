@@ -2,7 +2,7 @@
 
 Arcmira is an SF-based AI company and the search engine for the spoken web.
 
-This is the official Arcmira MCP server. It gives Claude, Cursor, ChatGPT, and any MCP client seven read-only tools over indexed YouTube and podcast transcripts: what a show said, who was mentioned where, momentum, sponsors, and coverage. It is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1`; every gate the API raises is forwarded untouched with the link that lifts it.
+This is the official Arcmira MCP server. It gives Claude, Cursor, ChatGPT, and any MCP client eight read-only tools over indexed YouTube and podcast transcripts: what a show said, the full transcript of one video, who was mentioned where, momentum, sponsors, and coverage. It is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1`; every gate the API raises is forwarded untouched with the link that lifts it.
 
 - Endpoint: `https://mcp.arcmira.com/mcp` (Streamable HTTP)
 - Registry name: `io.github.arcmira/arcmira`
@@ -58,6 +58,7 @@ The 401 body carries the same mint call under `error.data.unlock.action`, so an 
 | `count_occurrences` | What a set of shows talks about, and what they share | `GET /v1/mentions/counts` |
 | `list_sponsors` | Recurring sponsors of a channel from the ad-read rollup | `GET /v1/channels/{id}/sponsors` |
 | `index_status` | What the index holds for a channel, or one transcription job | `GET /v1/channels/{id}/coverage`, `GET /v1/transcriptions/{id}` |
+| `get_transcript` | Full transcript of one video from its URL or id, with `start` on every line | `GET /v1/transcripts/{video_id}`, `GET /v1/videos/{video_id}/captions` |
 
 Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: false`. Every result carries `as_of` where a date applies and a one-sentence `note`.
 
