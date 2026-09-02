@@ -9,8 +9,15 @@ import { z } from 'zod';
 import type { ApiClient, Query } from '../src/api.ts';
 import { SRC } from '../src/api.ts';
 import { READ_ONLY, SERVER_INSTRUCTIONS, TOOLS } from '../src/tools.ts';
+import server from '../server.json' with { type: 'json' };
 
 const openapiUrl = process.argv[2] ?? 'https://api.arcmira.com/v1/openapi.json';
+
+/** The registry rejects longer descriptions with a 422 at publish time; catch it here first. */
+if (server.description.length > 100) {
+  console.error(`server.json description is ${server.description.length} characters; the registry allows 100.`);
+  process.exit(1);
+}
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
 const MTS = 'UClWkDGXEzsh77GAhs90wpXw';
 
