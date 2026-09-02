@@ -54,6 +54,17 @@ describe('the v1 client', () => {
     }
   });
 
+  it('a legacy string error becomes a typed not_found that keeps the message', async () => {
+    const client = createApiClient({}, 'k');
+    const result = await withFetch(() => Response.json({ error: 'Transcription request not found.' }, { status: 404 }), () => client.get('/v1/transcriptions/x'));
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.error.code, 'not_found');
+      assert.equal(result.error.type, 'not_found');
+      assert.equal(result.error.message, 'Transcription request not found.');
+    }
+  });
+
   it('a non-JSON upstream answer is a typed server error, never a throw', async () => {
     const client = createApiClient({}, 'k');
     const result = await withFetch(() => new Response('<html>challenge</html>', { status: 403, headers: { 'x-request-id': 'req_edge' } }), () => client.get('/v1/me'));
