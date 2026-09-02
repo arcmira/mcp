@@ -1,0 +1,41 @@
+{
+  "name": "@arcmira/mcp",
+  "version": "0.1.0",
+  "description": "Arcmira MCP server: search the spoken web from Claude, Cursor, ChatGPT, and any MCP client.",
+  "private": true,
+  "mcpName": "io.github.arcmira/arcmira",
+  "license": "UNLICENSED",
+  "author": "Arcmira",
+  "homepage": "https://arcmira.com/docs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arcmira/mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/arcmira/mcp/issues"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8790",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "manifest:check": "node --experimental-strip-types scripts/check-manifest.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "agents": "0.21.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260702.1",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "22.20.1",
+    "typescript": "5.9.3",
+    "wrangler": "4.126.0"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

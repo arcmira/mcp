@@ -1,0 +1,38 @@
+name: Publish to the MCP registry
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm manifest:check
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_${MCP_PUBLISHER_VERSION#v}_linux_amd64.tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher --version
+        env:
+          MCP_PUBLISHER_VERSION: v1.8.1
+      - name: Publish if this version is new
+        run: |
+          version="$(node -p "require('./server.json').version")"
+          if curl -sf "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.arcmira/arcmira&version=${version}" | grep -q "\"version\":\"${version}\""; then
+            echo "io.github.arcmira/arcmira ${version} is already on the registry. Skipping publish."
+            exit 0
+          fi
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
