@@ -67,6 +67,13 @@ function isErrorBody(value: unknown): value is { error: ApiErrorBody } {
   return typeof error === 'object' && error !== null && typeof (error as ApiErrorBody).code === 'string';
 }
 
+/** A few older v1 routes still answer { error: "message" }. The message is kept; the envelope is ours. */
+function legacyErrorMessage(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const error = (value as { error?: unknown }).error;
+  return typeof error === 'string' && error.length > 0 ? error : null;
+}
+
 export function createApiClient(env: Env, apiKey: string): ApiClient {
   const base = (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
   return {
@@ -89,6 +96,20 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
         return { ok: true, status: response.status, body: body as never };
       }
       if (isErrorBody(body)) return { ok: false, status: response.status, error: body.error };
+      const legacy = legacyErrorMessage(body);
+      if (legacy !== null) {
+        return {
+          ok: false,
+          status: response.status,
+          error: {
+            type: response.status === 404 ? 'not_found' : response.status < 500 ? 'invalid_request_error' : 'server_error',
+            code: response.status === 404 ? 'not_found' : 'upstream_error',
+            message: legacy,
+            doc_url: 'https://arcmira.com/docs/errors#not_found',
+            request_id: response.headers.get('x-request-id') ?? `mcp_${crypto.randomUUID()}`,
+          },
+        };
+      }
       return {
         ok: false,
         status: response.status,
