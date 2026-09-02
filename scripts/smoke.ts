@@ -4,8 +4,9 @@
  *   ARCMIRA_KEY=arc_tk_... node --experimental-strip-types scripts/smoke.ts [mcp-url]
  *
  * Lists the tools, then makes one call per tool and one call per gate row the key can hit.
- * With no key every call must be the mint-a-trial-key gate. Prints one line per call and never
- * prints the key. Exit 1 when any call is not what the manifest promises.
+ * With no key the transport must answer 401 with the OAuth challenge, and the script stops there.
+ * Prints one line per call and never prints the key. Exit 1 when any call is not what the
+ * manifest promises.
  */
 import { Client } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
@@ -32,8 +33,18 @@ const CALLS: Array<{ label: string; tool: string; args: Record<string, unknown>;
   { label: 'gate: job on key', tool: 'index_status', args: { jobId: '00000000-0000-4000-8000-000000000000' }, expect: 'either' },
 ];
 
-const client = new Client({ name: 'arcmira-mcp-smoke', version: '0.1.0' });
-const transport = new StreamableHTTPClientTransport(url, key ? { requestInit: { headers: { authorization: `Bearer ${key}` } } } : {});
+if (!key) {
+  const probe = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '0' } } }) });
+  const challenge = probe.headers.get('www-authenticate') ?? '';
+  const metadataUrl = /resource_metadata="([^"]+)"/.exec(challenge)?.[1];
+  const metadata = metadataUrl ? ((await (await fetch(metadataUrl)).json()) as { authorization_servers?: string[] }) : null;
+  const ok = probe.status === 401 && metadata !== null && Array.isArray(metadata.authorization_servers) && metadata.authorization_servers.length > 0;
+  console.log(`${ok ? 'ok' : 'UNEXPECTED'}         no key: ${probe.status} ${challenge || '(no WWW-Authenticate)'} -> ${metadata?.authorization_servers?.join(', ') ?? '-'}`);
+  process.exit(ok ? 0 : 1);
+}
+
+const client = new Client({ name: 'arcmira-mcp-smoke', version: '0.2.0' });
+const transport = new StreamableHTTPClientTransport(url, { requestInit: { headers: { authorization: `Bearer ${key}` } } });
 await client.connect(transport);
 
 const tools = await client.listTools();
@@ -81,7 +92,7 @@ for (const call of CALLS) {
   const result = await client.callTool({ name: call.tool, arguments: call.args });
   const text = (result.content as Array<{ type: string; text?: string }>).find((part) => part.type === 'text')?.text ?? '';
   const isError = result.isError === true;
-  const expect = key ? call.expect : 'gate';
+  const expect = call.expect;
   const verdict = expect === 'either' ? 'ok' : (expect === 'gate') === isError ? 'ok' : 'UNEXPECTED';
   if (verdict !== 'ok') failed = true;
   console.log(`${verdict.padEnd(10)} ${call.label.padEnd(24)} ${call.tool.padEnd(19)} ${isError ? 'isError' : 'result '} ${String(Date.now() - started).padStart(5)}ms  ${summarize(result.structuredContent, text)}`);

@@ -1,6 +1,7 @@
 import { createMcpHandler } from 'agents/mcp/server';
 import pkg from '../package.json' with { type: 'json' };
 import { apiKeyOf, createApiClient, type Env } from './api.ts';
+import { AUTHORIZATION_SERVER_PATH, PROTECTED_RESOURCE_PATH, authorizationServerMetadata, challenge, isOAuthBearer, protectedResourceMetadata, tokenIsLive } from './auth.ts';
 import { MCP_PATH, createServer } from './server.ts';
 
 // Only the default export: workerd reads every named export of the entry module as an entrypoint.
@@ -13,7 +14,8 @@ function landing(): Response {
     version: pkg.version,
     mcp: `https://mcp.arcmira.com${MCP_PATH}`,
     transport: 'streamable-http',
-    auth: 'Authorization: Bearer <arc_sk_ account key or arc_tk_ trial key>',
+    auth: 'OAuth through the host (sign in at arcmira.com), or Authorization: Bearer <arc_sk_ account key or arc_tk_ trial key>',
+    oauth: `https://mcp.arcmira.com${PROTECTED_RESOURCE_PATH}`,
     mint_trial_key: 'POST https://api.arcmira.com/v1/trial-keys?src=mcp-tool',
     docs: 'https://arcmira.com/docs',
     source: 'https://github.com/arcmira/mcp',
@@ -25,12 +27,18 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === MCP_PATH) {
       const key = apiKeyOf(request);
-      const api = key === null ? null : createApiClient(env, key);
+      if (key === null) return challenge(url.origin);
+      if (isOAuthBearer(key) && !(await tokenIsLive(key, env))) return challenge(url.origin);
+      const api = createApiClient(env, key);
       return createMcpHandler(() => createServer(api), {
         route: MCP_PATH,
         allowedOriginHostnames: BROWSER_ORIGINS,
       })(request, env, ctx);
     }
+    if (url.pathname === PROTECTED_RESOURCE_PATH || url.pathname === `${PROTECTED_RESOURCE_PATH}${MCP_PATH}`) {
+      return Response.json(protectedResourceMetadata(url.origin, env), { headers: { 'cache-control': 'public, max-age=300' } });
+    }
+    if (url.pathname === AUTHORIZATION_SERVER_PATH) return authorizationServerMetadata(env);
     if (url.pathname === '/' || url.pathname === '/health') return landing();
     return Response.json({ error: { code: 'not_found', message: `Nothing at ${url.pathname}. The MCP endpoint is ${MCP_PATH}.` } }, { status: 404 });
   },

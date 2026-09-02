@@ -3,7 +3,7 @@
   "name": "io.github.arcmira/arcmira",
   "description": "Search indexed YouTube and podcast transcripts. Who is mentioned where, momentum, and sponsors.",
   "repository": { "url": "https://github.com/arcmira/mcp", "source": "github" },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "websiteUrl": "https://arcmira.com/docs",
   "remotes": [
     {
