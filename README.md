@@ -11,7 +11,17 @@ This is the official Arcmira MCP server. It gives Claude, Cursor, ChatGPT, and a
 
 ## Connect
 
-Send an API key as a bearer token. Two keys work:
+Two ways in. Hosts that speak the MCP authorization spec sign you in; everything else sends a key.
+
+**Sign in through the host.** Add `https://mcp.arcmira.com/mcp` with no key. The server answers 401 with an OAuth challenge, the host registers itself against `api.arcmira.com`, opens arcmira.com for sign-in and consent, and connects with a token that carries the permissions you allowed. Tokens refresh on their own; revoke a host under Settings, Connected apps.
+
+```bash
+claude mcp add --transport http arcmira https://mcp.arcmira.com/mcp
+```
+
+Claude Desktop, claude.ai, ChatGPT, and Cursor: add the URL as a custom connector or MCP server with no headers and follow the sign-in prompt.
+
+**Send a key.** Any client that cannot do the sign-in sends a bearer token instead, and the server skips OAuth:
 
 - An account key (`arc_sk_...`) from https://arcmira.com. Plan and scopes decide what each tool returns.
 - A trial key (`arc_tk_...`), minted with no login. It reads exactly what a free account reads, with a smaller row allotment and a 7 day expiry:
@@ -20,13 +30,9 @@ Send an API key as a bearer token. Two keys work:
 curl -X POST "https://api.arcmira.com/v1/trial-keys?src=mcp-tool"
 ```
 
-Claude Code:
-
 ```bash
 claude mcp add --transport http arcmira https://mcp.arcmira.com/mcp --header "Authorization: Bearer $ARCMIRA_API_KEY"
 ```
-
-Cursor, Windsurf, and other JSON-configured clients:
 
 ```json
 {
@@ -39,9 +45,7 @@ Cursor, Windsurf, and other JSON-configured clients:
 }
 ```
 
-Claude Desktop and ChatGPT: add `https://mcp.arcmira.com/mcp` as a custom connector and paste the key when asked for a bearer token.
-
-A call with no key returns a blocking error whose `unlock.action` is the mint call above, so an agent can get its own trial key and reconnect.
+The 401 body carries the same mint call under `error.data.unlock.action`, so an agent that cannot sign in can get its own trial key and reconnect. Discovery: `https://mcp.arcmira.com/.well-known/oauth-protected-resource` names the authorization server; `https://api.arcmira.com/.well-known/oauth-authorization-server` lists its endpoints.
 
 ## Tools
 
