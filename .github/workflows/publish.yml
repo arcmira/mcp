@@ -3,6 +3,10 @@ name: Publish to the MCP registry
 on:
   workflow_dispatch:
 
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
 permissions:
   contents: read
   id-token: write
