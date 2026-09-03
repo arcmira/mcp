@@ -31,6 +31,10 @@ const CALLS: Array<{ label: string; tool: string; args: Record<string, unknown>;
   { label: 'gate: sponsor filter', tool: 'list_sponsors', args: { youtubeChannelId: TBPN, status: 'active' }, expect: 'either' },
   { label: 'gate: mentions dateTo', tool: 'list_mentions', args: { entityId: 'ent_14', dateTo: '2026-01-01' }, expect: 'either' },
   { label: 'gate: job on key', tool: 'index_status', args: { jobId: '00000000-0000-4000-8000-000000000000' }, expect: 'either' },
+  { label: 'captions tbpn', tool: 'get_transcript', args: { video: 'https://www.youtube.com/watch?v=cdLeJU_1UH8' }, expect: 'either' },
+  { label: 'captions german', tool: 'get_transcript', args: { video: 'VbaNcJXVmI4', language: 'de,en' }, expect: 'either' },
+  { label: 'premium on trial', tool: 'get_transcript', args: { video: 'cdLeJU_1UH8', quality: 'premium' }, expect: 'either' },
+  { label: 'premium paid', tool: 'get_transcript', args: { video: 'cdLeJU_1UH8', quality: 'premium', range: { start: 0, end: 300 } }, expect: 'either' },
 ];
 
 if (!key) {
@@ -69,11 +73,12 @@ function summarize(structured: unknown, text: string): string {
     return `${error.code} gate=${error.gate ?? '-'} param=${error.param ?? '-'} unlock=${unlock.url ?? '-'}`;
   }
   const parts: string[] = [];
-  for (const key of ['entities', 'chunks', 'mentions', 'cards', 'rows', 'sponsors']) {
+  for (const key of ['entities', 'chunks', 'mentions', 'cards', 'rows', 'sponsors', 'lines', 'paragraphs', 'speakers', 'languages']) {
     if (Array.isArray(body[key])) parts.push(`${key}=${(body[key] as unknown[]).length}`);
   }
   if (body.channel) parts.push(`channel=${JSON.stringify(body.channel).slice(0, 80)}`);
   if (body.transcription) parts.push('transcription');
+  if (body.premium_job) parts.push(`premium_job=${(body.premium_job as Record<string, unknown>).job_id}`);
   if (body.as_of !== undefined) parts.push(`as_of=${body.as_of}`);
   if (body.access) parts.push(`access=${(body.access as Record<string, unknown>).code}`);
   return parts.join(' ') || JSON.stringify(body).slice(0, 160);
