@@ -20,6 +20,7 @@ export const TOOL_NAMES = [
   'list_sponsors',
   'index_status',
   'count_occurrences',
+  'get_transcript',
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
@@ -206,7 +207,7 @@ const entityMomentum = tool({
       return errorResult(result.error);
     }
     if (cards.length === 0) {
-      return errorResult(notFound('entity_not_found', `No indexed entity for ${unresolved.join(', ')}. Call resolve_entities first.`));
+      return errorResult(localError('not_found', 'entity_not_found', `No indexed entity for ${unresolved.join(', ')}. Call resolve_entities first.`));
     }
     return okResult({
       cards,
@@ -306,8 +307,80 @@ const countOccurrences = tool({
   },
 });
 
-function notFound(code: string, message: string): ApiErrorBody {
-  return { type: 'not_found', code, message, doc_url: `https://arcmira.com/docs/errors#${code}`, request_id: `mcp_${crypto.randomUUID()}` };
+const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+
+const VIDEO_URL_FORMS: readonly RegExp[] = [
+  /youtube\.com\/[^#]*[?&]v=([^&#]+)/i,
+  /youtu\.be\/([^/?#]+)/i,
+  /youtube\.com\/(?:shorts|live|embed|v)\/([^/?#]+)/i,
+];
+
+export function extractVideoId(video: string): string | null {
+  if (VIDEO_ID.test(video)) return video;
+  for (const form of VIDEO_URL_FORMS) {
+    const candidate = form.exec(video)?.[1];
+    if (candidate !== undefined && VIDEO_ID.test(candidate)) return candidate;
+  }
+  return null;
+}
+
+function withWatchUrl(body: Record<string, unknown>, id: string): Record<string, unknown> {
+  const video = body.video;
+  if (typeof video !== 'object' || video === null) return body;
+  const row = video as Row;
+  if (row.watch_url !== undefined) return body;
+  return { ...body, video: { ...row, watch_url: watchUrl(row.id ?? id, null) } };
+}
+
+function errorWithLanguages(error: ApiErrorBody, languages: unknown[]): ToolResult {
+  const body = { error, languages };
+  return { content: [{ type: 'text', text: JSON.stringify(body) }], structuredContent: body, isError: true };
+}
+
+const getTranscript = tool({
+  name: 'get_transcript',
+  description: "Full transcript of one YouTube video from its URL or 11-character id, with `start` seconds on every line. Call it when the user names a specific video or pastes a link, or when a search hit needs its surrounding context; not for finding videos (`resolve_entities`, `search_transcripts`). The default is the video's own captions, creator-written when they exist and YouTube's auto captions otherwise, returned from our cache when we have it and fetched from YouTube when we do not, costing one row per fifteen minutes of video. Pass `language` as a priority list like `de,en` to pick a caption track; `languages` in the result says which tracks exist. `quality: premium` returns Arcmira's own transcript: every line carries `speaker`, because Premium always diarizes and we identify each speaker from the audio, the video, and internal and community review, which is right most of the time and wrong sometimes; say so when a name matters. Premium needs a paid plan and bills more rows; the tool tells you the plan and the row count with an unlock link before spending anything. `timestamps: false` returns the text as paragraphs when you only need to read. Never quote a transcript back in full; quote the lines that answer, with their `start` and the `watchUrl`.",
+  inputSchema: z.object({
+    video: z.string()
+      .describe('One YouTube video: a watch URL, a youtu.be link, a /shorts/, /live/, or /embed/ URL, or a bare 11-character id.')
+      .refine((value) => extractVideoId(value) !== null, {
+        message: 'Pass a watch URL with v=, a youtu.be link, a /shorts/, /live/, or /embed/ URL, or a bare 11-character video id.',
+      }),
+    quality: z.enum(['captions', 'premium']).optional().describe('captions is the default and reads the video\'s own caption track. premium is Arcmira\'s own diarized transcript; it needs a paid plan and bills more rows. The account setting transcripts.quality overrides the default.'),
+    language: z.string().optional().describe('A comma-separated priority list of caption language codes, like de,en. Use asr for any auto-generated track and asr-<code> for a specific auto track. Defaults to the account setting, then en, then the video\'s first track.'),
+    timestamps: z.boolean().optional().describe('Default true, which returns lines each carrying start seconds. false returns paragraphs for reading.'),
+    range: z.object({
+      start: z.number().min(0).describe('Window start in seconds from the beginning of the video. Non-negative.'),
+      end: z.number().min(0).describe('Window end in seconds. Non-negative and greater than start.'),
+    }).refine((value) => value.end > value.start, { message: 'range.end must be greater than range.start.' })
+      .optional()
+      .describe('Return only this window of the video and bill only its minutes.'),
+  }),
+  fronts: ['get_transcript', 'get_video_captions'],
+  async run(input, api) {
+    const id = extractVideoId(input.video);
+    if (id === null) {
+      return errorResult(localError('invalid_request_error', 'invalid_video_id', 'No video id in that value. Pass a watch URL with v=, a youtu.be link, a /shorts/, /live/, or /embed/ URL, or a bare 11-character id.'));
+    }
+    const result = await api.get(`/v1/transcripts/${encodeURIComponent(id)}`, {
+      format: 'v2',
+      quality: input.quality,
+      language: input.language,
+      timestamps: input.timestamps === false ? 'false' : undefined,
+      start: input.range?.start,
+      end: input.range?.end,
+    });
+    if (result.ok) return okResult(withWatchUrl(result.body, id));
+    const error = result.error as ApiErrorBody & { languages?: unknown };
+    if (error.code !== 'transcript_unavailable' || error.languages !== undefined) return errorResult(error);
+    const captions = await api.get(`/v1/videos/${encodeURIComponent(id)}/captions`);
+    if (!captions.ok || !Array.isArray(captions.body.languages)) return errorResult(error);
+    return errorWithLanguages(error, captions.body.languages);
+  },
+});
+
+function localError(type: string, code: string, message: string): ApiErrorBody {
+  return { type, code, message, doc_url: `https://arcmira.com/docs/errors#${code}`, request_id: `mcp_${crypto.randomUUID()}` };
 }
 
 export const TOOLS: readonly AnyToolSpec[] = [
@@ -318,6 +391,7 @@ export const TOOLS: readonly AnyToolSpec[] = [
   listSponsors,
   indexStatus,
   countOccurrences,
+  getTranscript,
 ];
 
 /** What every connecting client loads before its first call. Steering lives here and in the tool descriptions, nowhere else. */

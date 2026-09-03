@@ -30,6 +30,7 @@ const SAMPLE_INPUTS: Record<string, Record<string, unknown>> = {
   list_sponsors: { youtubeChannelId: TBPN, minAdReads: 3, status: 'active', limit: 10 },
   index_status: { youtubeChannelId: MTS, jobId: '00000000-0000-4000-8000-000000000000' },
   count_occurrences: { channelIds: [TBPN, MTS], entityIds: ['ent_14'], entityTypes: ['topic'], mode: 'mentions', recency: 'quarter', publishedBefore: '2026-09-01', limit: 20 },
+  get_transcript: { video: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', quality: 'captions', language: 'en', timestamps: true, range: { start: 0, end: 60 } },
 };
 
 interface Operation {

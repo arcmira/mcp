@@ -39,3 +39,18 @@ export function gate(code: string, extra: Partial<ApiErrorBody> = {}): ApiResult
 export function ok(body: Record<string, unknown>): ApiResult {
   return { ok: true, status: 200, body };
 }
+
+export function failure(code: string, extra: Partial<ApiErrorBody> & Record<string, unknown> = {}): ApiResult {
+  return {
+    ok: false,
+    status: 404,
+    error: {
+      type: 'not_found',
+      code,
+      message: `${code} fixture`,
+      doc_url: `https://arcmira.com/docs/errors#${code}`,
+      request_id: 'req_fixture',
+      ...extra,
+    },
+  };
+}

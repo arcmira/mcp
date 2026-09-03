@@ -1,16 +1,27 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { READ_ONLY, SERVER_INSTRUCTIONS, TOOLS, TOOL_NAMES } from '../src/tools.ts';
+import { extractVideoId, READ_ONLY, SERVER_INSTRUCTIONS, TOOLS, TOOL_NAMES } from '../src/tools.ts';
 import { resolvePublishedAfter } from '../src/recency.ts';
-import { fakeApi, gate, ok } from './fake-api.ts';
+import { fakeApi, failure, gate, ok } from './fake-api.ts';
 
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
+const VIDEO = 'dQw4w9WgXcQ';
 const NOW = new Date('2026-09-02T12:00:00.000Z');
 
 describe('the manifest', () => {
-  it('is the seven tools in the spec order', () => {
+  it('is the eight tools in the spec order', () => {
     assert.deepEqual(TOOLS.map((tool) => tool.name), [...TOOL_NAMES]);
+    assert.deepEqual([...TOOL_NAMES], [
+      'search_transcripts',
+      'resolve_entities',
+      'list_mentions',
+      'entity_momentum',
+      'list_sponsors',
+      'index_status',
+      'count_occurrences',
+      'get_transcript',
+    ]);
   });
 
   it('marks every tool read-only, non-destructive, idempotent, closed-world', () => {
@@ -189,5 +200,128 @@ describe('count_occurrences', () => {
     assert.deepEqual(call.query.entity_types, ['topic']);
     assert.match(String(call.query.published_after), /^\d{4}-\d{2}-\d{2}$/);
     assert.equal(call.query.limit, 20);
+  });
+});
+
+describe('get_transcript', () => {
+  it('reads an id out of every accepted link form and rejects the rest', () => {
+    assert.equal(extractVideoId(`https://www.youtube.com/watch?list=RDaaa&v=${VIDEO}&t=30s`), VIDEO);
+    assert.equal(extractVideoId(`https://youtu.be/${VIDEO}?t=30`), VIDEO);
+    assert.equal(extractVideoId(`https://www.youtube.com/shorts/${VIDEO}`), VIDEO);
+    assert.equal(extractVideoId(`https://www.youtube.com/embed/${VIDEO}?start=10#top`), VIDEO);
+    assert.equal(extractVideoId(VIDEO), VIDEO);
+    assert.equal(extractVideoId('https://vimeo.com/123456789'), null);
+    assert.equal(extractVideoId(`https://example.com/watch?v=${VIDEO}`), null);
+    assert.equal(extractVideoId('dQw4'), null);
+    const schema = toolNamed('get_transcript').inputSchema;
+    assert.equal(schema.safeParse({ video: 'the ramp episode' }).success, false);
+    assert.equal(schema.safeParse({ video: `https://www.youtube.com/watch?v=${VIDEO}` }).success, true);
+  });
+
+  it('sends the v2 query with the window, the language list, and the timestamps opt-out', async () => {
+    const api = fakeApi({ '/v1/transcripts': ok({ video: { id: VIDEO }, lines: [] }) });
+    await toolNamed('get_transcript').run({ video: `https://youtu.be/${VIDEO}`, quality: 'premium', language: 'de,en', timestamps: false, range: { start: 30, end: 90 } }, api);
+    const [call] = api.calls;
+    assert.equal(call.path, `/v1/transcripts/${VIDEO}`);
+    assert.equal(call.query.format, 'v2');
+    assert.equal(call.query.quality, 'premium');
+    assert.equal(call.query.language, 'de,en');
+    assert.equal(call.query.timestamps, 'false');
+    assert.equal(call.query.start, 30);
+    assert.equal(call.query.end, 90);
+  });
+
+  it('leaves timestamps out unless the caller turns them off', async () => {
+    const api = fakeApi({ '/v1/transcripts': ok({ lines: [] }) });
+    await toolNamed('get_transcript').run({ video: VIDEO, timestamps: true }, api);
+    await toolNamed('get_transcript').run({ video: VIDEO }, api);
+    assert.equal(api.calls[0].query.timestamps, undefined);
+    assert.equal(api.calls[1].query.timestamps, undefined);
+  });
+
+  it('forwards the body untouched and fills the watch url on video', async () => {
+    const body = {
+      video: { id: VIDEO, title: 'Never Gonna Give You Up' },
+      lines: [{ start: 12, text: 'hello' }],
+      note: 'quote the lines that answer',
+      access: { code: 'premium_not_enabled' },
+      premium_job: { job_id: 'job_7', next_poll_seconds: 30 },
+      rows_billed: 4,
+      as_of: '2026-08-04',
+    };
+    const api = fakeApi({ '/v1/transcripts': ok(body) });
+    const result = await toolNamed('get_transcript').run({ video: VIDEO }, api);
+    const out = result.structuredContent as Record<string, unknown> & { video: Record<string, unknown> };
+    assert.equal(result.isError, undefined);
+    assert.equal(out.video.watch_url, `https://arcmira.com/watch?v=${VIDEO}`);
+    assert.equal(out.video.title, 'Never Gonna Give You Up');
+    assert.deepEqual(out.lines, body.lines);
+    assert.equal(out.note, body.note);
+    assert.deepEqual(out.access, body.access);
+    assert.deepEqual(out.premium_job, body.premium_job);
+    assert.equal(out.rows_billed, 4);
+    assert.equal(out.as_of, '2026-08-04');
+  });
+
+  it('leaves a watch url the API already sent', async () => {
+    const sent = 'https://arcmira.com/watch?v=other12345six&t=5';
+    const api = fakeApi({ '/v1/transcripts': ok({ video: { id: VIDEO, watch_url: sent }, lines: [] }) });
+    const result = await toolNamed('get_transcript').run({ video: VIDEO }, api);
+    assert.equal((result.structuredContent as { video: Record<string, unknown> }).video.watch_url, sent);
+  });
+
+  it('forwards a premium gate untouched in one call', async () => {
+    const denial = gate('premium_transcript_requested');
+    const api = fakeApi({ '/v1/transcripts': denial });
+    const result = await toolNamed('get_transcript').run({ video: VIDEO, quality: 'premium' }, api);
+    assert.equal(result.isError, true);
+    if (!denial.ok) assert.deepEqual(result.structuredContent, { error: denial.error });
+    assert.deepEqual(JSON.parse(result.content[0].text), result.structuredContent);
+    assert.equal(api.calls.length, 1);
+  });
+
+  it('keeps retry_after_seconds on a fetching transcript and asks for no captions', async () => {
+    const api = fakeApi({ '/v1/transcripts': failure('transcript_fetching', { type: 'server_error', retry_after_seconds: 20 }) });
+    const result = await toolNamed('get_transcript').run({ video: VIDEO }, api);
+    assert.equal(result.isError, true);
+    assert.equal((result.structuredContent as { error: { code: string; retry_after_seconds: number } }).error.code, 'transcript_fetching');
+    assert.equal((result.structuredContent as { error: { retry_after_seconds: number } }).error.retry_after_seconds, 20);
+    assert.equal(api.calls.length, 1);
+  });
+
+  it('answers an unavailable transcript with the caption tracks that do exist', async () => {
+    const missing = failure('transcript_unavailable');
+    const languages = [{ code: 'de', kind: 'creator' }, { code: 'asr-en', kind: 'asr' }];
+    const api = fakeApi({ '/v1/transcripts': missing, '/v1/videos': ok({ languages }) });
+    const result = await toolNamed('get_transcript').run({ video: VIDEO }, api);
+    assert.equal(result.isError, true);
+    if (!missing.ok) assert.deepEqual(result.structuredContent, { error: missing.error, languages });
+    assert.deepEqual(JSON.parse(result.content[0].text), result.structuredContent);
+    assert.equal(api.calls.length, 2);
+    assert.equal(api.calls[1].path, `/v1/videos/${VIDEO}/captions`);
+  });
+
+  it('forwards the transcript error alone when the caption read also fails', async () => {
+    const missing = failure('transcript_unavailable');
+    const api = fakeApi({ '/v1/transcripts': missing, '/v1/videos': failure('not_found') });
+    const result = await toolNamed('get_transcript').run({ video: VIDEO }, api);
+    assert.equal(result.isError, true);
+    if (!missing.ok) assert.deepEqual(result.structuredContent, { error: missing.error });
+    assert.equal(api.calls.length, 2);
+  });
+
+  it('does not re-read captions when the error already lists them', async () => {
+    const api = fakeApi({ '/v1/transcripts': failure('transcript_unavailable', { languages: ['de', 'en'] }) });
+    const result = await toolNamed('get_transcript').run({ video: VIDEO }, api);
+    assert.equal(result.isError, true);
+    assert.equal(api.calls.length, 1);
+  });
+
+  it('refuses a video it cannot read an id out of without calling v1', async () => {
+    const api = fakeApi({ '/v1/transcripts': ok({ lines: [] }) });
+    const result = await toolNamed('get_transcript').run({ video: 'the ramp episode' }, api);
+    assert.equal(result.isError, true);
+    assert.equal((result.structuredContent as { error: { code: string } }).error.code, 'invalid_video_id');
+    assert.equal(api.calls.length, 0);
   });
 });
