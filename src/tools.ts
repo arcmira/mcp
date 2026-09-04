@@ -363,7 +363,6 @@ const getTranscript = tool({
       return errorResult(localError('invalid_request_error', 'invalid_video_id', 'No video id in that value. Pass a watch URL with v=, a youtu.be link, a /shorts/, /live/, or /embed/ URL, or a bare 11-character id.'));
     }
     const result = await api.get(`/v1/transcripts/${encodeURIComponent(id)}`, {
-      format: 'v2',
       quality: input.quality,
       language: input.language,
       timestamps: input.timestamps === false ? 'false' : undefined,
