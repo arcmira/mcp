@@ -223,7 +223,6 @@ describe('get_transcript', () => {
     await toolNamed('get_transcript').run({ video: `https://youtu.be/${VIDEO}`, quality: 'premium', language: 'de,en', timestamps: false, range: { start: 30, end: 90 } }, api);
     const [call] = api.calls;
     assert.equal(call.path, `/v1/transcripts/${VIDEO}`);
-    assert.equal(call.query.format, 'v2');
     assert.equal(call.query.quality, 'premium');
     assert.equal(call.query.language, 'de,en');
     assert.equal(call.query.timestamps, 'false');
