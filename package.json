@@ -1,6 +1,6 @@
 {
   "name": "@arcmira/mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Arcmira MCP server: search the spoken web from Claude, Cursor, ChatGPT, and any MCP client.",
   "private": true,
   "mcpName": "io.github.arcmira/arcmira",

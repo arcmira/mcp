@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.arcmira/arcmira",
-  "description": "Search indexed YouTube and podcast transcripts. Who is mentioned where, momentum, and sponsors.",
+  "description": "Search indexed YouTube and podcast transcripts. Full transcripts, mentions, momentum, and sponsors.",
   "repository": { "url": "https://github.com/arcmira/mcp", "source": "github" },
-  "version": "0.2.0",
+  "version": "0.3.0",
   "websiteUrl": "https://arcmira.com/docs",
   "remotes": [
     {
@@ -12,7 +12,7 @@
       "headers": [
         {
           "name": "Authorization",
-          "description": "Bearer <key>. An arc_sk_ account key from arcmira.com, or an arc_tk_ trial key minted with POST https://api.arcmira.com/v1/trial-keys (no login).",
+          "description": "Bearer <key>. An arc_sk_ account key from arcmira.com, or an arc_tk_ trial key minted with POST https://api.arcmira.com/v1/trial-keys (no login). Omit it and the host signs you in through OAuth.",
           "isRequired": false,
           "isSecret": true
         }
