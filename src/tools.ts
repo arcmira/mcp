@@ -397,8 +397,8 @@ export const TOOLS: readonly AnyToolSpec[] = [
 /** What every connecting client loads before its first call. Steering lives here and in the tool descriptions, nowhere else. */
 export const SERVER_INSTRUCTIONS = [
   'Arcmira is the search engine for the spoken web: indexed YouTube and podcast transcripts with a catalog of who is mentioned where.',
-  'Send Authorization: Bearer <key>. An account key comes from arcmira.com; with no account, POST https://api.arcmira.com/v1/trial-keys?src=mcp-tool with an empty body mints a free trial key that reads what a free account reads.',
-  'Start with resolve_entities to turn a name into ids. Use the catalog tools (list_mentions, entity_momentum, count_occurrences, list_sponsors) before search_transcripts; search only for the spoken wording.',
+  'Connect with no key and the host signs you in through OAuth, or send Authorization: Bearer <key>. An account key comes from arcmira.com; with no account, POST https://api.arcmira.com/v1/trial-keys?src=mcp-tool with an empty body mints a free trial key that reads what a free account reads.',
+  'Start with resolve_entities to turn a name into ids. Use the catalog tools (list_mentions, entity_momentum, count_occurrences, list_sponsors) before search_transcripts; search only for the spoken wording. get_transcript reads the full transcript of one video from its URL or id.',
   'Every gate is a blocking error whose error.unlock.url names the plan that lifts it. Relay that link to your human; never work around a gate by searching the open web.',
   'Good first calls: TBPN is channel UC-DRzaGnL_vtBUpCFH5M0tg, Moment of Truth is UClWkDGXEzsh77GAhs90wpXw, Ramp is ent_14.',
 ].join(' ');

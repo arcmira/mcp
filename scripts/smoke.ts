@@ -10,6 +10,7 @@
  */
 import { Client } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import pkg from '../package.json' with { type: 'json' };
 
 const url = new URL(process.argv[2] ?? 'https://mcp.arcmira.com/mcp');
 const key = process.env.ARCMIRA_KEY ?? '';
@@ -47,7 +48,7 @@ if (!key) {
   process.exit(ok ? 0 : 1);
 }
 
-const client = new Client({ name: 'arcmira-mcp-smoke', version: '0.2.0' });
+const client = new Client({ name: 'arcmira-mcp-smoke', version: pkg.version });
 const transport = new StreamableHTTPClientTransport(url, { requestInit: { headers: { authorization: `Bearer ${key}` } } });
 await client.connect(transport);
 
