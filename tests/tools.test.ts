@@ -29,7 +29,9 @@ describe('the manifest', () => {
   });
 
   for (const tool of TOOLS) {
-    it(`${tool.name}: description under 220 words, no em dash, every input described, fronts named`, () => {
+    it(`${tool.name}: title under 40 characters, description under 220 words, no dashes, every input described, fronts named`, () => {
+      assert.ok(tool.title.length > 0 && tool.title.length < 40, 'title missing or too long');
+      assert.ok(!/[—–-]/.test(tool.title), 'dash in title');
       assert.ok(!tool.description.includes('—'), 'em dash in description');
       assert.ok(tool.description.split(/\s+/).length < 220, 'description too long');
       const schema = z.toJSONSchema(tool.inputSchema) as { properties?: Record<string, { description?: string }> };

@@ -12,7 +12,7 @@ export function createServer(api: ApiClient | null): McpServer {
   for (const tool of TOOLS) {
     server.registerTool(
       tool.name,
-      { description: tool.description, inputSchema: tool.inputSchema, annotations: READ_ONLY },
+      { title: tool.title, description: tool.description, inputSchema: tool.inputSchema, annotations: READ_ONLY },
       async (input) => (api === null ? errorResult(noKeyError()) : tool.run(input, api)),
     );
   }
