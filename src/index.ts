@@ -20,7 +20,7 @@ function landing(): Response {
     mint_trial_key: 'POST https://api.arcmira.com/v1/trial-keys?src=mcp-tool',
     server_card: `https://mcp.arcmira.com${[...SERVER_CARD_PATHS][0]}`,
     icon: `https://mcp.arcmira.com${ICON_PATH}`,
-    docs: 'https://arcmira.com/docs',
+    docs: 'https://arcmira.com/docs/mcp',
     source: 'https://github.com/arcmira/mcp',
   });
 }

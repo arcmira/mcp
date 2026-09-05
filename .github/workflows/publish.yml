@@ -2,6 +2,14 @@ name: Publish to the MCP registry
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "publish: add server.json's version if the registry lacks it. update: replace the record of the version server.json names (metadata only, same version)."
+        type: choice
+        default: publish
+        options:
+          - publish
+          - update
 
 concurrency:
   group: publish
@@ -32,6 +40,7 @@ jobs:
         env:
           MCP_PUBLISHER_VERSION: v1.8.1
       - name: Publish if this version is new
+        if: ${{ inputs.mode != 'update' }}
         run: |
           version="$(node -p "require('./server.json').version")"
           if curl -sf "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.arcmira/arcmira&version=${version}" | grep -q "\"version\":\"${version}\""; then
@@ -40,3 +49,16 @@ jobs:
           fi
           ./mcp-publisher login github-oidc
           ./mcp-publisher publish
+
+      - name: Update the record of this version in place
+        if: ${{ inputs.mode == 'update' }}
+        run: |
+          version="$(node -p "require('./server.json').version")"
+          ./mcp-publisher login github-oidc
+          token="$(node -p "JSON.parse(require('fs').readFileSync(require('os').homedir() + '/.mcp_publisher_token', 'utf8')).token")"
+          code="$(curl -s -o response.json -w '%{http_code}' -X PUT \
+            "https://registry.modelcontextprotocol.io/v0/servers/io.github.arcmira%2Farcmira/versions/${version}" \
+            -H "authorization: Bearer ${token}" -H "content-type: application/json" --data-binary @server.json)"
+          echo "PUT answered ${code}"
+          node -e "const r=require('./response.json'); console.log(JSON.stringify({websiteUrl: r.server?.websiteUrl, icons: r.server?.icons, updatedAt: r._meta?.['io.modelcontextprotocol.registry/official']?.updatedAt}, null, 2))"
+          test "${code}" = "200"
