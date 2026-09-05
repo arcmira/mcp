@@ -26,6 +26,8 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 
 export interface ToolSpec<Schema extends z.ZodObject<z.ZodRawShape>> {
   readonly name: ToolName;
+  /** Short noun phrase a host shows in its tool picker. Under 40 characters, no dash. */
+  readonly title: string;
   /** Loaded context. Verbatim from SPEC-mcp-manifest section 3; revise there first. */
   readonly description: string;
   readonly inputSchema: Schema;
@@ -73,6 +75,7 @@ function watchUrl(videoId: unknown, startSeconds: unknown): string | null {
 
 const searchTranscripts = tool({
   name: 'search_transcripts',
+  title: 'Spoken slices for one topic',
   description: "Retrieve short spoken slices from indexed YouTube and podcast transcripts that answer one topic or phrase. Use it after you know what to look for: a named entity from `resolve_entities`, a channel id, or a phrase the user gave you. Pass every show in scope in `channelIds` unless drilling into one. One topic per call; do not concatenate unrelated names. Do NOT use it to learn whether a name was ever said (`list_mentions`), how hot something is (`entity_momentum`), what a show talks about (`count_occurrences`), or who sponsors a show (`list_sponsors`); those are catalog tools and are cheaper and exact. For any question with 'newest', 'latest', 'recently', or 'this week', pass `recency` or `publishedAfter`; otherwise results span the whole index. Quote `text` as a spoken beat of a few sentences and cite `watchUrl` with `publishedAt`. An empty `chunks` array means the index has no hit; say so, never search the open web.",
   inputSchema: z.object({
     query: z.string().min(2).describe('One topic or phrase, 2 or more characters. One topic per call.'),
@@ -109,6 +112,7 @@ function resolveNote(entities: Row[]): string {
 
 const resolveEntities = tool({
   name: 'resolve_entities',
+  title: 'Name to stable entity ids',
   description: 'Turn a name, alias, YouTube URL, `@handle`, or `UC` channel id into typed rows: person, organization, product, topic, channel, each with a stable `ent_` id and, for channels, `youtube_channel_id`. Call this first whenever the user names a show, person, brand, or topic and you do not already hold its id. A row with `suggested: true` is an exact match with far more traction than any other row; use it without asking. When a person and a channel both match closely (a creator who is also a show), return the options to the user instead of choosing. Do not call it again for an id you already hold, and do not use it to search transcripts.',
   inputSchema: z.object({
     q: z.string().min(2).describe('A name, alias, YouTube URL, @handle, or UC channel id. 2 or more characters.'),
@@ -128,6 +132,7 @@ const resolveEntities = tool({
 
 const listMentions = tool({
   name: 'list_mentions',
+  title: 'Mention history of an entity',
   description: "Catalog rows for 'has X mentioned Y yet', 'first seen', or 'when did they last talk about it'. Exact and cheap: one row per mention with the video, timestamp, and channel, newest first. Call it before `search_transcripts` for any existence question, and search only afterwards if you need the spoken wording of a clip that this tool proved exists. `indexed_through` is the newest media we have for that channel; an empty list means no mention in our index up to that date, not that it never happened. Never fill an empty result from the open web.",
   inputSchema: z.object({
     entityId: ENT.describe('The entity to look for, as ent_... from resolve_entities.'),
@@ -183,6 +188,7 @@ const listMentions = tool({
 
 const entityMomentum = tool({
   name: 'entity_momentum',
+  title: 'Mention momentum with a verdict',
   description: "Spoken-web heat for up to four entities: mentions in the last 7 and 30 days versus the prior 30 days, an absolute-delta verdict (`accelerating`, `flat`, `fading`, `none`), the top shows in the window, and on Pro keys the paid-versus-organic split. Call it for 'is X hot', 'momentum', 'trending', 'who is talking about X most'. Lead with the verdict and `as_of`. It measures the shows we index, not the whole internet, and it is a count, not a score; never invent a heat number. Use `search_transcripts` afterwards only for quotes that explain the curve.",
   inputSchema: z.object({
     entityIds: z.array(ENT).min(1).max(4).describe('One to four entity ids (ent_...) from resolve_entities.'),
@@ -219,6 +225,7 @@ const entityMomentum = tool({
 
 const listSponsors = tool({
   name: 'list_sponsors',
+  title: 'Recurring sponsors of a channel',
   description: "Recurring sponsors of a YouTube channel from our ad-read rollup, ordered by ad-read count. Call it for 'who sponsors X', 'advertisers on X', 'is brand Y a sponsor of X'. Pass a `UC` channel id from `resolve_entities`, not a handle. Free and trial keys receive the free slice the website shows (the top sponsors plus the total count); the full list, status filters, and lower thresholds need a Pro plan and the tool tells you so with an unlock link. Never assemble a sponsor list from transcript search; if this tool is gated or empty, say that.",
   inputSchema: z.object({
     youtubeChannelId: UC.describe('The YouTube channel id (UC...), from resolve_entities. Not a handle.'),
@@ -251,6 +258,7 @@ const listSponsors = tool({
 
 const indexStatus = tool({
   name: 'index_status',
+  title: 'Index coverage for a channel',
   description: "What we have for a channel, or the state of one transcription job. For a `UC` channel id it returns how many videos are searchable and the newest indexed publish date, so you can say 'as of' honestly or explain an empty search. For a transcription `jobId` (account keys only) it returns the pipeline status and when to poll again. Call it when a search or mention lookup came back empty, before telling the user we do not cover something. It cannot request indexing; say that channel backfill is not available yet rather than promising it.",
   inputSchema: z.object({
     youtubeChannelId: UC.optional().describe('A YouTube channel id (UC...) to report coverage for.'),
@@ -279,6 +287,7 @@ const indexStatus = tool({
 
 const countOccurrences = tool({
   name: 'count_occurrences',
+  title: 'What a set of shows talks about',
   description: "Catalog counts of which entities a set of channels mention or host, as a small ranked table. Call it for 'what do they talk about', 'hottest topics on X', 'how often does X mention Y', or 'which brands appear on both X and Y'. Match `entityTypes` to the question: subjects and topics `[\"topic\"]`, guests `[\"person\"]`, brands `[\"organization\",\"product\"]`; omit it and organizations dominate. Passing two or more `channelIds` also returns `shared`, the entities on more than one of those channels ranked by the smallest per-channel count, which is true overlap. Counts are all-time unless you pass `publishedAfter` or `recency`. Do not use it for quotes (`search_transcripts`), a single yes-or-no existence check (`list_mentions`), or heat versus a prior window (`entity_momentum`).",
   inputSchema: z.object({
     channelIds: z.array(UC).max(8).optional().describe('YouTube channel ids (UC...) to count over, at most 8. Two or more also return shared.'),
@@ -339,6 +348,7 @@ function errorWithLanguages(error: ApiErrorBody, languages: unknown[]): ToolResu
 
 const getTranscript = tool({
   name: 'get_transcript',
+  title: 'Full transcript of one video',
   description: "Full transcript of one YouTube video from its URL or 11-character id, with `start` seconds on every line. Call it when the user names a specific video or pastes a link, or when a search hit needs its surrounding context; not for finding videos (`resolve_entities`, `search_transcripts`). The default is the video's own captions, creator-written when they exist and YouTube's auto captions otherwise, returned from our cache when we have it and fetched from YouTube when we do not, costing one row per fifteen minutes of video. Pass `language` as a priority list like `de,en` to pick a caption track; `languages` in the result says which tracks exist. `quality: premium` returns Arcmira's own transcript: every line carries `speaker`, because Premium always diarizes and we identify each speaker from the audio, the video, and internal and community review, which is right most of the time and wrong sometimes; say so when a name matters. Premium needs a paid plan and bills more rows; the tool tells you the plan and the row count with an unlock link before spending anything. `timestamps: false` returns the text as paragraphs when you only need to read. Never quote a transcript back in full; quote the lines that answer, with their `start` and the `watchUrl`.",
   inputSchema: z.object({
     video: z.string()

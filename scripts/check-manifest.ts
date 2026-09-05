@@ -69,6 +69,8 @@ function recorder(calls: Array<{ path: string; query: Query }>): ApiClient {
 
 for (const tool of TOOLS) {
   const label = `tool ${tool.name}`;
+  if (tool.title.length === 0 || tool.title.length >= 40) fail(`${label}: title missing or 40 characters or more`);
+  if (/[—–-]/.test(tool.title)) fail(`${label}: dash in title`);
   if (tool.description.includes('—')) fail(`${label}: em dash in description`);
   if (tool.description.split(/\s+/).length >= 220) fail(`${label}: description is 220 words or more`);
   const schema = z.toJSONSchema(tool.inputSchema) as { properties?: Record<string, { description?: string }> };
