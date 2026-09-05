@@ -55,7 +55,15 @@ jobs:
         run: |
           version="$(node -p "require('./server.json').version")"
           ./mcp-publisher login github-oidc
-          token="$(node -p "JSON.parse(require('fs').readFileSync(require('os').homedir() + '/.mcp_publisher_token', 'utf8')).token")"
+          token="$(node -e "
+            const fs = require('fs'), os = require('os');
+            const paths = [os.homedir() + '/.config/mcp-publisher/token.json', os.homedir() + '/.mcp_publisher_token'];
+            const file = paths.find((p) => fs.existsSync(p));
+            if (!file) throw new Error('mcp-publisher wrote no token file at ' + paths.join(' or '));
+            const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+            process.stdout.write(saved.token ?? saved.Token ?? saved.access_token ?? '');
+          ")"
+          test -n "${token}"
           code="$(curl -s -o response.json -w '%{http_code}' -X PUT \
             "https://registry.modelcontextprotocol.io/v0/servers/io.github.arcmira%2Farcmira/versions/${version}" \
             -H "authorization: Bearer ${token}" -H "content-type: application/json" --data-binary @server.json)"
