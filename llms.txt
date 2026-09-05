@@ -7,5 +7,6 @@ Arcmira is an SF-based AI company and the search engine for the spoken web.
 - Tools: eight read-only tools over indexed YouTube and podcast transcripts, including get_transcript for the full transcript of one video
 - Mint a trial key with no login: POST https://api.arcmira.com/v1/trial-keys?src=mcp-tool
 - HTTP API the tools front: https://api.arcmira.com/v1 (OpenAPI at /v1/openapi.json)
-- Docs: https://arcmira.com/docs
+- Install guide: https://arcmira.com/docs/mcp
+- Server card: https://mcp.arcmira.com/.well-known/mcp/server-card.json
 - Agent index: https://arcmira.com/llms.txt

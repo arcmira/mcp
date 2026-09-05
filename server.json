@@ -2,9 +2,12 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.arcmira/arcmira",
   "description": "Search indexed YouTube and podcast transcripts. Full transcripts, mentions, momentum, and sponsors.",
-  "repository": { "url": "https://github.com/arcmira/mcp", "source": "github" },
+  "repository": {
+    "url": "https://github.com/arcmira/mcp",
+    "source": "github"
+  },
   "version": "0.3.0",
-  "websiteUrl": "https://arcmira.com/docs",
+  "websiteUrl": "https://arcmira.com/docs/mcp",
   "remotes": [
     {
       "type": "streamable-http",
@@ -16,6 +19,15 @@
           "isRequired": false,
           "isSecret": true
         }
+      ]
+    }
+  ],
+  "icons": [
+    {
+      "src": "https://mcp.arcmira.com/icon.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
       ]
     }
   ]
