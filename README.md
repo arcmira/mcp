@@ -1,12 +1,15 @@
-# Arcmira MCP
+# Arcmira MCP: search YouTube and podcast transcripts from Claude, Cursor, ChatGPT, and Codex
 
 Arcmira is an SF-based AI company and the search engine for the spoken web.
 
-This is the official Arcmira MCP server. It gives Claude, Cursor, ChatGPT, and any MCP client eight read-only tools over indexed YouTube and podcast transcripts: what a show said, the full transcript of one video, who was mentioned where, momentum, sponsors, and coverage. It is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1`; every gate the API raises is forwarded untouched with the link that lifts it.
+The official Arcmira MCP server. Eight read-only tools over indexed YouTube and podcast transcripts: the full transcript of one video, what a show said, who was mentioned where, momentum, sponsors, and coverage. One remote URL, sign in through your host or send a key, or mint a free trial key with no account.
+
+It is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1`; every gate the API raises is forwarded untouched with the link that lifts it.
 
 - Endpoint: `https://mcp.arcmira.com/mcp` (Streamable HTTP)
 - Registry name: `io.github.arcmira/arcmira`
-- Docs: https://arcmira.com/docs
+- Install guide: https://arcmira.com/docs/mcp
+- Server card: https://mcp.arcmira.com/.well-known/mcp/server-card.json
 - HTTP API the tools front: https://api.arcmira.com/v1/openapi.json
 
 ## Connect
@@ -19,7 +22,11 @@ Two ways in. Hosts that speak the MCP authorization spec sign you in; everything
 claude mcp add --transport http arcmira https://mcp.arcmira.com/mcp
 ```
 
-Claude Desktop, claude.ai, ChatGPT, and Cursor: add the URL as a custom connector or MCP server with no headers and follow the sign-in prompt.
+```bash
+codex mcp add arcmira --url https://mcp.arcmira.com/mcp
+```
+
+Claude Desktop, claude.ai, ChatGPT, and Cursor: add the URL as a custom connector or MCP server with no headers and follow the sign-in prompt. Per-host steps are on https://arcmira.com/docs/mcp.
 
 **Send a key.** Any client that cannot do the sign-in sends a bearer token instead, and the server skips OAuth:
 

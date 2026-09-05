@@ -1,12 +1,26 @@
 {
   "name": "@arcmira/mcp",
   "version": "0.3.0",
-  "description": "Arcmira MCP server: search the spoken web from Claude, Cursor, ChatGPT, and any MCP client.",
+  "description": "Remote MCP server for YouTube and podcast transcripts: full transcripts, mentions, momentum, sponsors. OAuth or free trial key.",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "youtube",
+    "youtube-transcript",
+    "podcast",
+    "podcast-transcripts",
+    "transcripts",
+    "claude",
+    "cursor",
+    "codex",
+    "chatgpt"
+  ],
   "private": true,
   "mcpName": "io.github.arcmira/arcmira",
   "license": "UNLICENSED",
   "author": "Arcmira",
-  "homepage": "https://arcmira.com/docs",
+  "homepage": "https://arcmira.com/docs/mcp",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/arcmira/mcp.git"
