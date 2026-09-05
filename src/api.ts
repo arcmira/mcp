@@ -74,6 +74,11 @@ function legacyErrorMessage(value: unknown): string | null {
   return typeof error === 'string' && error.length > 0 ? error : null;
 }
 
+/**
+ * Every credential goes upstream as Authorization: Bearer. v1 reads an arc_sk_ account key and an
+ * arc_tk_ trial key from either header, but an OAuth access token only from Authorization, so the
+ * bearer form is the one that admits all three.
+ */
 export function createApiClient(env: Env, apiKey: string): ApiClient {
   const base = (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
   return {
@@ -89,7 +94,7 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
       }
       url.searchParams.set('src', SRC);
       const response = await fetch(url, {
-        headers: { 'x-api-key': apiKey, accept: 'application/json', 'user-agent': USER_AGENT },
+        headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json', 'user-agent': USER_AGENT },
       });
       const body: unknown = await response.json().catch(() => null);
       if (response.ok && body !== null && typeof body === 'object') {

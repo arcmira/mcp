@@ -39,8 +39,24 @@ describe('the v1 client', () => {
     assert.equal(url.searchParams.has('published_after'), false);
     assert.equal(url.searchParams.get('src'), SRC);
     const headers = new Headers(init.headers);
-    assert.equal(headers.get('x-api-key'), 'arc_tk_fixture');
+    assert.equal(headers.get('authorization'), 'Bearer arc_tk_fixture');
+    assert.equal(headers.has('x-api-key'), false);
     assert.equal(headers.get('user-agent'), USER_AGENT);
+  });
+
+  it('forwards an OAuth access token as a bearer, which is the only header v1 reads one from', async () => {
+    const seen: Array<{ init: RequestInit }> = [];
+    const client = createApiClient({}, 'OpaqueOAuthTokenAAAAAAAAAAAAAAAA');
+    await withFetch(
+      (_url, init) => {
+        seen.push({ init });
+        return Response.json({ ok: true });
+      },
+      () => client.get('/v1/me'),
+    );
+    const headers = new Headers(seen[0].init.headers);
+    assert.equal(headers.get('authorization'), 'Bearer OpaqueOAuthTokenAAAAAAAAAAAAAAAA');
+    assert.equal(headers.has('x-api-key'), false);
   });
 
   it('forwards an error body untouched', async () => {
