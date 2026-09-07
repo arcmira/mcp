@@ -13,6 +13,16 @@ export function okResult(body: Record<string, unknown>): ToolResult {
 }
 
 /**
+ * An answer whose text block is written for the model rather than serialized from the body. The
+ * transcript would otherwise ride twice, once as text and once as structured content. The spec's
+ * serialized-JSON rule is a SHOULD, and no tool here declares an outputSchema, so nothing
+ * validates the text against the body.
+ */
+export function renderedResult(text: string, structuredContent: Record<string, unknown>): ToolResult {
+  return { content: [{ type: 'text', text }], structuredContent };
+}
+
+/**
  * A gate or failure. The catalog body rides as both the text and the structured content, so an
  * agent that reads either sees the same code, gate, and unlock.
  */
