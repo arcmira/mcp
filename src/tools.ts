@@ -2,7 +2,8 @@ import { z } from 'zod';
 import type { ToolAnnotations } from '@modelcontextprotocol/server';
 import type { ApiClient, ApiErrorBody } from './api.ts';
 import { RECENCY, resolvePublishedAfter } from './recency.ts';
-import { errorResult, okResult, type ToolResult } from './result.ts';
+import { errorResult, okResult, renderedResult, type ToolResult } from './result.ts';
+import { renderTranscript } from './transcript-text.ts';
 
 /** Every tool reads our index and nothing else. The Claude and ChatGPT directories require all four. */
 export const READ_ONLY: ToolAnnotations = {
@@ -349,7 +350,7 @@ function errorWithLanguages(error: ApiErrorBody, languages: unknown[]): ToolResu
 const getTranscript = tool({
   name: 'get_transcript',
   title: 'Full transcript of one video',
-  description: "Full transcript of one YouTube video from its URL or 11-character id, with `start` seconds on every line. Call it when the user names a specific video or pastes a link, or when a search hit needs its surrounding context; not for finding videos (`resolve_entities`, `search_transcripts`). The default is the video's own captions, creator-written when they exist and YouTube's auto captions otherwise, returned from our cache when we have it and fetched from YouTube when we do not, costing one row per fifteen minutes of video. Pass `language` as a priority list like `de,en` to pick a caption track; `languages` in the result says which tracks exist. `quality: premium` returns Arcmira's own transcript: every line carries `speaker`, because Premium always diarizes and we identify each speaker from the audio, the video, and internal and community review, which is right most of the time and wrong sometimes; say so when a name matters. Premium needs a paid plan and bills more rows; the tool tells you the plan and the row count with an unlock link before spending anything. `timestamps: false` returns the text as paragraphs when you only need to read. Never quote a transcript back in full; quote the lines that answer, with their `start` and the `watchUrl`.",
+  description: "Full transcript of one YouTube video from its URL or 11-character id, with `start` seconds on every line. Call it when the user names a specific video or pastes a link, or when a search hit needs its surrounding context; not for finding videos (`resolve_entities`, `search_transcripts`). The default is the video's own captions, creator-written when they exist and YouTube's auto captions otherwise, costing one row per fifteen minutes of video. Pass `language` as a priority list like `de,en` to pick a caption track; `languages` in the result says which tracks exist. `quality: premium` returns Arcmira's own transcript: every line carries `speaker`, because Premium always diarizes and we identify each speaker from the audio, the video, and internal and community review, which is right most of the time and wrong sometimes; say so when a name matters. Premium needs a paid plan and bills more rows; the tool tells you the plan and the row count with an unlock link before spending anything. `timestamps: false` returns the text as paragraphs when you only need to read. The transcript is the text block of the result, one line per `[start] text`, and `structuredContent` carries the metadata without the lines. Never quote a transcript back in full; quote the lines that answer, with their `start` and the `watchUrl`.",
   inputSchema: z.object({
     video: z.string()
       .describe('One YouTube video: a watch URL, a youtu.be link, a /shorts/, /live/, or /embed/ URL, or a bare 11-character id.')
@@ -379,7 +380,11 @@ const getTranscript = tool({
       start: input.range?.start,
       end: input.range?.end,
     });
-    if (result.ok) return okResult(withWatchUrl(result.body, id));
+    if (result.ok) {
+      const body = withWatchUrl(result.body, id);
+      const rendered = renderTranscript(body);
+      return rendered === null ? okResult(body) : renderedResult(rendered.text, rendered.structured);
+    }
     const error = result.error as ApiErrorBody & { languages?: unknown };
     if (error.code !== 'transcript_unavailable' || error.languages !== undefined) return errorResult(error);
     const captions = await api.get(`/v1/videos/${encodeURIComponent(id)}/captions`);
