@@ -101,6 +101,7 @@ pnpm test           # node:test
 pnpm typecheck
 pnpm manifest:check # every tool call matches the live OpenAPI document
 ARCMIRA_KEY=arc_tk_... node --experimental-strip-types scripts/smoke.ts http://localhost:8790/mcp
+ARCMIRA_KEY=arc_tk_... node --experimental-strip-types scripts/measure-transcript-bytes.ts <video-id> http://localhost:8790/mcp
 ```
 
 The tool descriptions are loaded context and are the steering surface. They are maintained in Arcmira's manifest spec first and copied here verbatim; revise there before here.
