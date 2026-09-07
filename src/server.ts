@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import pkg from '../package.json' with { type: 'json' };
 import { noKeyError, type ApiClient } from './api.ts';
-import { errorResult } from './result.ts';
+import { errorResult, withRateLimit } from './result.ts';
 import { READ_ONLY, SERVER_INSTRUCTIONS, TOOLS } from './tools.ts';
 
 export const MCP_PATH = '/mcp';
@@ -13,7 +13,7 @@ export function createServer(api: ApiClient | null): McpServer {
     server.registerTool(
       tool.name,
       { title: tool.title, description: tool.description, inputSchema: tool.inputSchema, annotations: READ_ONLY },
-      async (input) => (api === null ? errorResult(noKeyError()) : tool.run(input, api)),
+      async (input) => (api === null ? errorResult(noKeyError()) : withRateLimit(await tool.run(input, api), api.rateLimit())),
     );
   }
   return server;

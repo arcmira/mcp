@@ -10,6 +10,7 @@ export function fakeApi(answers: Record<string, ApiResult>): ApiClient & { calls
   const calls: RecordedCall[] = [];
   return {
     calls,
+    rateLimit: () => null,
     async get(path, query = {}) {
       calls.push({ path, query });
       const key = Object.keys(answers).find((prefix) => path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`));

@@ -59,6 +59,7 @@ function pathMatches(template: string, actual: string): boolean {
 
 function recorder(calls: Array<{ path: string; query: Query }>): ApiClient {
   return {
+    rateLimit: () => null,
     async get(path, query = {}) {
       calls.push({ path, query });
       const body: Record<string, unknown> = { data: [], chunks: [], cards: [], sponsors: [], rows: [], channel: {}, entity: {}, meta: {}, note: 'x' };

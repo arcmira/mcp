@@ -92,6 +92,8 @@ A gate is an MCP tool result with `isError: true` whose content is the API's err
 
 Switch on `error.code`, relay `error.unlock.url` to the human, and honor `retry_after_seconds` on `rate_limited`. A 200 that withheld something (Premium transcript text, the paid-versus-organic split, sponsors past the free slice) is a normal result carrying the same body under `access`. The full catalog is at https://arcmira.com/docs/errors.
 
+Every result, gates included, carries the key's budget after the call under `_meta["arcmira.com/rate_limit"]` as `{ "limit": 20, "remaining": 17, "reset": 1788819360 }`, read from the API's RateLimit headers. `reset` is Unix seconds at the next window. Hosts do not show `_meta`; a client that watches its spend reads it there.
+
 ## Develop
 
 ```bash
