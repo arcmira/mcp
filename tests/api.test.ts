@@ -81,6 +81,17 @@ describe('the v1 client', () => {
     }
   });
 
+  it('remembers the RateLimit headers of the latest answer, and keeps the last seen when an answer has none', async () => {
+    const client = createApiClient({}, 'k');
+    assert.equal(client.rateLimit(), null);
+    await withFetch(() => Response.json({}, { headers: { 'RateLimit-Limit': '20', 'RateLimit-Remaining': '17', 'RateLimit-Reset': '1788819360' } }), () => client.get('/v1/me'));
+    assert.deepEqual(client.rateLimit(), { limit: 20, remaining: 17, reset: 1788819360 });
+    await withFetch(() => Response.json({ error: { type: 'rate_limit_error', code: 'rate_limited', message: 'm', doc_url: 'd', request_id: 'r' } }, { status: 429, headers: { 'RateLimit-Limit': '20', 'RateLimit-Remaining': '0', 'RateLimit-Reset': '1788819420' } }), () => client.get('/v1/me'));
+    assert.deepEqual(client.rateLimit(), { limit: 20, remaining: 0, reset: 1788819420 }, 'a refusal carries the headers too');
+    await withFetch(() => new Response('<html>challenge</html>', { status: 403 }), () => client.get('/v1/me'));
+    assert.deepEqual(client.rateLimit(), { limit: 20, remaining: 0, reset: 1788819420 }, 'an edge answer without the headers does not erase the last reading');
+  });
+
   it('a non-JSON upstream answer is a typed server error, never a throw', async () => {
     const client = createApiClient({}, 'k');
     const result = await withFetch(() => new Response('<html>challenge</html>', { status: 403, headers: { 'x-request-id': 'req_edge' } }), () => client.get('/v1/me'));

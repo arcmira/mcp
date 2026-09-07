@@ -28,8 +28,32 @@ export type ApiResult<T = Record<string, unknown>> =
 
 export type Query = Record<string, string | number | string[] | undefined | null>;
 
+/** The per-key throttle as v1 reports it on every response: RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset. */
+export interface RateLimit {
+  limit: number;
+  remaining: number;
+  /** Unix seconds when the fixed window rolls over. */
+  reset: number;
+}
+
 export interface ApiClient {
   get<T = Record<string, unknown>>(path: string, query?: Query): Promise<ApiResult<T>>;
+  /** The throttle headers on the latest upstream answer, or null before any call or when the answer carried none. */
+  rateLimit(): RateLimit | null;
+}
+
+/** Reads the three RateLimit headers, or null unless all three are numbers. */
+export function rateLimitOf(headers: Headers): RateLimit | null {
+  const read = (name: string): number | null => {
+    const value = headers.get(name);
+    if (value === null || value.trim() === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  const limit = read('ratelimit-limit');
+  const remaining = read('ratelimit-remaining');
+  const reset = read('ratelimit-reset');
+  return limit === null || remaining === null || reset === null ? null : { limit, remaining, reset };
 }
 
 /**
@@ -81,7 +105,9 @@ function legacyErrorMessage(value: unknown): string | null {
  */
 export function createApiClient(env: Env, apiKey: string): ApiClient {
   const base = (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
+  let latest: RateLimit | null = null;
   return {
+    rateLimit: () => latest,
     async get(path, query = {}) {
       const url = new URL(base + path);
       for (const [key, value] of Object.entries(query)) {
@@ -96,6 +122,7 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
       const response = await fetch(url, {
         headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json', 'user-agent': USER_AGENT },
       });
+      latest = rateLimitOf(response.headers) ?? latest;
       const body: unknown = await response.json().catch(() => null);
       if (response.ok && body !== null && typeof body === 'object') {
         return { ok: true, status: response.status, body: body as never };

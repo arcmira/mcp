@@ -1,11 +1,25 @@
-import type { ApiErrorBody } from './api.ts';
+import type { ApiErrorBody, RateLimit } from './api.ts';
+
+/** The _meta key the budget rides under. Namespaced per the MCP spec; hosts pass _meta through and show none of it. */
+export const RATE_LIMIT_META = 'arcmira.com/rate_limit';
 
 /** A type alias, not an interface: the SDK's result type carries an index signature. */
 export type ToolResult = {
   content: Array<{ type: 'text'; text: string }>;
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
+  _meta?: Record<string, unknown>;
 };
+
+/**
+ * The key's budget after this call, from the latest v1 answer behind it, so a client that watches its
+ * spend sees it on every result including a gate. The HTTP response cannot carry it: the handler streams
+ * the reply, and its headers leave before the tool runs. Unchanged when no upstream answer carried one.
+ */
+export function withRateLimit(result: ToolResult, rateLimit: RateLimit | null): ToolResult {
+  if (rateLimit === null) return result;
+  return { ...result, _meta: { ...result._meta, [RATE_LIMIT_META]: rateLimit } };
+}
 
 /** A usable answer, including a 200 that carries an access block for what was withheld. */
 export function okResult(body: Record<string, unknown>): ToolResult {
