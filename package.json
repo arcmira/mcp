@@ -35,7 +35,8 @@
     "types": "wrangler types",
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types tests/*.test.ts",
-    "manifest:check": "node --experimental-strip-types scripts/check-manifest.ts"
+    "manifest:check": "node --experimental-strip-types scripts/check-manifest.ts",
+    "identity:check": "bash scripts/check-commit-identity.sh"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",

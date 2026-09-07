@@ -13,6 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Every commit is zealous1, signed with the key in .github/allowed_signers
+        run: bash scripts/check-commit-identity.sh
       - uses: pnpm/action-setup@v4
         with:
           version: 10
