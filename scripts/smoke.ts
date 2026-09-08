@@ -77,6 +77,8 @@ function summarize(structured: unknown, text: string): string {
   for (const key of ['entities', 'chunks', 'mentions', 'cards', 'rows', 'sponsors', 'lines', 'paragraphs', 'speakers', 'languages']) {
     if (Array.isArray(body[key])) parts.push(`${key}=${(body[key] as unknown[]).length}`);
   }
+  const inContent = body.transcript_in_content as Record<string, unknown> | undefined;
+  if (inContent) parts.push(`${inContent.form}=${inContent.count}`);
   if (body.channel) parts.push(`channel=${JSON.stringify(body.channel).slice(0, 80)}`);
   if (body.transcription) parts.push('transcription');
   if (body.premium_job) parts.push(`premium_job=${(body.premium_job as Record<string, unknown>).job_id}`);
