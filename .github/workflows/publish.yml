@@ -1,4 +1,5 @@
 name: Publish to the MCP registry
+run-name: Publish to the MCP registry (${{ inputs.mode }})
 
 on:
   workflow_dispatch:
