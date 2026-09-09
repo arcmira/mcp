@@ -1,7 +1,33 @@
-import type { ApiErrorBody, RateLimit } from './api.ts';
+import type { ApiErrorBody, ClientInfo, RateLimit } from './api.ts';
 
 /** The _meta key the budget rides under. Namespaced per the MCP spec; hosts pass _meta through and show none of it. */
 export const RATE_LIMIT_META = 'arcmira.com/rate_limit';
+/** The _meta key the build rides under: which server, which deploy, which API build, and which host asked. */
+export const BUILD_META = 'arcmira.com/build';
+
+export interface BuildMeta {
+  /** This server's package version. */
+  server: string;
+  /** This server's Worker deploy id, null under local dev. */
+  deploy: string | null;
+  /** The API build behind the answer, from v1's X-Arcmira-Build, null when no upstream call was made. */
+  api: string | null;
+  /** The host that asked, as its initialize handshake named it, null when it named nothing. */
+  client: string | null;
+}
+
+export function clientLabel(info: ClientInfo | undefined): string | null {
+  return info?.name ? `${info.name}${info.version ? `/${info.version}` : ''}` : null;
+}
+
+/**
+ * The build behind every result, gates included, so a transcript a host keeps can be joined to
+ * the exact server and API code that produced it. The HTTP response cannot carry it for the same
+ * reason the budget rides here: the reply streams and its headers leave before the tool runs.
+ */
+export function withBuild(result: ToolResult, build: BuildMeta): ToolResult {
+  return { ...result, _meta: { ...result._meta, [BUILD_META]: build } };
+}
 
 /** A type alias, not an interface: the SDK's result type carries an index signature. */
 export type ToolResult = {

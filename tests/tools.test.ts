@@ -10,7 +10,7 @@ const VIDEO = 'dQw4w9WgXcQ';
 const NOW = new Date('2026-09-02T12:00:00.000Z');
 
 describe('the manifest', () => {
-  it('is the eight tools in the spec order', () => {
+  it('is the nine tools in the spec order', () => {
     assert.deepEqual(TOOLS.map((tool) => tool.name), [...TOOL_NAMES]);
     assert.deepEqual([...TOOL_NAMES], [
       'search_transcripts',
@@ -20,6 +20,7 @@ describe('the manifest', () => {
       'list_sponsors',
       'index_status',
       'count_occurrences',
+      'list_episodes',
       'get_transcript',
     ]);
   });
@@ -44,9 +45,11 @@ describe('the manifest', () => {
     });
   }
 
-  it('server instructions carry no em dash and name the trial key mint', () => {
+  it('server instructions carry no em dash, name the trial key mint, and tell the agent to link names to their page', () => {
     assert.ok(!SERVER_INSTRUCTIONS.includes('—'));
     assert.match(SERVER_INSTRUCTIONS, /POST https:\/\/api\.arcmira\.com\/v1\/trial-keys\?src=mcp-tool/);
+    assert.match(SERVER_INSTRUCTIONS, /link the name to that page in markdown/);
+    assert.match(SERVER_INSTRUCTIONS, /never invent an arcmira\.com link/);
   });
 });
 
@@ -95,14 +98,14 @@ describe('resolve_entities', () => {
   it('keeps the catalog row fields and writes a note the agent can act on', async () => {
     const api = fakeApi({
       '/v1/entities/search': ok({
-        data: [{ id: 'ent_6', numeric_id: 6, name: 'TBPN', slug: 'tbpn', type: 'channel', appearance_count: 412, youtube_channel_id: TBPN, suggested: true, recommendations_summary: { x: 1 } }],
+        data: [{ id: 'ent_6', numeric_id: 6, name: 'TBPN', slug: 'tbpn', type: 'channel', appearance_count: 412, youtube_channel_id: TBPN, page: 'https://arcmira.com/yt/@TBPNLive', suggested: true, recommendations_summary: { x: 1 } }],
         query: '@TBPNLive',
         has_more: false,
       }),
     });
     const result = await toolNamed('resolve_entities').run({ q: '@TBPNLive' }, api);
     const body = result.structuredContent as { entities: Array<Record<string, unknown>>; note: string };
-    assert.deepEqual(body.entities, [{ id: 'ent_6', name: 'TBPN', slug: 'tbpn', type: 'channel', appearance_count: 412, youtube_channel_id: TBPN, suggested: true }]);
+    assert.deepEqual(body.entities, [{ id: 'ent_6', name: 'TBPN', slug: 'tbpn', type: 'channel', appearance_count: 412, youtube_channel_id: TBPN, page: 'https://arcmira.com/yt/@TBPNLive', suggested: true }]);
     assert.match(body.note, /without asking/);
     assert.equal(api.calls[0].query.limit, 8);
   });
@@ -113,18 +116,19 @@ describe('list_mentions', () => {
     const api = fakeApi({
       '/v1/mentions': ok({
         data: [{ id: 'men_1', is_appearance: false, start_seconds: 72, media: { video_id: 'abcdefghijk', title: 'T', published_at: '2026-08-04', channel_id: TBPN, source_channel: { id: 'ent_6', name: 'TBPN' } } }],
-        entity: { id: 'ent_14', name: 'Ramp', type: 'organization', numeric_id: 14 },
+        entity: { id: 'ent_14', name: 'Ramp', type: 'organization', numeric_id: 14, slug: 'ramp', page: 'https://arcmira.com/org/ramp', appearances_page: null, mentions_page: null },
         has_more: false,
       }),
       [`/v1/channels/${TBPN}/coverage`]: ok({ channel: { indexed_through: '2026-09-01' } }),
     });
     const result = await toolNamed('list_mentions').run({ entityId: 'ent_14', channelId: TBPN }, api);
     const body = result.structuredContent as Record<string, unknown> & { mentions: Array<Record<string, unknown>> };
-    assert.deepEqual(body.entity, { id: 'ent_14', name: 'Ramp', type: 'organization' });
+    assert.deepEqual(body.entity, { id: 'ent_14', name: 'Ramp', type: 'organization', page: 'https://arcmira.com/org/ramp', appearances_page: null, mentions_page: null, slug: 'ramp' });
     assert.equal(body.indexed_through, '2026-09-01');
     assert.equal(body.count, 1);
     assert.equal(body.mentions[0].watch_url, 'https://arcmira.com/watch?v=abcdefghijk&t=72');
     assert.equal(body.mentions[0].channel_name, 'TBPN');
+    assert.equal(body.mentions[0].channel_page, `https://arcmira.com/yt/${TBPN}`);
     assert.equal(body.as_of, '2026-08-04');
     assert.equal(api.calls.length, 2);
   });
@@ -202,6 +206,58 @@ describe('count_occurrences', () => {
     assert.deepEqual(call.query.entity_types, ['topic']);
     assert.match(String(call.query.published_after), /^\d{4}-\d{2}-\d{2}$/);
     assert.equal(call.query.limit, 20);
+  });
+
+  it('takes videoIds alone, validated as 11-character ids, and sends them as video_ids', async () => {
+    const schema = toolNamed('count_occurrences').inputSchema;
+    assert.equal(schema.safeParse({ videoIds: [VIDEO] }).success, true);
+    assert.equal(schema.safeParse({ videoIds: ['not-an-id'] }).success, false);
+    assert.equal(schema.safeParse({ videoIds: Array.from({ length: 21 }, () => VIDEO) }).success, false);
+    const api = fakeApi({ '/v1/mentions/counts': ok({ rows: [], shared: [], videoIds: [VIDEO], note: 'n' }) });
+    await toolNamed('count_occurrences').run({ videoIds: [VIDEO], entityTypes: ['organization', 'product'] }, api);
+    const [call] = api.calls;
+    assert.deepEqual(call.query.video_ids, [VIDEO]);
+    assert.equal(call.query.channel_ids, undefined);
+    assert.deepEqual(call.query.entity_types, ['organization', 'product']);
+  });
+});
+
+describe('list_episodes', () => {
+  it('needs a UC channel id, never a handle', () => {
+    const schema = toolNamed('list_episodes').inputSchema;
+    assert.equal(schema.safeParse({}).success, false);
+    assert.equal(schema.safeParse({ youtubeChannelId: '@tbpn' }).success, false);
+    assert.equal(schema.safeParse({ youtubeChannelId: TBPN, limit: 26 }).success, false);
+    assert.equal(schema.safeParse({ youtubeChannelId: TBPN, limit: 1 }).success, true);
+  });
+
+  it('calls the channel videos route with the window and forwards the body', async () => {
+    const body = {
+      channel: { id: 'ent_6', youtube_channel_id: TBPN, name: 'TBPN', page: 'https://arcmira.com/yt/@TBPNLive' },
+      episodes: [{ video_id: VIDEO, title: 'TBPN | Friday', published_at: '2026-08-28', watch_url: `https://arcmira.com/watch?v=${VIDEO}` }],
+      returned: 1,
+      has_more: true,
+      indexed_through: '2026-08-28',
+      as_of: '2026-08-28',
+      note: 'n',
+    };
+    const api = fakeApi({ [`/v1/channels/${TBPN}/videos`]: ok(body) });
+    const result = await toolNamed('list_episodes').run({ youtubeChannelId: TBPN, limit: 1, publishedAfter: '2026-08-01' }, api);
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(result.structuredContent, body);
+    const [call] = api.calls;
+    assert.equal(call.path, `/v1/channels/${TBPN}/videos`);
+    assert.equal(call.query.limit, 1);
+    assert.equal(call.query.published_after, '2026-08-01');
+    assert.equal(call.query.published_before, undefined);
+  });
+
+  it('defaults to ten episodes and forwards a gate untouched', async () => {
+    const api = fakeApi({ [`/v1/channels/${TBPN}/videos`]: gate('rate_limited') });
+    const result = await toolNamed('list_episodes').run({ youtubeChannelId: TBPN }, api);
+    assert.equal(api.calls[0].query.limit, 10);
+    assert.equal(result.isError, true);
+    assert.equal((result.structuredContent as { error: { code: string } }).error.code, 'rate_limited');
   });
 });
 

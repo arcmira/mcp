@@ -30,7 +30,7 @@ describe('the server card', () => {
       assert.equal(tool.inputSchema.type, 'object');
       assert.equal(tool.annotations.readOnlyHint, true);
     }
-    assert.equal(card.tools.length, 8);
+    assert.equal(card.tools.length, 9);
   });
 
   it('answers as JSON, cacheable for an hour, readable cross-origin', async () => {
@@ -40,6 +40,6 @@ describe('the server card', () => {
     assert.equal(response.headers.get('cache-control'), 'public, max-age=3600');
     assert.equal(response.headers.get('access-control-allow-origin'), '*');
     const body = (await response.json()) as { tools: unknown[] };
-    assert.equal(body.tools.length, 8);
+    assert.equal(body.tools.length, 9);
   });
 });
