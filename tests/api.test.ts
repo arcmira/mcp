@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { SRC, USER_AGENT, apiKeyOf, createApiClient, noKeyError } from '../src/api.ts';
+import { BUILD_HEADER, CLIENT_HEADER, SRC, USER_AGENT, apiKeyOf, createApiClient, noKeyError } from '../src/api.ts';
 
 function withFetch<T>(handler: (url: URL, init: RequestInit) => Response, body: () => Promise<T>): Promise<T> {
   const original = globalThis.fetch;
@@ -112,5 +112,27 @@ describe('noKeyError', () => {
     assert.equal(error.unlock?.action?.url, 'https://api.arcmira.com/v1/trial-keys?src=mcp-tool');
     assert.match(String(error.unlock?.url), /[?&]src=mcp-tool/);
     assert.ok(!error.message.includes('—'));
+  });
+});
+
+describe('the host and the build', () => {
+  it('forwards the host it was told about and remembers the API build that answered', async () => {
+    const client = createApiClient({}, 'arc_tk_fixture');
+    assert.equal(client.upstreamBuild(), null);
+    let seen: Headers | null = null;
+    await withFetch(async (_url, init) => {
+      seen = new Headers(init.headers);
+      return Response.json({ ok: true }, { headers: { [BUILD_HEADER]: 'v-abc123' } });
+    }, async () => {
+      await client.get('/v1/health');
+      assert.equal(seen?.get(CLIENT_HEADER), null);
+      client.setClient({ name: 'claude-ai', version: '1.2.0' });
+      await client.get('/v1/health');
+      assert.equal(seen?.get(CLIENT_HEADER), 'claude-ai/1.2.0');
+      client.setClient(undefined);
+      await client.get('/v1/health');
+      assert.equal(seen?.get(CLIENT_HEADER), null);
+    });
+    assert.equal(client.upstreamBuild(), 'v-abc123');
   });
 });

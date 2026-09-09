@@ -95,6 +95,8 @@ Switch on `error.code`, relay `error.unlock.url` to the human, and honor `retry_
 
 Every result, gates included, carries the key's budget after the call under `_meta["arcmira.com/rate_limit"]` as `{ "limit": 20, "remaining": 17, "reset": 1788819360 }`, read from the API's RateLimit headers. `reset` is Unix seconds at the next window. Hosts do not show `_meta`; a client that watches its spend reads it there.
 
+Every result also carries `_meta["arcmira.com/build"]`: `server` (this server's version), `deploy` (its Worker deploy id), `api` (the deploy id of the API build that answered, from the `X-Arcmira-Build` response header), and `client` (the host's name and version from its initialize handshake, which the server forwards to the API as `x-arcmira-client`). A transcript a host keeps can be joined to the exact code that produced it.
+
 ## Develop
 
 ```bash

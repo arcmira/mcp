@@ -33,7 +33,7 @@ export default {
       if (key === null) return challenge(url.origin);
       if (isOAuthBearer(key) && !(await tokenIsLive(key, env))) return challenge(url.origin);
       const api = createApiClient(env, key);
-      return createMcpHandler(() => createServer(api), {
+      return createMcpHandler(() => createServer(api, env.CF_VERSION_METADATA?.id ?? null), {
         route: MCP_PATH,
         allowedOriginHostnames: BROWSER_ORIGINS,
       })(request, env, ctx);
