@@ -2,7 +2,7 @@
 
 Arcmira is an SF-based AI company and the search engine for the spoken web.
 
-The official Arcmira MCP server. Eight read-only tools over indexed YouTube and podcast transcripts: the full transcript of one video, what a show said, who was mentioned where, momentum, sponsors, and coverage. One remote URL, sign in through your host or send a key, or mint a free trial key with no account.
+The official Arcmira MCP server. Nine read-only tools over indexed YouTube and podcast transcripts: the full transcript of one video, the newest episodes of a show, what a show said, who was mentioned where, momentum, sponsors, and coverage. One remote URL, sign in through your host or send a key, or mint a free trial key with no account.
 
 It is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1`; every gate the API raises is forwarded untouched with the link that lifts it.
 
@@ -62,7 +62,8 @@ The 401 body carries the same mint call under `error.data.unlock.action`, so an 
 | `search_transcripts` | Short spoken slices for one topic, with watch links and dates | `GET /v1/transcripts/search` |
 | `list_mentions` | Has X mentioned Y yet, first seen, last seen | `GET /v1/mentions` |
 | `entity_momentum` | Mentions in the last 7 and 30 days against the prior 30, with a verdict | `GET /v1/entities/{id}/momentum` |
-| `count_occurrences` | What a set of shows talks about, and what they share | `GET /v1/mentions/counts` |
+| `count_occurrences` | What a set of shows talks about, and what they share; `videoIds` scopes it to one episode | `GET /v1/mentions/counts` |
+| `list_episodes` | The newest indexed episodes of one channel, with the `video_id` the other tools take | `GET /v1/channels/{id}/videos` |
 | `list_sponsors` | Recurring sponsors of a channel from the ad-read rollup | `GET /v1/channels/{id}/sponsors` |
 | `index_status` | What the index holds for a channel, or one transcription job | `GET /v1/channels/{id}/coverage`, `GET /v1/transcriptions/{id}` |
 | `get_transcript` | Full transcript of one video from its URL or id, as text with `[start]` on every line | `GET /v1/transcripts/{video_id}`, `GET /v1/videos/{video_id}/captions` |
@@ -93,6 +94,8 @@ A gate is an MCP tool result with `isError: true` whose content is the API's err
 Switch on `error.code`, relay `error.unlock.url` to the human, and honor `retry_after_seconds` on `rate_limited`. A 200 that withheld something (Premium transcript text, the paid-versus-organic split, sponsors past the free slice) is a normal result carrying the same body under `access`. The full catalog is at https://arcmira.com/docs/errors.
 
 Every result, gates included, carries the key's budget after the call under `_meta["arcmira.com/rate_limit"]` as `{ "limit": 20, "remaining": 17, "reset": 1788819360 }`, read from the API's RateLimit headers. `reset` is Unix seconds at the next window. Hosts do not show `_meta`; a client that watches its spend reads it there.
+
+Every result also carries `_meta["arcmira.com/build"]`: `server` (this server's version), `deploy` (its Worker deploy id), `api` (the deploy id of the API build that answered, from the `X-Arcmira-Build` response header), and `client` (the host's name and version from its initialize handshake, which the server forwards to the API as `x-arcmira-client`). A transcript a host keeps can be joined to the exact code that produced it.
 
 ## Develop
 

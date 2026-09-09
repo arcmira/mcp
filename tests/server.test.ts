@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.ts';
-import { RATE_LIMIT_META, okResult, withRateLimit } from '../src/result.ts';
+import pkg from '../package.json' with { type: 'json' };
+import { BUILD_META, RATE_LIMIT_META, okResult, withRateLimit } from '../src/result.ts';
 
 const RATE_LIMIT = { limit: 20, remaining: 17, reset: 1788819360 };
 
@@ -51,8 +52,14 @@ describe('a tool call through the handler', () => {
     assert.deepEqual(gate.result._meta?.[RATE_LIMIT_META], { ...RATE_LIMIT, remaining: 0 });
   });
 
-  it('carries no _meta when the upstream answer has no RateLimit headers', async () => {
+  it('carries no budget when the upstream answer has no RateLimit headers, and the build always', async () => {
+    const reply = await callTool('resolve_entities', { q: 'Ramp' }, () => Response.json({ entities: [], has_more: false }, { headers: { 'x-arcmira-build': 'v-abc123' } }));
+    assert.equal(reply.result._meta?.[RATE_LIMIT_META], undefined);
+    assert.deepEqual(reply.result._meta?.[BUILD_META], { server: pkg.version, deploy: null, api: 'v-abc123', client: null });
+  });
+
+  it('names the API build null when no upstream call answered', async () => {
     const reply = await callTool('resolve_entities', { q: 'Ramp' }, () => Response.json({ entities: [], has_more: false }));
-    assert.equal(reply.result._meta, undefined);
+    assert.deepEqual(reply.result._meta?.[BUILD_META], { server: pkg.version, deploy: null, api: null, client: null });
   });
 });

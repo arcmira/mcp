@@ -7,7 +7,20 @@ export const USER_AGENT = `arcmira-mcp/${pkg.version} (+https://github.com/arcmi
 
 export interface Env {
   ARCMIRA_API_BASE?: string;
+  /** The running Worker version (wrangler version_metadata). Absent under local dev. */
+  CF_VERSION_METADATA?: { id: string; tag: string; timestamp: string };
 }
+
+/** The host on the other end of the MCP connection, as its initialize handshake named it. */
+export interface ClientInfo {
+  name: string;
+  version?: string;
+}
+
+/** The header v1 reads the host from. Attribution only. */
+export const CLIENT_HEADER = 'x-arcmira-client';
+/** The header v1 answers with: the deploy id of the API build that served the call. */
+export const BUILD_HEADER = 'x-arcmira-build';
 
 /** The v1 error envelope body. Forwarded untouched; the facade never edits a gate. */
 export interface ApiErrorBody {
@@ -38,6 +51,10 @@ export interface RateLimit {
 
 export interface ApiClient {
   get<T = Record<string, unknown>>(path: string, query?: Query): Promise<ApiResult<T>>;
+  /** Name the host every later call is made for. Sent upstream as x-arcmira-client. */
+  setClient(client: ClientInfo | undefined): void;
+  /** The deploy id of the API build behind the latest answer, or null before any answer. */
+  upstreamBuild(): string | null;
   /** The throttle headers on the latest upstream answer, or null before any call or when the answer carried none. */
   rateLimit(): RateLimit | null;
 }
@@ -106,8 +123,14 @@ function legacyErrorMessage(value: unknown): string | null {
 export function createApiClient(env: Env, apiKey: string): ApiClient {
   const base = (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
   let latest: RateLimit | null = null;
+  let build: string | null = null;
+  let client: string | null = null;
   return {
     rateLimit: () => latest,
+    upstreamBuild: () => build,
+    setClient(info) {
+      client = info?.name ? `${info.name}${info.version ? `/${info.version}` : ''}`.slice(0, 120) : null;
+    },
     async get(path, query = {}) {
       const url = new URL(base + path);
       for (const [key, value] of Object.entries(query)) {
@@ -120,9 +143,15 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
       }
       url.searchParams.set('src', SRC);
       const response = await fetch(url, {
-        headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json', 'user-agent': USER_AGENT },
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          accept: 'application/json',
+          'user-agent': USER_AGENT,
+          ...(client ? { [CLIENT_HEADER]: client } : {}),
+        },
       });
       latest = rateLimitOf(response.headers) ?? latest;
+      build = response.headers.get(BUILD_HEADER) ?? build;
       const body: unknown = await response.json().catch(() => null);
       if (response.ok && body !== null && typeof body === 'object') {
         return { ok: true, status: response.status, body: body as never };

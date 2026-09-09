@@ -21,6 +21,7 @@ export const TOOL_NAMES = [
   'list_sponsors',
   'index_status',
   'count_occurrences',
+  'list_episodes',
   'get_transcript',
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -44,6 +45,7 @@ function tool<Schema extends z.ZodObject<z.ZodRawShape>>(spec: ToolSpec<Schema>)
 }
 
 const UC = z.string().regex(/^UC[A-Za-z0-9_-]{22}$/, 'a YouTube channel id starts with UC and is 24 characters');
+const VIDEO = z.string().regex(/^[A-Za-z0-9_-]{11}$/, 'a YouTube video id is 11 characters');
 const ENT = z.string().regex(/^ent_\d+$/, 'an entity id looks like ent_14');
 const ISO_DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}/, 'an ISO date, YYYY-MM-DD');
 const ENTITY_TYPE = z.enum(['person', 'organization', 'product', 'topic', 'channel']);
@@ -72,6 +74,12 @@ function watchUrl(videoId: unknown, startSeconds: unknown): string | null {
   if (typeof videoId !== 'string' || videoId === '') return null;
   const t = typeof startSeconds === 'number' && startSeconds > 0 ? `&t=${startSeconds}` : '';
   return `https://arcmira.com/watch?v=${videoId}${t}`;
+}
+
+/** A channel's arcmira.com page: the one v1 named when it did, else the UC id form, which the site 301s onto the handle. */
+function channelPage(named: unknown, channelId: unknown): string | null {
+  if (typeof named === 'string' && named !== '') return named;
+  return typeof channelId === 'string' && channelId !== '' ? `https://arcmira.com/yt/${channelId}` : null;
 }
 
 const searchTranscripts = tool({
@@ -114,7 +122,7 @@ function resolveNote(entities: Row[]): string {
 const resolveEntities = tool({
   name: 'resolve_entities',
   title: 'Name to stable entity ids',
-  description: 'Turn a name, alias, YouTube URL, `@handle`, or `UC` channel id into typed rows: person, organization, product, topic, channel, each with a stable `ent_` id and, for channels, `youtube_channel_id`. Call this first whenever the user names a show, person, brand, or topic and you do not already hold its id. A row with `suggested: true` is an exact match with far more traction than any other row; use it without asking. When a person and a channel both match closely (a creator who is also a show), return the options to the user instead of choosing. Do not call it again for an id you already hold, and do not use it to search transcripts.',
+  description: 'Turn a name, alias, YouTube URL, `@handle`, or `UC` channel id into typed rows: person, organization, product, topic, channel, each with a stable `ent_` id, its arcmira.com `page`, and, for channels, `youtube_channel_id`. Call this first whenever the user names a show, person, brand, or topic and you do not already hold its id. A row with `suggested: true` is an exact match with far more traction than any other row; use it without asking. When a person and a channel both match closely (a creator who is also a show), return the options to the user instead of choosing. Do not call it again for an id you already hold, and do not use it to search transcripts. When you write an entity into your answer, link its name to `page`.',
   inputSchema: z.object({
     q: z.string().min(2).describe('A name, alias, YouTube URL, @handle, or UC channel id. 2 or more characters.'),
     type: ENTITY_TYPE.optional().describe('Restrict to one entity type.'),
@@ -125,7 +133,7 @@ const resolveEntities = tool({
     const result = await api.get('/v1/entities/search', { q: input.q, type: input.type, limit: input.limit ?? 8 });
     if (!result.ok) return errorResult(result.error);
     const entities = rows(result.body.data).map((row) =>
-      pick(row, ['id', 'name', 'slug', 'type', 'appearance_count', 'youtube_channel_id', 'suggested']),
+      pick(row, ['id', 'name', 'slug', 'type', 'appearance_count', 'youtube_channel_id', 'page', 'suggested']),
     );
     return okResult({ query: input.q, entities, has_more: result.body.has_more === true, note: resolveNote(entities) });
   },
@@ -134,7 +142,7 @@ const resolveEntities = tool({
 const listMentions = tool({
   name: 'list_mentions',
   title: 'Mention history of an entity',
-  description: "Catalog rows for 'has X mentioned Y yet', 'first seen', or 'when did they last talk about it'. Exact and cheap: one row per mention with the video, timestamp, and channel, newest first. Call it before `search_transcripts` for any existence question, and search only afterwards if you need the spoken wording of a clip that this tool proved exists. `indexed_through` is the newest media we have for that channel; an empty list means no mention in our index up to that date, not that it never happened. Never fill an empty result from the open web.",
+  description: "Catalog rows for 'has X mentioned Y yet', 'first seen', or 'when did they last talk about it'. Exact and cheap: one row per mention with the video, timestamp, and channel, newest first. Call it before `search_transcripts` for any existence question, and search only afterwards if you need the spoken wording of a clip that this tool proved exists. `indexed_through` is the newest media we have for that channel; an empty list means no mention in our index up to that date, not that it never happened. Never fill an empty result from the open web. `entity.page` and each row's `channel_page` are arcmira.com pages; link the entity and show names to them when you write them, and for a person link a summary of their appearances or the mentions of them to `entity.appearances_page` or `entity.mentions_page`.",
   inputSchema: z.object({
     entityId: ENT.describe('The entity to look for, as ent_... from resolve_entities.'),
     channelId: UC.optional().describe('Restrict to one YouTube channel id (UC...). Also fills indexed_through.'),
@@ -163,6 +171,7 @@ const listMentions = tool({
         published_at: media.published_at ?? null,
         channel_id: media.channel_id ?? null,
         channel_name: source?.name ?? null,
+        channel_page: channelPage(source?.page, media.channel_id),
         start_seconds: row.start_seconds ?? null,
         watch_url: watchUrl(media.video_id, row.start_seconds),
       };
@@ -175,7 +184,7 @@ const listMentions = tool({
     }
     const entity = (result.body.entity ?? {}) as Row;
     return okResult({
-      entity: pick(entity, ['id', 'name', 'type']),
+      entity: pick(entity, ['id', 'name', 'type', 'page', 'appearances_page', 'mentions_page', 'slug']),
       indexed_through: indexedThrough,
       count: mentions.length,
       mentions,
@@ -190,7 +199,7 @@ const listMentions = tool({
 const entityMomentum = tool({
   name: 'entity_momentum',
   title: 'Mention momentum with a verdict',
-  description: "Spoken-web heat for up to four entities: mentions in the last 7 and 30 days versus the prior 30 days, an absolute-delta verdict (`accelerating`, `flat`, `fading`, `none`), the top shows in the window, and on Pro keys the paid-versus-organic split. Call it for 'is X hot', 'momentum', 'trending', 'who is talking about X most'. Lead with the verdict and `as_of`. It measures the shows we index, not the whole internet, and it is a count, not a score; never invent a heat number. Use `search_transcripts` afterwards only for quotes that explain the curve.",
+  description: "Spoken-web heat for up to four entities: mentions in the last 7 and 30 days versus the prior 30 days, an absolute-delta verdict (`accelerating`, `flat`, `fading`, `none`), the top shows in the window, and on Pro keys the paid-versus-organic split. Call it for 'is X hot', 'momentum', 'trending', 'who is talking about X most'. Lead with the verdict and `as_of`. It measures the shows we index, not the whole internet, and it is a count, not a score; never invent a heat number. Use `search_transcripts` afterwards only for quotes that explain the curve. Link the entity name to `entity.page` and each show to its `channel_page`.",
   inputSchema: z.object({
     entityIds: z.array(ENT).min(1).max(4).describe('One to four entity ids (ent_...) from resolve_entities.'),
   }),
@@ -227,7 +236,7 @@ const entityMomentum = tool({
 const listSponsors = tool({
   name: 'list_sponsors',
   title: 'Recurring sponsors of a channel',
-  description: "Recurring sponsors of a YouTube channel from our ad-read rollup, ordered by ad-read count. Call it for 'who sponsors X', 'advertisers on X', 'is brand Y a sponsor of X'. Pass a `UC` channel id from `resolve_entities`, not a handle. Free and trial keys receive the free slice the website shows (the top sponsors plus the total count); the full list, status filters, and lower thresholds need a Pro plan and the tool tells you so with an unlock link. Never assemble a sponsor list from transcript search; if this tool is gated or empty, say that.",
+  description: "Recurring sponsors of a YouTube channel from our ad-read rollup, ordered by ad-read count. Call it for 'who sponsors X', 'advertisers on X', 'is brand Y a sponsor of X'. Pass a `UC` channel id from `resolve_entities`, not a handle. Free and trial keys receive the free slice the website shows (the top sponsors plus the total count); the full list, status filters, and lower thresholds need a Pro plan and the tool tells you so with an unlock link. Never assemble a sponsor list from transcript search; if this tool is gated or empty, say that. Link each sponsor to its `entity.page` and the show to `channel.page`.",
   inputSchema: z.object({
     youtubeChannelId: UC.describe('The YouTube channel id (UC...), from resolve_entities. Not a handle.'),
     minAdReads: z.number().int().min(1).max(100).optional().describe('Exclude sponsors with fewer ad reads. Default 3. Pro plans only.'),
@@ -289,29 +298,52 @@ const indexStatus = tool({
 const countOccurrences = tool({
   name: 'count_occurrences',
   title: 'What a set of shows talks about',
-  description: "Catalog counts of which entities a set of channels mention or host, as a small ranked table. Call it for 'what do they talk about', 'hottest topics on X', 'how often does X mention Y', or 'which brands appear on both X and Y'. Match `entityTypes` to the question: subjects and topics `[\"topic\"]`, guests `[\"person\"]`, brands `[\"organization\",\"product\"]`; omit it and organizations dominate. Passing two or more `channelIds` also returns `shared`, the entities on more than one of those channels ranked by the smallest per-channel count, which is true overlap. Counts are all-time unless you pass `publishedAfter` or `recency`. Do not use it for quotes (`search_transcripts`), a single yes-or-no existence check (`list_mentions`), or heat versus a prior window (`entity_momentum`).",
+  description: "Catalog counts of which entities a set of channels mention or host, as a small ranked table. Call it for 'what do they talk about', 'hottest topics on X', 'how often does X mention Y', or 'which brands appear on both X and Y'. Match `entityTypes` to the question: subjects and topics `[\"topic\"]`, guests `[\"person\"]`, brands `[\"organization\",\"product\"]`; omit it and organizations dominate. Passing two or more `channelIds` also returns `shared`, the entities on more than one of those channels ranked by the smallest per-channel count, which is true overlap. Counts are all-time unless you pass `publishedAfter` or `recency`. Pass the `video_id` of one episode from `list_episodes` as `videoIds` to list what that episode mentions; then `entityTypes` matches the question. Every row carries `page` and `channel_page`, the arcmira.com pages for the entity and the show; link the names to them when you list them. Do not use it for quotes (`search_transcripts`), a single yes-or-no existence check (`list_mentions`), or heat versus a prior window (`entity_momentum`).",
   inputSchema: z.object({
     channelIds: z.array(UC).max(8).optional().describe('YouTube channel ids (UC...) to count over, at most 8. Two or more also return shared.'),
     entityIds: z.array(ENT).max(20).optional().describe('Entity ids (ent_...) to count, at most 20.'),
+    videoIds: z.array(VIDEO).max(20).optional().describe('11-character YouTube video ids to count over, at most 20. Pass the video_id of one episode from list_episodes to list what that episode mentions.'),
     entityTypes: z.array(ENTITY_TYPE).optional().describe('Entity types to count. topic for subjects, person for guests, organization and product for brands.'),
     mode: z.enum(['mentions', 'appearances', 'both']).optional().describe('mentions counts talk about an entity, appearances counts a person being present, both counts either. Default mentions.'),
     recency: recencyInput,
     publishedAfter: ISO_DATE.optional().describe('ISO date. Only media published on or after this day. Wins over recency.'),
     publishedBefore: ISO_DATE.optional().describe('ISO date. Only media published before this day.'),
     limit: z.number().int().min(1).max(40).optional().describe('Rows in the ranked table, 1 to 40. Default 20.'),
-  }).refine((value) => (value.channelIds?.length ?? 0) > 0 || (value.entityIds?.length ?? 0) > 0, {
-    message: 'Pass channelIds or entityIds.',
+  }).refine((value) => (value.channelIds?.length ?? 0) > 0 || (value.entityIds?.length ?? 0) > 0 || (value.videoIds?.length ?? 0) > 0, {
+    message: 'Pass channelIds, entityIds, or videoIds.',
   }),
   fronts: ['count_mentions'],
   async run(input, api) {
     const result = await api.get('/v1/mentions/counts', {
       channel_ids: input.channelIds,
       entity_ids: input.entityIds,
+      video_ids: input.videoIds,
       entity_types: input.entityTypes,
       mode: input.mode,
       published_after: resolvePublishedAfter(input),
       published_before: input.publishedBefore,
       limit: input.limit ?? 20,
+    });
+    return result.ok ? okResult(result.body) : errorResult(result.error);
+  },
+});
+
+const listEpisodes = tool({
+  name: 'list_episodes',
+  title: 'Newest episodes of a channel',
+  description: "The newest indexed videos of one YouTube channel, newest first, each with its `video_id`, `title`, `published_at`, `duration_seconds`, `view_count`, and `watch_url` on arcmira.com. Call it for the latest, newest, or most recent episode of a show, for what a show covered last week, or to list its episodes, and call it before `count_occurrences` or `get_transcript` when the question is about one episode: pass that row's `video_id` to `count_occurrences` `videoIds` for what the episode mentions, or to `get_transcript` to read it. `indexed_through` is the newest publish date we hold for the channel. Do not use it for quotes (`search_transcripts`), counts across a show (`count_occurrences`), or whether X has mentioned Y (`list_mentions`). An empty `episodes` array means the channel has nothing indexed; say so, channel backfill is not available yet.",
+  inputSchema: z.object({
+    youtubeChannelId: UC.describe('The YouTube channel id (UC...), from resolve_entities. Not a handle.'),
+    limit: z.number().int().min(1).max(25).optional().describe('Episodes to return, 1 to 25, newest first. Default 10. Pass 1 for the latest episode.'),
+    publishedAfter: ISO_DATE.optional().describe('ISO date. Only episodes published on or after this day.'),
+    publishedBefore: ISO_DATE.optional().describe('ISO date. Only episodes published before this day.'),
+  }),
+  fronts: ['list_channel_videos'],
+  async run(input, api) {
+    const result = await api.get(`/v1/channels/${encodeURIComponent(input.youtubeChannelId)}/videos`, {
+      limit: input.limit ?? 10,
+      published_after: input.publishedAfter,
+      published_before: input.publishedBefore,
     });
     return result.ok ? okResult(result.body) : errorResult(result.error);
   },
@@ -405,6 +437,7 @@ export const TOOLS: readonly AnyToolSpec[] = [
   listSponsors,
   indexStatus,
   countOccurrences,
+  listEpisodes,
   getTranscript,
 ];
 
@@ -412,7 +445,8 @@ export const TOOLS: readonly AnyToolSpec[] = [
 export const SERVER_INSTRUCTIONS = [
   'Arcmira is the search engine for the spoken web: indexed YouTube and podcast transcripts with a catalog of who is mentioned where.',
   'Connect with no key and the host signs you in through OAuth, or send Authorization: Bearer <key>. An account key comes from arcmira.com; with no account, POST https://api.arcmira.com/v1/trial-keys?src=mcp-tool with an empty body mints a free trial key that reads what a free account reads.',
-  'Start with resolve_entities to turn a name into ids. Use the catalog tools (list_mentions, entity_momentum, count_occurrences, list_sponsors) before search_transcripts; search only for the spoken wording. get_transcript reads the full transcript of one video from its URL or id.',
+  'Start with resolve_entities to turn a name into ids. Use the catalog tools (list_mentions, entity_momentum, count_occurrences, list_sponsors, list_episodes) before search_transcripts; search only for the spoken wording. For the latest episode of a show, list_episodes gives its video_id; count_occurrences videoIds lists what that episode mentions, and get_transcript reads the full transcript of one video from its URL or id.',
   'Every gate is a blocking error whose error.unlock.url names the plan that lifts it. Relay that link to your human; never work around a gate by searching the open web.',
+  'Catalog rows carry page (and channel_page): the arcmira.com page for that entity or show. When you name an entity or show in your answer, link the name to that page in markdown, like [Ramp](https://arcmira.com/org/ramp). Use only pages the tools returned this turn; never invent an arcmira.com link.',
   'Good first calls: TBPN is channel UC-DRzaGnL_vtBUpCFH5M0tg, Moment of Truth is UClWkDGXEzsh77GAhs90wpXw, Ramp is ent_14.',
 ].join(' ');
