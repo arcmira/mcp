@@ -26,6 +26,7 @@ const SAMPLE_INPUTS: Record<string, Record<string, unknown>> = {
   search_transcripts: { query: 'Ramp', channelIds: [TBPN], entityIds: ['ent_14'], recency: 'recent', publishedBefore: '2026-09-01', source: 'creator_captions', maxResults: 5 },
   resolve_entities: { q: 'Ramp', type: 'organization', limit: 8 },
   list_mentions: { entityId: 'ent_14', channelId: TBPN, dateFrom: '2026-01-01', dateTo: '2026-09-01', limit: 10 },
+  list_episodes: { youtubeChannelId: TBPN, limit: 10, publishedAfter: '2026-01-01', publishedBefore: '2026-09-01' },
   entity_momentum: { entityIds: ['ent_14'] },
   list_sponsors: { youtubeChannelId: TBPN, minAdReads: 3, status: 'active', limit: 10 },
   index_status: { youtubeChannelId: MTS, jobId: '00000000-0000-4000-8000-000000000000' },
