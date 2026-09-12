@@ -34,7 +34,7 @@ export function serverCard(origin: string): Record<string, unknown> {
       schemes: ['oauth2', 'bearer'],
       oauth2: { protectedResourceMetadata: `${origin}${PROTECTED_RESOURCE_PATH}` },
       bearer: { header: 'Authorization', description: server.remotes[0].headers[0].description },
-      trialKey: { method: 'POST', url: `${DEFAULT_API_BASE}/v1/trial-keys?src=${SRC}`, description: 'Mints a free trial key with no login. It reads what a free account reads for seven days.' },
+      signUp: { method: 'POST', url: `${DEFAULT_API_BASE}/v1/signups?src=${SRC}`, description: 'Mails a six digit code to an email address. POST that code to /v1/signups/verify for a free account key.' },
     },
     tools: TOOLS.map((tool) => ({
       name: tool.name,

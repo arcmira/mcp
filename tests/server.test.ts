@@ -18,7 +18,7 @@ function withFetch<T>(handler: (url: URL) => Response, body: () => Promise<T>): 
 async function callTool(name: string, args: Record<string, unknown>, upstream: (url: URL) => Response) {
   const request = new Request('https://mcp.arcmira.com/mcp', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer arc_tk_fixture' },
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer arc_sk_fixture' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
   });
   const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;

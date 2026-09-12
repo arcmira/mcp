@@ -2,7 +2,7 @@
 
 Arcmira is an SF-based AI company and the search engine for the spoken web.
 
-The official Arcmira MCP server. Nine read-only tools over indexed YouTube and podcast transcripts: the full transcript of one video, the newest episodes of a show, what a show said, who was mentioned where, momentum, sponsors, and coverage. One remote URL, sign in through your host or send a key, or mint a free trial key with no account.
+The official Arcmira MCP server. Nine read-only tools over indexed YouTube and podcast transcripts: the full transcript of one video, the newest episodes of a show, what a show said, who was mentioned where, momentum, sponsors, and coverage. One remote URL, sign in through your host or send an account key.
 
 It is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1`; every gate the API raises is forwarded untouched with the link that lifts it.
 
@@ -28,13 +28,18 @@ codex mcp add arcmira --url https://mcp.arcmira.com/mcp
 
 Claude Desktop, claude.ai, ChatGPT, and Cursor: add the URL as a custom connector or MCP server with no headers and follow the sign-in prompt. Per-host steps are on https://arcmira.com/docs/mcp.
 
-**Send a key.** Any client that cannot do the sign-in sends a bearer token instead, and the server skips OAuth:
+**Send a key.** Any client that cannot do the sign-in sends a bearer token instead, and the server skips OAuth.
 
-- An account key (`arc_sk_...`) from https://arcmira.com. Plan and scopes decide what each tool returns.
-- A trial key (`arc_tk_...`), minted with no login. It reads exactly what a free account reads, with a smaller row allotment and a 7 day expiry:
+An account key (`arc_sk_...`) comes from https://arcmira.com. Plan and scopes decide what each tool returns. With no account and no browser, sign up from the API. Post an email address, then post the six digit code from that inbox back.
 
 ```bash
-curl -X POST "https://api.arcmira.com/v1/trial-keys?src=mcp-tool"
+curl -X POST "https://api.arcmira.com/v1/signups?src=mcp-tool" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"agent@example.com"}'
+
+curl -X POST "https://api.arcmira.com/v1/signups/verify" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"agent@example.com","code":"482913"}'
 ```
 
 ```bash
@@ -46,13 +51,13 @@ claude mcp add --transport http arcmira https://mcp.arcmira.com/mcp --header "Au
   "mcpServers": {
     "arcmira": {
       "url": "https://mcp.arcmira.com/mcp",
-      "headers": { "Authorization": "Bearer arc_tk_..." }
+      "headers": { "Authorization": "Bearer arc_sk_..." }
     }
   }
 }
 ```
 
-The 401 body carries the same mint call under `error.data.unlock.action`, so an agent that cannot sign in can get its own trial key and reconnect. Discovery: `https://mcp.arcmira.com/.well-known/oauth-protected-resource` names the authorization server; `https://api.arcmira.com/.well-known/oauth-authorization-server` lists its endpoints.
+The 401 body carries that signup call under `error.data.unlock.action`, so an agent that cannot sign in can create an account and reconnect. Discovery: `https://mcp.arcmira.com/.well-known/oauth-protected-resource` names the authorization server; `https://api.arcmira.com/.well-known/oauth-authorization-server` lists its endpoints.
 
 ## Tools
 
@@ -105,8 +110,8 @@ pnpm dev            # wrangler dev on :8790, API base from .dev.vars
 pnpm test           # node:test
 pnpm typecheck
 pnpm manifest:check # every tool call matches the live OpenAPI document
-ARCMIRA_KEY=arc_tk_... node --experimental-strip-types scripts/smoke.ts http://localhost:8790/mcp
-ARCMIRA_KEY=arc_tk_... node --experimental-strip-types scripts/measure-transcript-bytes.ts <video-id> http://localhost:8790/mcp
+ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/smoke.ts http://localhost:8790/mcp
+ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/measure-transcript-bytes.ts <video-id> http://localhost:8790/mcp
 ```
 
 The tool descriptions are loaded context and are the steering surface. They are maintained in Arcmira's manifest spec first and copied here verbatim; revise there before here.

@@ -7,12 +7,13 @@ import { MCP_PATH } from './server.ts';
  * WWW-Authenticate names this server's protected-resource document; the document names
  * api.arcmira.com as the authorization server. Hosts that speak the spec then register, send
  * the person to arcmira.com to sign in and allow, and come back with a token. Hosts that do
- * not speak it keep sending an arc_ key, which never reaches the token check.
+ * not speak it send an arc_sk_ account key, which never reaches the token check.
  */
 export const PROTECTED_RESOURCE_PATH = '/.well-known/oauth-protected-resource';
 export const AUTHORIZATION_SERVER_PATH = '/.well-known/oauth-authorization-server';
 const ARCMIRA_KEY_PREFIX = 'arc_';
 const SESSION_PATH = '/api/auth/mcp/get-session';
+const ME_PATH = '/v1/me';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export function apiBase(env: Env): string {
@@ -34,7 +35,7 @@ export function isOAuthBearer(key: string | null): key is string {
   return key !== null && !key.startsWith(ARCMIRA_KEY_PREFIX);
 }
 
-/** The 401 that starts the OAuth dance. The body still carries the no-login rung. */
+/** The 401 that starts the OAuth dance. The body names the sign-up, for a host that cannot run it. */
 export function challenge(origin: string): Response {
   const error = noKeyError();
   return Response.json(
@@ -85,6 +86,28 @@ export async function tokenIsLive(token: string, env: Env, now = Date.now()): Pr
   const until = Math.min(now + CACHE_TTL_MS, Number.isFinite(expiry) ? expiry : now + CACHE_TTL_MS);
   if (until <= now) return false;
   live.set(token, until);
+  return true;
+}
+
+/**
+ * Live account keys by value, for five minutes per isolate. Only a 401 from /v1/me is a verdict
+ * against the key: a 402 over quota, a 403 at a plan gate, a 429, a 5xx, or a fetch that never
+ * lands all mean a real key the API will not serve right now, and answering those with the 401
+ * that starts the OAuth dance teaches a host to re-authenticate in a loop that cannot succeed.
+ */
+const liveKeys = new Map<string, number>();
+
+export async function keyIsLive(key: string, env: Env, now = Date.now()): Promise<boolean> {
+  const cached = liveKeys.get(key);
+  if (cached !== undefined && cached > now) return true;
+  liveKeys.delete(key);
+  const response = await fetch(`${apiBase(env)}${ME_PATH}`, {
+    headers: { authorization: `Bearer ${key}`, accept: 'application/json', 'user-agent': USER_AGENT },
+  }).catch(() => null);
+  if (response === null) return true;
+  if (response.status === 401) return false;
+  if (!response.ok) return true;
+  liveKeys.set(key, now + CACHE_TTL_MS);
   return true;
 }
 

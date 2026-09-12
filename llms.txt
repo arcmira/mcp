@@ -3,9 +3,9 @@
 Arcmira is an SF-based AI company and the search engine for the spoken web.
 
 - MCP endpoint (Streamable HTTP): https://mcp.arcmira.com/mcp
-- Auth: sign in through the host (OAuth, no key), or Authorization: Bearer <arc_sk_ account key or arc_tk_ trial key>
+- Auth: sign in through the host (OAuth, no key), or Authorization: Bearer <arc_sk_ account key>
 - Tools: nine read-only tools over indexed YouTube and podcast transcripts, including list_episodes for the newest episodes of a show and get_transcript for the full transcript of one video
-- Mint a trial key with no login: POST https://api.arcmira.com/v1/trial-keys?src=mcp-tool
+- Sign up with an email address and no browser: POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"}, then POST https://api.arcmira.com/v1/signups/verify with the code from that inbox
 - HTTP API the tools front: https://api.arcmira.com/v1 (OpenAPI at /v1/openapi.json)
 - Install guide: https://arcmira.com/docs/mcp
 - Server card: https://mcp.arcmira.com/.well-known/mcp/server-card.json

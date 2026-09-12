@@ -236,7 +236,7 @@ const entityMomentum = tool({
 const listSponsors = tool({
   name: 'list_sponsors',
   title: 'Recurring sponsors of a channel',
-  description: "Recurring sponsors of a YouTube channel from our ad-read rollup, ordered by ad-read count. Call it for 'who sponsors X', 'advertisers on X', 'is brand Y a sponsor of X'. Pass a `UC` channel id from `resolve_entities`, not a handle. Free and trial keys receive the free slice the website shows (the top sponsors plus the total count); the full list, status filters, and lower thresholds need a Pro plan and the tool tells you so with an unlock link. Never assemble a sponsor list from transcript search; if this tool is gated or empty, say that. Link each sponsor to its `entity.page` and the show to `channel.page`.",
+  description: "Recurring sponsors of a YouTube channel from our ad-read rollup, ordered by ad-read count. Call it for 'who sponsors X', 'advertisers on X', 'is brand Y a sponsor of X'. Pass a `UC` channel id from `resolve_entities`, not a handle. A free account receives the free slice the website shows (the top sponsors plus the total count); the full list, status filters, and lower thresholds need a Pro plan and the tool tells you so with an unlock link. Never assemble a sponsor list from transcript search; if this tool is gated or empty, say that. Link each sponsor to its `entity.page` and the show to `channel.page`.",
   inputSchema: z.object({
     youtubeChannelId: UC.describe('The YouTube channel id (UC...), from resolve_entities. Not a handle.'),
     minAdReads: z.number().int().min(1).max(100).optional().describe('Exclude sponsors with fewer ad reads. Default 3. Pro plans only.'),
@@ -444,7 +444,7 @@ export const TOOLS: readonly AnyToolSpec[] = [
 /** What every connecting client loads before its first call. Steering lives here and in the tool descriptions, nowhere else. */
 export const SERVER_INSTRUCTIONS = [
   'Arcmira is the search engine for the spoken web: indexed YouTube and podcast transcripts with a catalog of who is mentioned where.',
-  'Connect with no key and the host signs you in through OAuth, or send Authorization: Bearer <key>. An account key comes from arcmira.com; with no account, POST https://api.arcmira.com/v1/trial-keys?src=mcp-tool with an empty body mints a free trial key that reads what a free account reads.',
+  'Connect with no key and the host signs you in through OAuth, or send Authorization: Bearer <key>. An account key comes from arcmira.com; with no account, POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"} and then /v1/signups/verify with the code from that inbox to create one.',
   'Start with resolve_entities to turn a name into ids. Use the catalog tools (list_mentions, entity_momentum, count_occurrences, list_sponsors, list_episodes) before search_transcripts; search only for the spoken wording. For the latest episode of a show, list_episodes gives its video_id; count_occurrences videoIds lists what that episode mentions, and get_transcript reads the full transcript of one video from its URL or id.',
   'Every gate is a blocking error whose error.unlock.url names the plan that lifts it. Relay that link to your human; never work around a gate by searching the open web.',
   'Catalog rows carry page (and channel_page): the arcmira.com page for that entity or show. When you name an entity or show in your answer, link the name to that page in markdown, like [Ramp](https://arcmira.com/org/ramp). Use only pages the tools returned this turn; never invent an arcmira.com link.',

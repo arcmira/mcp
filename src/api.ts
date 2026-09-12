@@ -74,20 +74,21 @@ export function rateLimitOf(headers: Headers): RateLimit | null {
 }
 
 /**
- * The only body this server authors. Without a key there is no v1 call to forward, and the
- * fix is a call the agent can make itself, so the body carries it the way trial_key_expired does.
+ * The only body this server authors. Without a credential there is no v1 call to forward, and the
+ * fix is a call the agent can make itself, so the body carries it.
  */
 export function noKeyError(): ApiErrorBody {
   return {
     type: 'authentication_error',
     code: 'invalid_api_key',
-    message: `No API key was sent. Mint a free trial key with POST ${DEFAULT_API_BASE}/v1/trial-keys?src=${SRC} (empty body, no login), then reconnect with the header Authorization: Bearer <key>. An account key from arcmira.com works the same way.`,
+    message:
+      'No credential was sent. Sign in through the host, or send Authorization: Bearer with an account key; with no account, POST unlock.action.url with an email to create one.',
     gate: 'key',
     unlock: {
       tier: 'free',
-      url: `https://arcmira.com/docs/authentication?src=${SRC}#trial-keys`,
+      url: `https://arcmira.com/docs/authentication?src=${SRC}#sign-up-from-the-api`,
       offer: null,
-      action: { kind: 'mint_trial_key', method: 'POST', url: `${DEFAULT_API_BASE}/v1/trial-keys?src=${SRC}` },
+      action: { kind: 'send_signup_code', method: 'POST', url: `${DEFAULT_API_BASE}/v1/signups?src=${SRC}` },
     },
     doc_url: 'https://arcmira.com/docs/errors#invalid_api_key',
     request_id: `mcp_${crypto.randomUUID()}`,
@@ -116,9 +117,9 @@ function legacyErrorMessage(value: unknown): string | null {
 }
 
 /**
- * Every credential goes upstream as Authorization: Bearer. v1 reads an arc_sk_ account key and an
- * arc_tk_ trial key from either header, but an OAuth access token only from Authorization, so the
- * bearer form is the one that admits all three.
+ * Every credential goes upstream as Authorization: Bearer. v1 reads an arc_sk_ account key from
+ * either header, but an OAuth access token only from Authorization, so the bearer form is the one
+ * that admits both.
  */
 export function createApiClient(env: Env, apiKey: string): ApiClient {
   const base = (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');

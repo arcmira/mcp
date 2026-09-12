@@ -12,7 +12,7 @@ function withFetch<T>(handler: (url: URL, init: RequestInit) => Response, body: 
 
 describe('apiKeyOf', () => {
   it('reads a bearer or an x-api-key header and nothing else', () => {
-    assert.equal(apiKeyOf(new Request('https://x', { headers: { authorization: 'Bearer arc_tk_abc' } })), 'arc_tk_abc');
+    assert.equal(apiKeyOf(new Request('https://x', { headers: { authorization: 'Bearer arc_sk_abc' } })), 'arc_sk_abc');
     assert.equal(apiKeyOf(new Request('https://x', { headers: { 'x-api-key': ' arc_sk_abc ' } })), 'arc_sk_abc');
     assert.equal(apiKeyOf(new Request('https://x', { headers: { authorization: 'Basic abc' } })), null);
     assert.equal(apiKeyOf(new Request('https://x')), null);
@@ -22,7 +22,7 @@ describe('apiKeyOf', () => {
 describe('the v1 client', () => {
   it('sends the key, the user agent, csv lists, and always src=mcp-tool', async () => {
     const seen: Array<{ url: URL; init: RequestInit }> = [];
-    const client = createApiClient({ ARCMIRA_API_BASE: 'http://localhost:8788/' }, 'arc_tk_fixture');
+    const client = createApiClient({ ARCMIRA_API_BASE: 'http://localhost:8788/' }, 'arc_sk_fixture');
     const result = await withFetch(
       (url, init) => {
         seen.push({ url, init });
@@ -39,7 +39,7 @@ describe('the v1 client', () => {
     assert.equal(url.searchParams.has('published_after'), false);
     assert.equal(url.searchParams.get('src'), SRC);
     const headers = new Headers(init.headers);
-    assert.equal(headers.get('authorization'), 'Bearer arc_tk_fixture');
+    assert.equal(headers.get('authorization'), 'Bearer arc_sk_fixture');
     assert.equal(headers.has('x-api-key'), false);
     assert.equal(headers.get('user-agent'), USER_AGENT);
   });
@@ -60,7 +60,7 @@ describe('the v1 client', () => {
   });
 
   it('forwards an error body untouched', async () => {
-    const error = { type: 'permission_error', code: 'trial_rows_exhausted', message: 'm', gate: 'rows', unlock: { tier: 'free', url: 'https://arcmira.com/sign-up?src=mcp-tool', offer: null }, doc_url: 'd', request_id: 'r' };
+    const error = { type: 'permission_error', code: 'quota_exceeded', message: 'm', gate: 'rows', unlock: { tier: 'free', url: 'https://arcmira.com/sign-up?src=mcp-tool', offer: null }, doc_url: 'd', request_id: 'r' };
     const client = createApiClient({}, 'k');
     const result = await withFetch(() => Response.json({ error }, { status: 402 }), () => client.get('/v1/me'));
     assert.equal(result.ok, false);
@@ -104,12 +104,13 @@ describe('the v1 client', () => {
 });
 
 describe('noKeyError', () => {
-  it('is the catalog shape with the mint call as the action and mcp-tool on every link', () => {
+  it('is the catalog shape with the signup call as the action and mcp-tool on every link', () => {
     const error = noKeyError();
     assert.equal(error.code, 'invalid_api_key');
     assert.equal(error.gate, 'key');
     assert.equal(error.unlock?.action?.method, 'POST');
-    assert.equal(error.unlock?.action?.url, 'https://api.arcmira.com/v1/trial-keys?src=mcp-tool');
+    assert.equal(error.unlock?.action?.kind, 'send_signup_code');
+    assert.equal(error.unlock?.action?.url, 'https://api.arcmira.com/v1/signups?src=mcp-tool');
     assert.match(String(error.unlock?.url), /[?&]src=mcp-tool/);
     assert.ok(!error.message.includes('—'));
   });
@@ -117,7 +118,7 @@ describe('noKeyError', () => {
 
 describe('the host and the build', () => {
   it('forwards the host it was told about and remembers the API build that answered', async () => {
-    const client = createApiClient({}, 'arc_tk_fixture');
+    const client = createApiClient({}, 'arc_sk_fixture');
     assert.equal(client.upstreamBuild(), null);
     let seen: Headers | null = null;
     await withFetch(async (_url, init) => {
