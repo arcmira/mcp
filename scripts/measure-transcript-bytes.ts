@@ -1,7 +1,7 @@
 /**
  * Response bytes for one get_transcript call, measured on the wire.
  *
- *   ARCMIRA_KEY=arc_tk_... node --experimental-strip-types scripts/measure-transcript-bytes.ts <video> [mcp-url]
+ *   ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/measure-transcript-bytes.ts <video> [mcp-url]
  *
  * Connects as an MCP client, calls get_transcript once, and prints the byte length of the HTTP
  * response body the server sent, split into the text block and the structured content.
@@ -13,7 +13,7 @@ const video = process.argv[2];
 const url = new URL(process.argv[3] ?? 'http://localhost:8790/mcp');
 const key = process.env.ARCMIRA_KEY ?? '';
 if (!video || !key) {
-  console.error('Usage: ARCMIRA_KEY=arc_tk_... node --experimental-strip-types scripts/measure-transcript-bytes.ts <video> [mcp-url]');
+  console.error('Usage: ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/measure-transcript-bytes.ts <video> [mcp-url]');
   process.exit(1);
 }
 
