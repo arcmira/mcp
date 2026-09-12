@@ -1,7 +1,7 @@
 import { createMcpHandler } from 'agents/mcp/server';
 import pkg from '../package.json' with { type: 'json' };
 import { apiKeyOf, createApiClient, type Env } from './api.ts';
-import { AUTHORIZATION_SERVER_PATH, PROTECTED_RESOURCE_PATH, authorizationServerMetadata, challenge, isOAuthBearer, protectedResourceMetadata, tokenIsLive } from './auth.ts';
+import { AUTHORIZATION_SERVER_PATH, PROTECTED_RESOURCE_PATH, authorizationServerMetadata, challenge, isOAuthBearer, keyIsLive, protectedResourceMetadata, tokenIsLive } from './auth.ts';
 import { ICON_PATH, SERVER_CARD_PATHS, serverCardResponse } from './card.ts';
 import { MCP_PATH, createServer } from './server.ts';
 
@@ -15,9 +15,9 @@ function landing(): Response {
     version: pkg.version,
     mcp: `https://mcp.arcmira.com${MCP_PATH}`,
     transport: 'streamable-http',
-    auth: 'OAuth through the host (sign in at arcmira.com), or Authorization: Bearer <arc_sk_ account key or arc_tk_ trial key>',
+    auth: 'OAuth through the host (sign in at arcmira.com), or Authorization: Bearer <arc_sk_ account key>',
     oauth: `https://mcp.arcmira.com${PROTECTED_RESOURCE_PATH}`,
-    mint_trial_key: 'POST https://api.arcmira.com/v1/trial-keys?src=mcp-tool',
+    sign_up: 'POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"}, then /v1/signups/verify with the code',
     server_card: `https://mcp.arcmira.com${[...SERVER_CARD_PATHS][0]}`,
     icon: `https://mcp.arcmira.com${ICON_PATH}`,
     docs: 'https://arcmira.com/docs/mcp',
@@ -31,7 +31,8 @@ export default {
     if (url.pathname === MCP_PATH) {
       const key = apiKeyOf(request);
       if (key === null) return challenge(url.origin);
-      if (isOAuthBearer(key) && !(await tokenIsLive(key, env))) return challenge(url.origin);
+      const credential = isOAuthBearer(key) ? await tokenIsLive(key, env) : await keyIsLive(key, env);
+      if (!credential) return challenge(url.origin);
       const api = createApiClient(env, key);
       return createMcpHandler(() => createServer(api, env.CF_VERSION_METADATA?.id ?? null), {
         route: MCP_PATH,

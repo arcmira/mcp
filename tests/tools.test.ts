@@ -45,9 +45,10 @@ describe('the manifest', () => {
     });
   }
 
-  it('server instructions carry no em dash, name the trial key mint, and tell the agent to link names to their page', () => {
+  it('server instructions carry no em dash, name the sign-up, and tell the agent to link names to their page', () => {
     assert.ok(!SERVER_INSTRUCTIONS.includes('—'));
-    assert.match(SERVER_INSTRUCTIONS, /POST https:\/\/api\.arcmira\.com\/v1\/trial-keys\?src=mcp-tool/);
+    assert.match(SERVER_INSTRUCTIONS, /POST https:\/\/api\.arcmira\.com\/v1\/signups\?src=mcp-tool/);
+    assert.match(SERVER_INSTRUCTIONS, /\/v1\/signups\/verify with the code from that inbox/);
     assert.match(SERVER_INSTRUCTIONS, /link the name to that page in markdown/);
     assert.match(SERVER_INSTRUCTIONS, /never invent an arcmira\.com link/);
   });
@@ -156,7 +157,7 @@ describe('entity_momentum', () => {
   });
 
   it('a gate on any card is the answer', async () => {
-    const api = fakeApi({ '/v1/entities/ent_14/momentum': gate('trial_rows_exhausted') });
+    const api = fakeApi({ '/v1/entities/ent_14/momentum': gate('quota_exceeded') });
     const result = await toolNamed('entity_momentum').run({ entityIds: ['ent_14'] }, api);
     assert.equal(result.isError, true);
   });
@@ -188,7 +189,7 @@ describe('index_status', () => {
     assert.equal(schema.safeParse({ youtubeChannelId: TBPN }).success, true);
   });
 
-  it('a trial key polling a job gets the account gate', async () => {
+  it('a job poll with no account gets the account gate', async () => {
     const api = fakeApi({ '/v1/transcriptions': gate('job_requires_account') });
     const result = await toolNamed('index_status').run({ jobId: '00000000-0000-4000-8000-000000000000' }, api);
     assert.equal(result.isError, true);

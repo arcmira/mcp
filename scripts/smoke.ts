@@ -1,7 +1,7 @@
 /**
  * Directory-reviewer dry run over the blessed entities, as an MCP client would see it.
  *
- *   ARCMIRA_KEY=arc_tk_... node --experimental-strip-types scripts/smoke.ts [mcp-url]
+ *   ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/smoke.ts [mcp-url]
  *
  * Lists the tools, then makes one call per tool and one call per gate row the key can hit.
  * With no key the transport must answer 401 with the OAuth challenge, and the script stops there.
@@ -34,7 +34,7 @@ const CALLS: Array<{ label: string; tool: string; args: Record<string, unknown>;
   { label: 'gate: job on key', tool: 'index_status', args: { jobId: '00000000-0000-4000-8000-000000000000' }, expect: 'either' },
   { label: 'captions tbpn', tool: 'get_transcript', args: { video: 'https://www.youtube.com/watch?v=cdLeJU_1UH8' }, expect: 'either' },
   { label: 'captions german', tool: 'get_transcript', args: { video: 'VbaNcJXVmI4', language: 'de,en' }, expect: 'either' },
-  { label: 'premium on trial', tool: 'get_transcript', args: { video: 'cdLeJU_1UH8', quality: 'premium' }, expect: 'either' },
+  { label: 'premium on free', tool: 'get_transcript', args: { video: 'cdLeJU_1UH8', quality: 'premium' }, expect: 'either' },
   { label: 'premium paid', tool: 'get_transcript', args: { video: 'cdLeJU_1UH8', quality: 'premium', range: { start: 0, end: 300 } }, expect: 'either' },
 ];
 
