@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { BUILD_HEADER, CLIENT_HEADER, SRC, USER_AGENT, apiKeyOf, createApiClient, noKeyError } from '../src/api.ts';
 
-function withFetch<T>(handler: (url: URL, init: RequestInit) => Response, body: () => Promise<T>): Promise<T> {
+function withFetch<T>(handler: (url: URL, init: RequestInit) => Response | Promise<Response>, body: () => Promise<T>): Promise<T> {
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => handler(new URL(String(input)), init ?? {})) as typeof fetch;
   return body().finally(() => {
