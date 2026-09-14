@@ -6,8 +6,8 @@
     "url": "https://github.com/arcmira/mcp",
     "source": "github"
   },
-  "version": "0.5.0",
-  "websiteUrl": "https://arcmira.com/docs/mcp",
+  "version": "0.5.1",
+  "websiteUrl": "https://arcmira.com/docs/mcp-server",
   "remotes": [
     {
       "type": "streamable-http",

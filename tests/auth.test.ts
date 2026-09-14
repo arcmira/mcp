@@ -29,6 +29,7 @@ describe('challenge', () => {
     assert.equal(body.jsonrpc, '2.0');
     assert.equal(body.error.code, -32000);
     assert.equal(body.error.data.code, 'invalid_api_key');
+    assert.equal((body.error.data as { reason?: string }).reason, 'no_credential');
     assert.equal(body.error.data.unlock.action.kind, 'send_signup_code');
     assert.equal(body.error.data.unlock.action.url, 'https://api.arcmira.com/v1/signups?src=mcp-tool');
     assert.equal(body.error.data.unlock.url, 'https://arcmira.com/docs/authentication?src=mcp-tool#sign-up-from-the-api');
@@ -121,13 +122,21 @@ describe('the handshake checks the account key', () => {
     assert.equal(response.status, 200);
   });
 
-  it('answers a key the API does not know with the keyless challenge, header and body alike', async () => {
-    const response = await initialize('arc_sk_garbage', me(401, { error: { code: 'invalid_api_key' } }));
+  it('answers a key the API does not know with the same header and a body that says the key was refused', async () => {
+    const response = await initialize('arc_sk_garbage', me(401, { error: { code: 'invalid_api_key', reason: 'invalid' } }));
     const keyless = challenge('https://mcp.arcmira.com');
     assert.equal(response.status, 401);
-    assert.ok(response.headers.get('www-authenticate'));
     assert.equal(response.headers.get('www-authenticate'), keyless.headers.get('www-authenticate'));
-    assert.deepEqual(await challengeBody(response), await challengeBody(keyless));
+    assert.deepEqual(await challengeBody(response), await challengeBody(challenge('https://mcp.arcmira.com', 'invalid')));
+    const body = (await challenge('https://mcp.arcmira.com', 'invalid').json()) as { error: { data: { reason: string; message: string } } };
+    assert.equal(body.error.data.reason, 'invalid');
+    assert.notEqual(body.error.data.message, ((await keyless.json()) as { error: { data: { message: string } } }).error.data.message);
+  });
+
+  it('carries revoked through from v1', async () => {
+    const response = await initialize('arc_sk_old', me(401, { error: { code: 'invalid_api_key', reason: 'revoked' } }));
+    assert.equal(response.status, 401);
+    assert.deepEqual(await challengeBody(response), await challengeBody(challenge('https://mcp.arcmira.com', 'revoked')));
   });
 
   it('answers no key at all with that same challenge', async () => {
