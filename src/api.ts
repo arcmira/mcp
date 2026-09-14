@@ -23,9 +23,13 @@ export const CLIENT_HEADER = 'x-arcmira-client';
 export const BUILD_HEADER = 'x-arcmira-build';
 
 /** The v1 error envelope body. Forwarded untouched; the facade never edits a gate. */
+/** Why a 401 happened, the same three values v1 puts on `error.reason`. */
+export type CredentialFailure = 'no_credential' | 'invalid' | 'revoked';
+
 export interface ApiErrorBody {
   type: string;
   code: string;
+  reason?: CredentialFailure;
   message: string;
   param?: string;
   gate?: string;
@@ -73,16 +77,27 @@ export function rateLimitOf(headers: Headers): RateLimit | null {
   return limit === null || remaining === null || reset === null ? null : { limit, remaining, reset };
 }
 
+const CREDENTIAL_MESSAGES: Record<CredentialFailure, string> = {
+  no_credential:
+    'No credential was sent. Sign in through the host, or send Authorization: Bearer with an account key; with no account, POST unlock.action.url with an email to create one.',
+  invalid:
+    'The key sent is not a live account key. Send a valid key with Authorization: Bearer, or POST unlock.action.url with an email to create an account.',
+  revoked:
+    'The key sent has been revoked. Mint a new key at unlock.url, or POST unlock.action.url with an email to create an account.',
+};
+
 /**
- * The only body this server authors. Without a credential there is no v1 call to forward, and the
- * fix is a call the agent can make itself, so the body carries it.
+ * The only body this server authors. Without a live credential there is no v1 call to forward,
+ * and the fix is a call the agent can make itself, so the body carries it. `reason` says whether
+ * nothing was sent or a key was refused, the split v1 makes, so a host with a stale key mints a
+ * new one instead of re-reading its config.
  */
-export function noKeyError(): ApiErrorBody {
+export function noKeyError(reason: CredentialFailure = 'no_credential'): ApiErrorBody {
   return {
     type: 'authentication_error',
     code: 'invalid_api_key',
-    message:
-      'No credential was sent. Sign in through the host, or send Authorization: Bearer with an account key; with no account, POST unlock.action.url with an email to create one.',
+    reason,
+    message: CREDENTIAL_MESSAGES[reason],
     gate: 'key',
     unlock: {
       tier: 'free',

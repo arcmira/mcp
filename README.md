@@ -8,7 +8,7 @@ It is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1
 
 - Endpoint: `https://mcp.arcmira.com/mcp` (Streamable HTTP)
 - Registry name: `io.github.arcmira/arcmira`
-- Install guide: https://arcmira.com/docs/mcp
+- Install guide: https://arcmira.com/docs/mcp-server
 - Server card: https://mcp.arcmira.com/.well-known/mcp/server-card.json
 - HTTP API the tools front: https://api.arcmira.com/v1/openapi.json
 
