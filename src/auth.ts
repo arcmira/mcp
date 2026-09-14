@@ -1,4 +1,4 @@
-import { DEFAULT_API_BASE, SRC, USER_AGENT, noKeyError, type Env } from './api.ts';
+import { DEFAULT_API_BASE, SRC, USER_AGENT, noKeyError, type CredentialFailure, type Env } from './api.ts';
 import { MCP_PATH } from './server.ts';
 
 /**
@@ -36,8 +36,8 @@ export function isOAuthBearer(key: string | null): key is string {
 }
 
 /** The 401 that starts the OAuth dance. The body names the sign-up, for a host that cannot run it. */
-export function challenge(origin: string): Response {
-  const error = noKeyError();
+export function challenge(origin: string, reason: CredentialFailure = 'no_credential'): Response {
+  const error = noKeyError(reason);
   return Response.json(
     { jsonrpc: '2.0', error: { code: -32000, message: error.message, data: error }, id: null },
     {
@@ -97,18 +97,26 @@ export async function tokenIsLive(token: string, env: Env, now = Date.now()): Pr
  */
 const liveKeys = new Map<string, number>();
 
-export async function keyIsLive(key: string, env: Env, now = Date.now()): Promise<boolean> {
+/**
+ * Null for a key v1 serves, otherwise why it refused: v1's own `error.reason` when the 401 carries
+ * one, `invalid` when it does not. A network failure or a non-401 error is not a verdict on the
+ * key and passes it through to the first tool call.
+ */
+export async function keyFailure(key: string, env: Env, now = Date.now()): Promise<CredentialFailure | null> {
   const cached = liveKeys.get(key);
-  if (cached !== undefined && cached > now) return true;
+  if (cached !== undefined && cached > now) return null;
   liveKeys.delete(key);
   const response = await fetch(`${apiBase(env)}${ME_PATH}`, {
     headers: { authorization: `Bearer ${key}`, accept: 'application/json', 'user-agent': USER_AGENT },
   }).catch(() => null);
-  if (response === null) return true;
-  if (response.status === 401) return false;
-  if (!response.ok) return true;
+  if (response === null) return null;
+  if (response.status === 401) {
+    const body = (await response.json().catch(() => null)) as { error?: { reason?: string } } | null;
+    return body?.error?.reason === 'revoked' ? 'revoked' : 'invalid';
+  }
+  if (!response.ok) return null;
   liveKeys.set(key, now + CACHE_TTL_MS);
-  return true;
+  return null;
 }
 
 /** The src every unlock link carries is the same one v1 sees, so the funnel joins. */
