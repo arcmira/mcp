@@ -73,7 +73,7 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 | `index_status` | What the index holds for a channel, or one transcription job | `GET /v1/channels/{id}/coverage`, `GET /v1/transcriptions/{id}` |
 | `get_transcript` | Full transcript of one video from its URL or id, as text with `[start]` on every line | `GET /v1/transcripts/{video_id}`, `GET /v1/videos/{video_id}/captions` |
 
-Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: false`. Every result carries `as_of` where a date applies and a one-sentence `note`. Seven of the tools return the JSON body in both the content block and `structuredContent`. `get_transcript` returns the transcript itself as text in the content block, and `structuredContent` carries the metadata without the lines, so a long transcript crosses the wire once.
+Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: false`. Every result carries `as_of` where a date applies and a one-sentence `note`. Seven of the tools return the JSON body in both the content block and `structuredContent`. `get_transcript` returns two text blocks and no `structuredContent`: the transcript as `[start] text` lines, then the rest of the body as JSON. A long transcript crosses the wire once, and a host that prefers `structuredContent` still shows the lines.
 
 Good first calls: TBPN is channel `UC-DRzaGnL_vtBUpCFH5M0tg`, Moment of Truth is `UClWkDGXEzsh77GAhs90wpXw`, Ramp is `ent_14`.
 
