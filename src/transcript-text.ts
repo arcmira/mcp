@@ -23,23 +23,41 @@ function startOf(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : 0;
 }
 
+/** v1 sends a premium row's speaker as a diarization id into `speakers[]`. */
+function speakerNames(value: unknown): Map<number, string> {
+  const names = new Map<number, string>();
+  if (!Array.isArray(value)) return names;
+  for (const item of value) {
+    const row = rowOf(item);
+    const name = stringOf(row.name);
+    if (typeof row.id === 'number' && name !== null) names.set(row.id, name);
+  }
+  return names;
+}
+
+function speakerOf(value: unknown, names: Map<number, string>): string | null {
+  if (typeof value === 'number') return names.get(value) ?? `Speaker ${value}`;
+  return stringOf(value);
+}
+
 /** Null for an absent or empty array, so the caller reads the two transcript forms in one pass. */
-function segments(value: unknown): Segment[] | null {
+function segments(value: unknown, names: Map<number, string>): Segment[] | null {
   if (!Array.isArray(value) || value.length === 0) return null;
   const out: Segment[] = [];
   for (const item of value) {
     const row = rowOf(item);
     const text = stringOf(row.text);
     if (text === null) continue;
-    out.push({ start: startOf(row.start), text, speaker: stringOf(row.speaker) });
+    out.push({ start: startOf(row.start), text, speaker: speakerOf(row.speaker, names) });
   }
   return out;
 }
 
 function resolveForm(body: Record<string, unknown>): Form | null {
-  const lines = segments(body.lines);
+  const names = speakerNames(body.speakers);
+  const lines = segments(body.lines, names);
   if (lines !== null) return { form: 'lines', rows: lines };
-  const paragraphs = segments(body.paragraphs);
+  const paragraphs = segments(body.paragraphs, names);
   if (paragraphs !== null) return { form: 'paragraphs', rows: paragraphs };
   return null;
 }
@@ -69,9 +87,13 @@ function formatLine(form: Form['form'], watchUrl: string | null): string {
   return `Every line below is [start seconds] then the words.${cite}`;
 }
 
+function spoken(row: Segment): string {
+  return row.speaker === null ? row.text : `${row.speaker}: ${row.text}`;
+}
+
 function transcriptText(form: Form): string {
-  if (form.form === 'paragraphs') return form.rows.map((row) => row.text).join('\n\n');
-  return form.rows.map((row) => `[${row.start}] ${row.speaker === null ? '' : `${row.speaker}: `}${row.text}`).join('\n');
+  if (form.form === 'paragraphs') return form.rows.map(spoken).join('\n\n');
+  return form.rows.map((row) => `[${row.start}] ${spoken(row)}`).join('\n');
 }
 
 function metadataOf(body: Record<string, unknown>): Record<string, unknown> {
