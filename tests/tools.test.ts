@@ -329,6 +329,15 @@ describe('get_transcript', () => {
     assert.equal(out.as_of, '2026-08-04');
   });
 
+  it('reaches the model whether the host reads structuredContent or the content blocks', async () => {
+    const api = fakeApi({ '/v1/transcripts': ok({ video: { id: VIDEO }, quality: 'premium', lines: [{ start: 12, speaker: 'Speaker A', text: 'hello' }] }) });
+    const result = await toolNamed('get_transcript').run({ video: VIDEO, quality: 'premium' }, api);
+    const contentOnly = result.content.map((block) => block.text).join('\n');
+    const structuredFirst = result.structuredContent === undefined ? contentOnly : JSON.stringify(result.structuredContent);
+    assert.match(contentOnly, /^\[12\] Speaker A: hello$/m);
+    assert.match(structuredFirst, /^\[12\] Speaker A: hello$/m);
+  });
+
   it('leaves a watch url the API already sent', async () => {
     const sent = 'https://arcmira.com/watch?v=other12345six&t=5';
     const api = fakeApi({ '/v1/transcripts': ok({ video: { id: VIDEO, watch_url: sent }, lines: [] }) });
