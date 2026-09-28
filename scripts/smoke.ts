@@ -65,9 +65,9 @@ for (const tool of tools.tools) {
   }
 }
 
-function summarize(structured: unknown, text: string): string {
-  const body = (structured ?? safeParse(text)) as Record<string, unknown> | null;
-  if (body === null) return text.slice(0, 160);
+function summarize(structured: unknown, texts: string[]): string {
+  const body = (structured ?? safeParse(texts[texts.length - 1] ?? '')) as Record<string, unknown> | null;
+  if (body === null) return (texts[0] ?? '').slice(0, 160);
   const error = body.error as Record<string, unknown> | undefined;
   if (error) {
     const unlock = (error.unlock ?? {}) as Record<string, unknown>;
@@ -77,8 +77,7 @@ function summarize(structured: unknown, text: string): string {
   for (const key of ['entities', 'chunks', 'mentions', 'cards', 'rows', 'sponsors', 'lines', 'paragraphs', 'speakers', 'languages']) {
     if (Array.isArray(body[key])) parts.push(`${key}=${(body[key] as unknown[]).length}`);
   }
-  const inContent = body.transcript_in_content as Record<string, unknown> | undefined;
-  if (inContent) parts.push(`${inContent.form}=${inContent.count}`);
+  if (texts.length === 2) parts.push(`transcript_lines=${texts[0].match(/^\[\d+\] /gm)?.length ?? 0}`);
   if (body.channel) parts.push(`channel=${JSON.stringify(body.channel).slice(0, 80)}`);
   if (body.transcription) parts.push('transcription');
   if (body.premium_job) parts.push(`premium_job=${(body.premium_job as Record<string, unknown>).job_id}`);
@@ -98,12 +97,14 @@ function safeParse(text: string): unknown {
 for (const call of CALLS) {
   const started = Date.now();
   const result = await client.callTool({ name: call.tool, arguments: call.args });
-  const text = (result.content as Array<{ type: string; text?: string }>).find((part) => part.type === 'text')?.text ?? '';
+  const texts = (result.content as Array<{ type: string; text?: string }>).flatMap((part) => (part.type === 'text' && part.text !== undefined ? [part.text] : []));
   const isError = result.isError === true;
   const expect = call.expect;
-  const verdict = expect === 'either' ? 'ok' : (expect === 'gate') === isError ? 'ok' : 'UNEXPECTED';
+  // A host that finds structuredContent may show the model only that, so it must hold everything the text blocks do.
+  const hidden = result.structuredContent !== undefined && (texts.length !== 1 || texts[0] !== JSON.stringify(result.structuredContent));
+  const verdict = hidden ? 'HIDDEN' : expect === 'either' ? 'ok' : (expect === 'gate') === isError ? 'ok' : 'UNEXPECTED';
   if (verdict !== 'ok') failed = true;
-  console.log(`${verdict.padEnd(10)} ${call.label.padEnd(24)} ${call.tool.padEnd(19)} ${isError ? 'isError' : 'result '} ${String(Date.now() - started).padStart(5)}ms  ${summarize(result.structuredContent, text)}`);
+  console.log(`${verdict.padEnd(10)} ${call.label.padEnd(24)} ${call.tool.padEnd(19)} ${isError ? 'isError' : 'result '} ${String(Date.now() - started).padStart(5)}ms  ${summarize(result.structuredContent, texts)}`);
 }
 await client.close();
 process.exit(failed ? 1 : 0);

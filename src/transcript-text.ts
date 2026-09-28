@@ -74,23 +74,18 @@ function transcriptText(form: Form): string {
   return form.rows.map((row) => `[${row.start}] ${row.speaker === null ? '' : `${row.speaker}: `}${row.text}`).join('\n');
 }
 
-function structuredOf(body: Record<string, unknown>, form: Form): Record<string, unknown> {
-  const structured = { ...body };
-  delete structured.lines;
-  delete structured.paragraphs;
-  structured.transcript_in_content = {
-    form: form.form,
-    count: form.rows.length,
-    note: 'The transcript is the text block of this result, not this object.',
-  };
-  return structured;
+function metadataOf(body: Record<string, unknown>): Record<string, unknown> {
+  const metadata = { ...body };
+  delete metadata.lines;
+  delete metadata.paragraphs;
+  return metadata;
 }
 
 /**
  * The transcript as prose for the model, plus the rest of the body with the rows lifted out.
  * Null when the body carries no transcript, which is how a pending premium job comes back.
  */
-export function renderTranscript(body: Record<string, unknown>): { text: string; structured: Record<string, unknown> } | null {
+export function renderTranscript(body: Record<string, unknown>): { text: string; metadata: Record<string, unknown> } | null {
   const form = resolveForm(body);
   if (form === null) return null;
   const video = rowOf(body.video);
@@ -102,5 +97,5 @@ export function renderTranscript(body: Record<string, unknown>): { text: string;
     stringOf(body.note),
     formatLine(form.form, watchUrl),
   ].filter((line): line is string => line !== null);
-  return { text: `${header.join('\n')}\n\n${transcriptText(form)}`, structured: structuredOf(body, form) };
+  return { text: `${header.join('\n')}\n\n${transcriptText(form)}`, metadata: metadataOf(body) };
 }

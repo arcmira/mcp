@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+`get_transcript` shows the lines again in hosts that read `structuredContent`. Since 0.4.0 the lines rode only in the text block while `structuredContent` carried the metadata, and Claude Code shows the model `structuredContent` alone when a result has both, so every call there came back as metadata with no transcript. The result is now two text blocks and no `structuredContent`: the rendered lines first, then the rest of the body as JSON with the video, quality, source, speakers, languages, revision, range, and rows billed. `transcript_in_content` is gone. A body with no transcript, such as a pending premium job, and every gate still answer JSON in both places. `scripts/smoke.ts` fails any result whose `structuredContent` holds less than its text blocks.
+
 ## 0.5.1
 
 The 401 says why. `error.data.reason` is `no_credential` when nothing was sent, `invalid` when the key is unknown, `revoked` when v1 says so, with a message for each, so a host holding a stale key mints a new one instead of re-reading its config; the header and the sign-up action are unchanged. The install guide moved to `https://arcmira.com/docs/mcp-server`, since Mintlify serves its docs MCP endpoint at the old path.

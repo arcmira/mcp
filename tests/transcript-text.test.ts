@@ -4,7 +4,6 @@ import { renderTranscript } from '../src/transcript-text.ts';
 
 const VIDEO = 'dQw4w9WgXcQ';
 const WATCH = `https://arcmira.com/watch?v=${VIDEO}`;
-const IN_CONTENT_NOTE = 'The transcript is the text block of this result, not this object.';
 
 function linesBody(): Record<string, unknown> {
   return {
@@ -74,7 +73,6 @@ describe('renderTranscript, lines', () => {
       '',
       '[1] kept',
     ].join('\n'));
-    assert.equal((out.structured.transcript_in_content as { count: number }).count, 1);
   });
 
   it('treats a missing start as zero', () => {
@@ -102,17 +100,16 @@ describe('renderTranscript, paragraphs', () => {
 
   it('lines win when a body carries both forms', () => {
     const out = rendered({ lines: [{ start: 0, text: 'from lines' }], paragraphs: [{ start: 0, text: 'from paragraphs' }] });
-    assert.equal((out.structured.transcript_in_content as { form: string }).form, 'lines');
     assert.match(out.text, /from lines/);
     assert.equal(/from paragraphs/.test(out.text), false, 'the losing form is not rendered');
   });
 });
 
-describe('renderTranscript, structured content', () => {
+describe('renderTranscript, metadata', () => {
   it('lifts the rows out and preserves every other field', () => {
     const body = linesBody();
     const out = rendered(body);
-    assert.deepEqual(out.structured, {
+    assert.deepEqual(out.metadata, {
       video: { id: VIDEO, title: 'Never Gonna Give You Up', watch_url: WATCH },
       quality: 'captions',
       source: 'third_party_quick',
@@ -120,17 +117,13 @@ describe('renderTranscript, structured content', () => {
       rows_billed: 10,
       note: 'quote the lines that answer',
       as_of: '2026-08-04',
-      transcript_in_content: { form: 'lines', count: 2, note: IN_CONTENT_NOTE },
     });
     assert.ok('lines' in body, 'the caller body is not mutated');
   });
 
   it('removes paragraphs too', () => {
     const out = rendered({ paragraphs: [{ start: 0, text: 'p' }], access: { code: 'premium_not_enabled' } });
-    assert.deepEqual(out.structured, {
-      access: { code: 'premium_not_enabled' },
-      transcript_in_content: { form: 'paragraphs', count: 1, note: IN_CONTENT_NOTE },
-    });
+    assert.deepEqual(out.metadata, { access: { code: 'premium_not_enabled' } });
   });
 });
 
