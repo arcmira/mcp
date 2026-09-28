@@ -41,17 +41,31 @@ describe('renderTranscript, lines', () => {
     ].join('\n'));
   });
 
-  it('keeps the speaker a premium line carries', () => {
+  it('names each premium line from speakers[], as v1 sends the speaker as an id', () => {
     const out = rendered({
       video: { id: VIDEO, watch_url: WATCH },
       quality: 'premium',
+      speakers: [{ id: 0, name: 'John Coogan', entity_id: 7, confidence: 'high' }, { id: 1, name: 'Speaker B', entity_id: null, confidence: 'low' }],
       lines: [
-        { start: 4.9, speaker: 'John Coogan', text: 'welcome back' },
+        { start: 4.9, speaker: 0, text: 'welcome back' },
+        { start: 6, speaker: 1, text: 'thanks for having me' },
+        { start: 8, speaker: 2, text: 'an id the list does not name' },
         { start: 9, text: 'no speaker on this one' },
       ],
     });
     assert.match(out.text, /^\[4\] John Coogan: welcome back$/m);
+    assert.match(out.text, /^\[6\] Speaker B: thanks for having me$/m);
+    assert.match(out.text, /^\[8\] Speaker 2: an id the list does not name$/m);
     assert.match(out.text, /^\[9\] no speaker on this one$/m);
+  });
+
+  it('names the speaker of each premium paragraph', () => {
+    const out = rendered({
+      speakers: [{ id: 0, name: 'John Coogan' }],
+      paragraphs: [{ start: 0, speaker: 0, text: 'First paragraph.' }, { start: 61, text: 'Captions paragraph.' }],
+    });
+    assert.match(out.text, /^John Coogan: First paragraph\.$/m);
+    assert.match(out.text, /^Captions paragraph\.$/m);
   });
 
   it('falls back to the video id and drops the header lines the body does not carry', () => {
