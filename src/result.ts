@@ -53,13 +53,12 @@ export function okResult(body: Record<string, unknown>): ToolResult {
 }
 
 /**
- * An answer whose text block is written for the model rather than serialized from the body. The
- * transcript would otherwise ride twice, once as text and once as structured content. The spec's
- * serialized-JSON rule is a SHOULD, and no tool here declares an outputSchema, so nothing
- * validates the text against the body.
+ * A transcript: the rendered lines, then the rest of the body as JSON, both as text and no
+ * structuredContent. Claude Code hands the model structuredContent in place of the content blocks
+ * when a result carries both, so any structured copy without the lines hides the transcript.
  */
-export function renderedResult(text: string, structuredContent: Record<string, unknown>): ToolResult {
-  return { content: [{ type: 'text', text }], structuredContent };
+export function transcriptResult(text: string, metadata: Record<string, unknown>): ToolResult {
+  return { content: [{ type: 'text', text }, { type: 'text', text: JSON.stringify(metadata) }] };
 }
 
 /**

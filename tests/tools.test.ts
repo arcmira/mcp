@@ -297,7 +297,7 @@ describe('get_transcript', () => {
     assert.equal(api.calls[1].query.timestamps, undefined);
   });
 
-  it('renders the lines into the text block, fills the watch url, and keeps the rest of the body structured', async () => {
+  it('renders the lines into the first text block, fills the watch url, and carries the rest of the body as JSON in the second', async () => {
     const body = {
       video: { id: VIDEO, title: 'Never Gonna Give You Up' },
       lines: [{ start: 12, text: 'hello' }],
@@ -309,17 +309,14 @@ describe('get_transcript', () => {
     };
     const api = fakeApi({ '/v1/transcripts': ok(body) });
     const result = await toolNamed('get_transcript').run({ video: VIDEO }, api);
-    const out = result.structuredContent as Record<string, unknown> & { video: Record<string, unknown> };
+    const out = JSON.parse(result.content[1].text) as Record<string, unknown> & { video: Record<string, unknown> };
     assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent, undefined);
+    assert.equal(result.content.length, 2);
     assert.match(result.content[0].text, /^\[12\] hello$/m);
     assert.match(result.content[0].text, /^Never Gonna Give You Up$/m);
     assert.equal(result.content[0].text.includes('"lines"'), false, 'the body is not serialized into the text block as well');
     assert.equal(out.lines, undefined);
-    assert.deepEqual(out.transcript_in_content, {
-      form: 'lines',
-      count: 1,
-      note: 'The transcript is the text block of this result, not this object.',
-    });
     assert.equal(out.video.watch_url, `https://arcmira.com/watch?v=${VIDEO}`);
     assert.equal(out.video.title, 'Never Gonna Give You Up');
     assert.equal(out.note, body.note);
@@ -327,6 +324,15 @@ describe('get_transcript', () => {
     assert.deepEqual(out.premium_job, body.premium_job);
     assert.equal(out.rows_billed, 4);
     assert.equal(out.as_of, '2026-08-04');
+  });
+
+  it('reaches the model whether the host reads structuredContent or the content blocks', async () => {
+    const api = fakeApi({ '/v1/transcripts': ok({ video: { id: VIDEO }, quality: 'premium', lines: [{ start: 12, speaker: 'Speaker A', text: 'hello' }] }) });
+    const result = await toolNamed('get_transcript').run({ video: VIDEO, quality: 'premium' }, api);
+    const contentOnly = result.content.map((block) => block.text).join('\n');
+    const structuredFirst = result.structuredContent === undefined ? contentOnly : JSON.stringify(result.structuredContent);
+    assert.match(contentOnly, /^\[12\] Speaker A: hello$/m);
+    assert.match(structuredFirst, /^\[12\] Speaker A: hello$/m);
   });
 
   it('leaves a watch url the API already sent', async () => {
