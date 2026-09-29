@@ -19,6 +19,7 @@ export const TOOL_NAMES = [
   'list_mentions',
   'entity_momentum',
   'list_sponsors',
+  'list_recommendations',
   'index_status',
   'count_occurrences',
   'list_episodes',
@@ -139,6 +140,14 @@ const resolveEntities = tool({
   },
 });
 
+/** The newest media we hold for a channel, so an empty answer can say 'as of'. Null without a channel or when coverage fails. */
+async function channelIndexedThrough(api: ApiClient, channelId: string | undefined): Promise<string | null> {
+  if (channelId === undefined) return null;
+  const coverage = await api.get(`/v1/channels/${encodeURIComponent(channelId)}/coverage`);
+  const channel = coverage.ok ? ((coverage.body.channel ?? {}) as Row) : {};
+  return typeof channel.indexed_through === 'string' ? channel.indexed_through : null;
+}
+
 const listMentions = tool({
   name: 'list_mentions',
   title: 'Mention history of an entity',
@@ -176,12 +185,7 @@ const listMentions = tool({
         watch_url: watchUrl(media.video_id, row.start_seconds),
       };
     });
-    let indexedThrough: string | null = null;
-    if (input.channelId) {
-      const coverage = await api.get(`/v1/channels/${encodeURIComponent(input.channelId)}/coverage`);
-      const channel = coverage.ok ? ((coverage.body.channel ?? {}) as Row) : {};
-      indexedThrough = typeof channel.indexed_through === 'string' ? channel.indexed_through : null;
-    }
+    const indexedThrough = await channelIndexedThrough(api, input.channelId);
     const entity = (result.body.entity ?? {}) as Row;
     return okResult({
       entity: pick(entity, ['id', 'name', 'type', 'page', 'appearances_page', 'mentions_page', 'slug']),
@@ -236,7 +240,7 @@ const entityMomentum = tool({
 const listSponsors = tool({
   name: 'list_sponsors',
   title: 'Recurring sponsors of a channel',
-  description: "Recurring sponsors of a YouTube channel from our ad-read rollup, ordered by ad-read count. Call it for 'who sponsors X', 'advertisers on X', 'is brand Y a sponsor of X'. Pass a `UC` channel id from `resolve_entities`, not a handle. A free account receives the free slice the website shows (the top sponsors plus the total count); the full list, status filters, and lower thresholds need a Pro plan and the tool tells you so with an unlock link. Never assemble a sponsor list from transcript search; if this tool is gated or empty, say that. Link each sponsor to its `entity.page` and the show to `channel.page`.",
+  description: "Recurring sponsors of a YouTube channel from our ad-read rollup, ordered by ad-read count. For one brand's ad reads across every show, or recommendations nobody paid for, use `list_recommendations`. Call it for 'who sponsors X', 'advertisers on X', 'is brand Y a sponsor of X'. Pass a `UC` channel id from `resolve_entities`, not a handle. A free account receives the free slice the website shows (the top sponsors plus the total count); the full list, status filters, and lower thresholds need a Pro plan and the tool tells you so with an unlock link. Never assemble a sponsor list from transcript search; if this tool is gated or empty, say that. Link each sponsor to its `entity.page` and the show to `channel.page`.",
   inputSchema: z.object({
     youtubeChannelId: UC.describe('The YouTube channel id (UC...), from resolve_entities. Not a handle.'),
     minAdReads: z.number().int().min(1).max(100).optional().describe('Exclude sponsors with fewer ad reads. Default 3. Pro plans only.'),
@@ -262,6 +266,83 @@ const listSponsors = tool({
         : result.body.access
           ? 'This is the free slice; meta.total is the true count and access names the plan that lifts the gate. Say so rather than listing more names.'
           : 'Structured rollup. Optionally search_transcripts for a recent host-read clip of the top sponsor.',
+    });
+  },
+});
+
+/** The tool's kind to v1's mention_class. */
+const MENTION_CLASS = { sponsored: 'ad_read', organic: 'endorsement', all: 'all' } as const;
+type Kind = keyof typeof MENTION_CLASS;
+
+/** v1's mention_class to the kind a row carries. mention is a legacy class nobody labeled paid or unpaid. */
+const ROW_KIND: Readonly<Record<string, 'sponsored' | 'organic'>> = { ad_read: 'sponsored', endorsement: 'organic' };
+
+function recommendationRow(row: Row): Row {
+  const media = (row.media ?? {}) as Row;
+  const source = (media.source_channel ?? null) as Row | null;
+  return {
+    kind: typeof row.mention_class === 'string' ? (ROW_KIND[row.mention_class] ?? 'unclassified') : 'unclassified',
+    quote: row.verbatim_quote ?? null,
+    speaker_role: row.speaker_role ?? null,
+    promo_code: row.promo_code ?? null,
+    offer: row.offer ?? null,
+    confidence: row.confidence ?? null,
+    video_id: media.video_id ?? null,
+    title: media.title ?? null,
+    published_at: media.published_at ?? null,
+    channel_id: media.channel_id ?? null,
+    channel_name: source?.name ?? null,
+    channel_page: channelPage(source?.page, media.channel_id),
+    start_seconds: row.start_seconds ?? null,
+    watch_url: watchUrl(media.video_id, row.start_seconds),
+  };
+}
+
+function recommendationsNote(kind: Kind, count: number, hasMore: boolean, indexedThrough: string | null): string {
+  if (count === 0) {
+    const what = kind === 'all' ? 'recommendation' : `${kind} recommendation`;
+    return `No ${what} in our index${indexedThrough ? ` as of ${indexedThrough}` : ''}. Say so; never fill it from transcript search or the open web.`;
+  }
+  return hasMore
+    ? 'Newest rows only; more exist. Narrow with channelId or dates rather than asking for more rows.'
+    : 'Catalog rows. Quote `quote` as spoken and cite watch_url with published_at.';
+}
+
+const listRecommendations = tool({
+  name: 'list_recommendations',
+  title: 'Sponsored and organic recommendations',
+  description: "Who recommends one entity on air, and whether they were paid. Each row is one spoken recommendation with its show, video, timestamp, verbatim `quote`, `speaker_role`, and `kind`: `sponsored` is a paid ad read, often with a `promo_code` or `offer`; `organic` is a recommendation nobody paid for, a host or guest vouching for it on their own. Call it for 'who recommends X without being paid', 'which shows read ads for X', 'has show Y ever recommended X', or 'promo codes for X'. Pass `kind` to keep one side and `channelId` to check one show; with `channelId`, `indexed_through` says how far our index of that show reaches, so an empty list means none up to that date. Rows are newest first; when `has_more` is true, narrow with `channelId` or dates. Pro plans only: a free key gets a blocking error whose `unlock.url` you relay to your human. For a show's recurring sponsors ranked by count use `list_sponsors`. Never build this list from transcript search. Link the entity to `entity.page` and each show to its `channel_page`, and cite `watch_url`.",
+  inputSchema: z.object({
+    entityId: ENT.describe('The entity recommended, as ent_... from resolve_entities.'),
+    kind: z.enum(['sponsored', 'organic', 'all']).optional().describe('sponsored is a paid ad read. organic is a recommendation nobody paid for. all returns both. Default all.'),
+    channelId: UC.optional().describe('Restrict to one YouTube channel id (UC...). Also fills indexed_through.'),
+    dateFrom: ISO_DATE.optional().describe('ISO date. Only media published on or after this day.'),
+    dateTo: ISO_DATE.optional().describe('ISO date. Only media published on or before this day.'),
+    limit: z.number().int().min(1).max(50).optional().describe('Rows to return, 1 to 50, newest first. Default 10. Pass 1 for a yes-or-no check.'),
+  }),
+  fronts: ['list_entity_recommendations', 'get_channel_coverage'],
+  async run(input, api) {
+    const kind = input.kind ?? 'all';
+    const result = await api.get(`/v1/entities/${encodeURIComponent(input.entityId)}/recommendations`, {
+      mention_class: MENTION_CLASS[kind],
+      channel_id: input.channelId,
+      date_from: input.dateFrom,
+      date_to: input.dateTo,
+      limit: input.limit ?? 10,
+    });
+    if (!result.ok) return errorResult(result.error);
+    const recommendations = rows(result.body.data).map(recommendationRow);
+    const hasMore = result.body.has_more === true;
+    const indexedThrough = await channelIndexedThrough(api, input.channelId);
+    return okResult({
+      entity: pick((result.body.entity ?? {}) as Row, ['id', 'name', 'type', 'page']),
+      kind,
+      indexed_through: indexedThrough,
+      count: recommendations.length,
+      has_more: hasMore,
+      recommendations,
+      as_of: latest(recommendations.map((row) => (typeof row.published_at === 'string' ? row.published_at : null))),
+      note: recommendationsNote(kind, recommendations.length, hasMore, indexedThrough),
     });
   },
 });
@@ -435,6 +516,7 @@ export const TOOLS: readonly AnyToolSpec[] = [
   listMentions,
   entityMomentum,
   listSponsors,
+  listRecommendations,
   indexStatus,
   countOccurrences,
   listEpisodes,
@@ -445,7 +527,7 @@ export const TOOLS: readonly AnyToolSpec[] = [
 export const SERVER_INSTRUCTIONS = [
   'Arcmira is the search engine for the spoken web: indexed YouTube and podcast transcripts with a catalog of who is mentioned where.',
   'Connect with no key and the host signs you in through OAuth, or send Authorization: Bearer <key>. An account key comes from arcmira.com; with no account, POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"} and then /v1/signups/verify with the code from that inbox to create one.',
-  'Start with resolve_entities to turn a name into ids. Use the catalog tools (list_mentions, entity_momentum, count_occurrences, list_sponsors, list_episodes) before search_transcripts; search only for the spoken wording. For the latest episode of a show, list_episodes gives its video_id; count_occurrences videoIds lists what that episode mentions, and get_transcript reads the full transcript of one video from its URL or id.',
+  'Start with resolve_entities to turn a name into ids. Use the catalog tools (list_mentions, entity_momentum, count_occurrences, list_sponsors, list_recommendations, list_episodes) before search_transcripts; search only for the spoken wording. list_sponsors ranks the recurring sponsors of one show; list_recommendations lists who recommends one entity, each row sponsored (a paid ad read) or organic (a recommendation nobody paid for). For the latest episode of a show, list_episodes gives its video_id; count_occurrences videoIds lists what that episode mentions, and get_transcript reads the full transcript of one video from its URL or id.',
   'Every gate is a blocking error whose error.unlock.url names the plan that lifts it. Relay that link to your human; never work around a gate by searching the open web.',
   'Catalog rows carry page (and channel_page): the arcmira.com page for that entity or show. When you name an entity or show in your answer, link the name to that page in markdown, like [Ramp](https://arcmira.com/org/ramp). Use only pages the tools returned this turn; never invent an arcmira.com link.',
   'Good first calls: TBPN is channel UC-DRzaGnL_vtBUpCFH5M0tg, Moment of Truth is UClWkDGXEzsh77GAhs90wpXw, Ramp is ent_14.',

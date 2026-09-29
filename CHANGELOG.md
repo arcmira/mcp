@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+`list_recommendations`, the tenth tool, lists who recommends one entity on air. Each row is one spoken recommendation with its show, video, `start_seconds`, `watch_url`, verbatim `quote`, `speaker_role`, `promo_code`, `offer`, `confidence`, and `kind`. `sponsored` is a paid ad read. `organic` is a recommendation nobody paid for. `kind` on the input keeps one side, `channelId` checks one show and fills `indexed_through`, and `dateFrom`, `dateTo`, and `limit` (1 to 50) narrow it. It fronts `GET /v1/entities/{id}/recommendations`, needs a Pro plan, and forwards `recommendations_not_enabled` with its unlock link to a free key. The result is JSON in both the text block and `structuredContent`. `list_sponsors` is unchanged and its description now points to the new tool for one brand across every show. The server instructions name the new tool and what sponsored and organic mean.
+
 ## 0.5.3
 
 Premium lines name their speaker again. v1 sends each premium line's `speaker` as the diarization id from `speakers[]`, and the renderer only printed a speaker that arrived as a string, so since 0.4.0 every premium line rendered with no speaker. Each line now reads `[start] Name: text`, with the name taken from `speakers[]` and `Speaker <id>` when the list does not name that id. Premium paragraphs from `timestamps: false` carry the same prefix.

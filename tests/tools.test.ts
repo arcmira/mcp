@@ -10,7 +10,7 @@ const VIDEO = 'dQw4w9WgXcQ';
 const NOW = new Date('2026-09-02T12:00:00.000Z');
 
 describe('the manifest', () => {
-  it('is the nine tools in the spec order', () => {
+  it('is the ten tools in the spec order', () => {
     assert.deepEqual(TOOLS.map((tool) => tool.name), [...TOOL_NAMES]);
     assert.deepEqual([...TOOL_NAMES], [
       'search_transcripts',
@@ -18,6 +18,7 @@ describe('the manifest', () => {
       'list_mentions',
       'entity_momentum',
       'list_sponsors',
+      'list_recommendations',
       'index_status',
       'count_occurrences',
       'list_episodes',
@@ -179,6 +180,95 @@ describe('list_sponsors', () => {
     assert.match(body.note, /free slice/);
     assert.equal(body.as_of, '2026-08-20');
     assert.equal(result.isError, undefined);
+  });
+});
+
+describe('list_recommendations', () => {
+  const RAMP = { id: 'ent_14', name: 'Ramp', type: 'organization', numeric_id: 14, page: 'https://arcmira.com/org/ramp' };
+  const row = (mentionClass: string, extra: Record<string, unknown> = {}) => ({
+    id: 'com_1',
+    mention_class: mentionClass,
+    entity: { id: 'ent_14', name: 'Ramp', type: 'organization' },
+    media: { video_id: 'abcdefghijk', title: 'T', published_at: '2026-09-24T20:11:49Z', channel_id: TBPN, source_channel: { id: 'ent_6', name: 'TBPN' } },
+    start_seconds: 289,
+    end_seconds: 299,
+    verbatim_quote: 'I use it every day.',
+    promo_code: null,
+    offer: null,
+    sentiment: null,
+    confidence: 0.9,
+    speaker_role: 'host',
+    conflict_status: null,
+    resolution: null,
+    ...extra,
+  });
+
+  for (const [kind, mentionClass] of [['organic', 'endorsement'], ['sponsored', 'ad_read'], [undefined, 'all']] as const) {
+    it(`kind ${kind ?? 'omitted'} asks v1 for mention_class ${mentionClass}`, async () => {
+      const api = fakeApi({ '/v1/entities/ent_14/recommendations': ok({ data: [], has_more: false, entity: RAMP }) });
+      await toolNamed('list_recommendations').run(kind === undefined ? { entityId: 'ent_14' } : { entityId: 'ent_14', kind }, api);
+      assert.equal(api.calls[0].query.mention_class, mentionClass);
+      assert.equal(api.calls[0].query.limit, 10);
+    });
+  }
+
+  it('names each row sponsored, organic, or unclassified and flattens it', async () => {
+    const api = fakeApi({
+      '/v1/entities/ent_14/recommendations': ok({
+        data: [row('endorsement'), row('ad_read', { promo_code: 'TBPN', media: { video_id: 'bcdefghijkl', title: 'U', published_at: '2026-09-25T20:21:25Z', channel_id: TBPN, source_channel: null } }), row('mention')],
+        has_more: true,
+        entity: RAMP,
+      }),
+    });
+    const result = await toolNamed('list_recommendations').run({ entityId: 'ent_14' }, api);
+    const body = result.structuredContent as Record<string, unknown> & { recommendations: Array<Record<string, unknown>> };
+    assert.deepEqual(body.recommendations.map((r) => r.kind), ['organic', 'sponsored', 'unclassified']);
+    assert.deepEqual(body.recommendations[0], {
+      kind: 'organic',
+      quote: 'I use it every day.',
+      speaker_role: 'host',
+      promo_code: null,
+      offer: null,
+      confidence: 0.9,
+      video_id: 'abcdefghijk',
+      title: 'T',
+      published_at: '2026-09-24T20:11:49Z',
+      channel_id: TBPN,
+      channel_name: 'TBPN',
+      channel_page: `https://arcmira.com/yt/${TBPN}`,
+      start_seconds: 289,
+      watch_url: 'https://arcmira.com/watch?v=abcdefghijk&t=289',
+    });
+    assert.equal(body.recommendations[1].promo_code, 'TBPN');
+    assert.equal(body.recommendations[1].channel_name, null);
+    assert.deepEqual(body.entity, { id: 'ent_14', name: 'Ramp', type: 'organization', page: 'https://arcmira.com/org/ramp' });
+    assert.equal(body.kind, 'all');
+    assert.equal(body.count, 3);
+    assert.equal(body.has_more, true);
+    assert.equal(body.as_of, '2026-09-25T20:21:25Z');
+    assert.match(body.note as string, /Narrow with channelId/);
+    assert.equal(result.content[0].text, JSON.stringify(result.structuredContent));
+    assert.equal(api.calls.length, 1);
+  });
+
+  it('with a channel, an empty answer says how far the index reaches', async () => {
+    const api = fakeApi({
+      '/v1/entities/ent_14/recommendations': ok({ data: [], has_more: false, entity: RAMP }),
+      [`/v1/channels/${TBPN}/coverage`]: ok({ channel: { indexed_through: '2026-09-28' } }),
+    });
+    const result = await toolNamed('list_recommendations').run({ entityId: 'ent_14', channelId: TBPN, kind: 'organic' }, api);
+    const body = result.structuredContent as Record<string, unknown>;
+    assert.equal(api.calls[0].query.channel_id, TBPN);
+    assert.equal(body.indexed_through, '2026-09-28');
+    assert.equal(body.note, 'No organic recommendation in our index as of 2026-09-28. Say so; never fill it from transcript search or the open web.');
+  });
+
+  it('forwards the plan gate untouched and reads no coverage', async () => {
+    const api = fakeApi({ '/v1/entities/ent_14/recommendations': gate('recommendations_not_enabled') });
+    const result = await toolNamed('list_recommendations').run({ entityId: 'ent_14', channelId: TBPN }, api);
+    assert.equal(result.isError, true);
+    assert.equal((result.structuredContent as { error: { unlock: { url: string } } }).error.unlock.url, 'https://arcmira.com/pricing?src=mcp-tool');
+    assert.equal(api.calls.length, 1);
   });
 });
 

@@ -26,6 +26,8 @@ const CALLS: Array<{ label: string; tool: string; args: Record<string, unknown>;
   { label: 'momentum ramp', tool: 'entity_momentum', args: { entityIds: ['ent_14'] }, expect: 'ok' },
   { label: 'counts brands both', tool: 'count_occurrences', args: { channelIds: [TBPN, MTS], entityTypes: ['organization', 'product'], limit: 5 }, expect: 'ok' },
   { label: 'sponsors tbpn', tool: 'list_sponsors', args: { youtubeChannelId: TBPN }, expect: 'either' },
+  { label: 'recs ramp organic', tool: 'list_recommendations', args: { entityId: 'ent_14', kind: 'organic', limit: 5 }, expect: 'either' },
+  { label: 'recs ramp sponsored', tool: 'list_recommendations', args: { entityId: 'ent_14', kind: 'sponsored', channelId: TBPN, limit: 3 }, expect: 'either' },
   { label: 'search recent', tool: 'search_transcripts', args: { query: 'Ramp corporate cards', channelIds: [TBPN], recency: 'year', maxResults: 3 }, expect: 'either' },
   { label: 'gate: premium source', tool: 'search_transcripts', args: { query: 'Ramp', channelIds: [TBPN], source: 'arcmira_premium' }, expect: 'either' },
   { label: 'gate: fresh window', tool: 'search_transcripts', args: { query: 'Ramp', channelIds: [TBPN], recency: 'recent' }, expect: 'either' },
@@ -74,7 +76,7 @@ function summarize(structured: unknown, texts: string[]): string {
     return `${error.code} gate=${error.gate ?? '-'} param=${error.param ?? '-'} unlock=${unlock.url ?? '-'}`;
   }
   const parts: string[] = [];
-  for (const key of ['entities', 'chunks', 'mentions', 'cards', 'rows', 'sponsors', 'lines', 'paragraphs', 'speakers', 'languages']) {
+  for (const key of ['entities', 'chunks', 'mentions', 'cards', 'rows', 'sponsors', 'recommendations', 'lines', 'paragraphs', 'speakers', 'languages']) {
     if (Array.isArray(body[key])) parts.push(`${key}=${(body[key] as unknown[]).length}`);
   }
   if (texts.length === 2) parts.push(`transcript_lines=${texts[0].match(/^\[\d+\] /gm)?.length ?? 0}`);
