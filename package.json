@@ -1,7 +1,7 @@
 {
   "name": "@arcmira/mcp",
-  "version": "0.5.3",
-  "description": "Remote MCP server for YouTube and podcast transcripts: full transcripts, mentions, momentum, sponsors. OAuth or an account key.",
+  "version": "0.6.0",
+  "description": "Remote MCP server for YouTube and podcast transcripts: full transcripts, mentions, momentum, sponsors, organic recommendations. OAuth or an account key.",
   "keywords": [
     "mcp",
     "mcp-server",

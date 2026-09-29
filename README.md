@@ -1,6 +1,6 @@
 # Arcmira MCP: search YouTube and podcast transcripts from Claude, Cursor, ChatGPT, and Codex
 
-Arcmira MCP is the official remote MCP server for [Arcmira](https://arcmira.com). It gives any MCP client nine read-only tools over indexed YouTube and podcast transcripts: the full transcript of one video, the newest episodes of a show, what a show said, who was mentioned where, momentum, sponsors, and coverage.
+Arcmira MCP is the official remote MCP server for [Arcmira](https://arcmira.com). It gives any MCP client ten read-only tools over indexed YouTube and podcast transcripts: the full transcript of one video, the newest episodes of a show, what a show said, who was mentioned where, momentum, sponsors, organic recommendations, and coverage.
 
 Arcmira is an SF-based AI company and the search engine for the spoken web.
 
@@ -76,10 +76,11 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 | `count_occurrences` | What a set of shows talks about, and what they share; `videoIds` scopes it to one episode | `GET /v1/mentions/counts` |
 | `list_episodes` | The newest indexed episodes of one channel, with the `video_id` the other tools take | `GET /v1/channels/{id}/videos` |
 | `list_sponsors` | Recurring sponsors of a channel from the ad-read rollup | `GET /v1/channels/{id}/sponsors` |
+| `list_recommendations` | Who recommends an entity on air, each row `sponsored` (a paid ad read) or `organic` (a recommendation nobody paid for), with the quote and timestamp | `GET /v1/entities/{id}/recommendations` |
 | `index_status` | What the index holds for a channel, or one transcription job | `GET /v1/channels/{id}/coverage`, `GET /v1/transcriptions/{id}` |
 | `get_transcript` | Full transcript of one video from its URL or id, as text with `[start]` on every line | `GET /v1/transcripts/{video_id}`, `GET /v1/videos/{video_id}/captions` |
 
-Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: false`. Every result carries `as_of` where a date applies and a one-sentence `note`. Seven of the tools return the JSON body in both the content block and `structuredContent`. `get_transcript` returns two text blocks and no `structuredContent`: the transcript as `[start] text` lines, then the rest of the body as JSON. A long transcript crosses the wire once, and a host that prefers `structuredContent` still shows the lines.
+Every tool declares `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: false`. Every result carries `as_of` where a date applies and a one-sentence `note`. Nine of the tools return the JSON body in both the content block and `structuredContent`. `get_transcript` returns two text blocks and no `structuredContent`: the transcript as `[start] text` lines, then the rest of the body as JSON. A long transcript crosses the wire once, and a host that prefers `structuredContent` still shows the lines.
 
 Good first calls: TBPN is channel `UC-DRzaGnL_vtBUpCFH5M0tg`, Moment of Truth is `UClWkDGXEzsh77GAhs90wpXw`, Ramp is `ent_14`.
 
@@ -102,7 +103,7 @@ A gate is an MCP tool result with `isError: true` whose content is the API's err
 }
 ```
 
-Switch on `error.code`, relay `error.unlock.url` to the human, and honor `retry_after_seconds` on `rate_limited`. A 200 that withheld something (Premium transcript text, the paid-versus-organic split, sponsors past the free slice) is a normal result carrying the same body under `access`. The full catalog is at https://arcmira.com/docs/errors.
+Switch on `error.code`, relay `error.unlock.url` to the human, and honor `retry_after_seconds` on `rate_limited`. `list_recommendations` needs a Pro plan; a free key gets `recommendations_not_enabled` with the unlock link. A 200 that withheld something (Premium transcript text, the paid-versus-organic split, sponsors past the free slice) is a normal result carrying the same body under `access`. The full catalog is at https://arcmira.com/docs/errors.
 
 Every result, gates included, carries the key's budget after the call under `_meta["arcmira.com/rate_limit"]` as `{ "limit": 20, "remaining": 17, "reset": 1788819360 }`, read from the API's RateLimit headers. `reset` is Unix seconds at the next window. Hosts do not show `_meta`; a client that watches its spend reads it there.
 

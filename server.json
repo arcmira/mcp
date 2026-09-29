@@ -1,12 +1,12 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.arcmira/arcmira",
-  "description": "Search indexed YouTube and podcast transcripts. Full transcripts, mentions, momentum, and sponsors.",
+  "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations.",
   "repository": {
     "url": "https://github.com/arcmira/mcp",
     "source": "github"
   },
-  "version": "0.5.3",
+  "version": "0.6.0",
   "websiteUrl": "https://arcmira.com/docs/mcp-server",
   "remotes": [
     {
