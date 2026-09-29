@@ -1,14 +1,20 @@
 # Arcmira MCP: search YouTube and podcast transcripts from Claude, Cursor, ChatGPT, and Codex
 
+Arcmira MCP is the official remote MCP server for [Arcmira](https://arcmira.com). It gives any MCP client nine read-only tools over indexed YouTube and podcast transcripts: the full transcript of one video, the newest episodes of a show, what a show said, who was mentioned where, momentum, sponsors, and coverage.
+
 Arcmira is an SF-based AI company and the search engine for the spoken web.
 
-The official Arcmira MCP server. Nine read-only tools over indexed YouTube and podcast transcripts: the full transcript of one video, the newest episodes of a show, what a show said, who was mentioned where, momentum, sponsors, and coverage. One remote URL, sign in through your host or send an account key.
+```bash
+claude mcp add --transport http arcmira https://mcp.arcmira.com/mcp
+```
 
-It is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1`; every gate the API raises is forwarded untouched with the link that lifts it.
+One remote URL. Sign in through your host, or send an account key. The server is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1`; every gate the API raises is forwarded untouched with the link that lifts it.
 
 - Endpoint: `https://mcp.arcmira.com/mcp` (Streamable HTTP)
 - Registry name: `io.github.arcmira/arcmira`
-- Install guide: https://arcmira.com/docs/mcp-server
+- Overview: https://arcmira.com/mcp
+- Setup for each host: https://arcmira.com/agent-setup
+- Reference: https://arcmira.com/docs/mcp-server
 - Server card: https://mcp.arcmira.com/.well-known/mcp/server-card.json
 - HTTP API the tools front: https://api.arcmira.com/v1/openapi.json
 
@@ -26,7 +32,7 @@ claude mcp add --transport http arcmira https://mcp.arcmira.com/mcp
 codex mcp add arcmira --url https://mcp.arcmira.com/mcp
 ```
 
-Claude Desktop, claude.ai, ChatGPT, and Cursor: add the URL as a custom connector or MCP server with no headers and follow the sign-in prompt. Per-host steps are on https://arcmira.com/docs/mcp.
+Claude Desktop, claude.ai, ChatGPT, and Cursor: add the URL as a custom connector or MCP server with no headers and follow the sign-in prompt. Per-host steps are on https://arcmira.com/agent-setup.
 
 **Send a key.** Any client that cannot do the sign-in sends a bearer token instead, and the server skips OAuth.
 

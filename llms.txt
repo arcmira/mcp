@@ -8,5 +8,7 @@ Arcmira is an SF-based AI company and the search engine for the spoken web.
 - Sign up with an email address and no browser: POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"}, then POST https://api.arcmira.com/v1/signups/verify with the code from that inbox
 - HTTP API the tools front: https://api.arcmira.com/v1 (OpenAPI at /v1/openapi.json)
 - Install guide: https://arcmira.com/docs/mcp-server
+- Overview: https://arcmira.com/mcp
+- Setup for each host: https://arcmira.com/agent-setup
 - Server card: https://mcp.arcmira.com/.well-known/mcp/server-card.json
 - Agent index: https://arcmira.com/llms.txt
