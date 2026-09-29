@@ -17,6 +17,7 @@ One remote URL. Sign in through your host, or send an account key. The server is
 - Reference: https://arcmira.com/docs/mcp-server
 - Server card: https://mcp.arcmira.com/.well-known/mcp/server-card.json
 - HTTP API the tools front: https://api.arcmira.com/v1/openapi.json
+- Prefer code? `npm i arcmira` (TypeScript SDK and the `arcmira` CLI, https://github.com/arcmira/arcmira) or `pip install arcmira` (Python SDK, https://github.com/arcmira/python). Same operations, same gates.
 
 ## Connect
 
