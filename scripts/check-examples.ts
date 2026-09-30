@@ -1,5 +1,5 @@
 /**
- * Runs every worked example in src/reference.ts against production through the sandbox client and
+ * Runs every worked example in src/reference.ts and every task skill program in src/skills.ts against production through the sandbox client and
  * fails when a program throws, returns nothing, or reads a field the API does not send (an undefined
  * leaf in the returned value). This is how the reference is kept true to the live response shapes.
  *
@@ -8,6 +8,7 @@
  * About a dozen calls, a few rows each. Pass --base to point at another API.
  */
 import { EXAMPLES } from '../src/reference.ts';
+import { TASK_SKILLS } from '../src/skills.ts';
 
 type Client = {
   createArcmira(o: { base: string; fetch: typeof fetch }): { arcmira: object; meter: { calls: number } };
@@ -29,7 +30,8 @@ function undefinedPaths(value: unknown, path = '$', out: string[] = []): string[
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (...args: string[]) => (...args: unknown[]) => Promise<unknown>;
 let failed = 0;
-for (const [i, example] of EXAMPLES.entries()) {
+const PROGRAMS = [...EXAMPLES, ...TASK_SKILLS.flatMap((s) => s.programs.map((p) => ({ title: `${s.name}: ${p.title}`, code: p.code })))];
+for (const [i, example] of PROGRAMS.entries()) {
   const { arcmira, meter } = createArcmira({
     base,
     fetch: ((url: string, init?: RequestInit) => fetch(url, { ...init, headers: { ...(init?.headers as Record<string, string>), authorization: `Bearer ${key}` } })) as typeof fetch,
@@ -38,13 +40,18 @@ for (const [i, example] of EXAMPLES.entries()) {
   const console_ = { log: (...a: unknown[]) => lines.push(a.map(String).join(' ')), error: (...a: unknown[]) => lines.push(a.map(String).join(' ')) };
   let verdict: string;
   try {
-    const run = new AsyncFunction('arcmira', 'ArcmiraError', 'console', example.code);
-    const value = await run(arcmira, ArcmiraError, console_);
+    let value = await new AsyncFunction('arcmira', 'ArcmiraError', 'console', example.code)(arcmira, ArcmiraError, console_);
+    const choose = (value as { choose?: Array<{ id: string }> } | null)?.choose;
+    if (choose && choose.length === 0) throw new Error('choose came back empty: the pick guard offered nothing to choose from');
+    if (choose?.[0]?.id && example.code.includes('ID = null')) {
+      lines.push(`choose returned ${choose.length}; rerun with ID = ${choose[0].id}`);
+      value = await new AsyncFunction('arcmira', 'ArcmiraError', 'console', example.code.replace('ID = null', `ID = ${JSON.stringify(choose[0].id)}`))(arcmira, ArcmiraError, console_);
+    }
     const holes = undefinedPaths(value);
     const empty = value === undefined || value === null || (Array.isArray(value) && value.length === 0);
     if (holes.length > 0) verdict = `FAIL undefined at ${holes.slice(0, 6).join(', ')}`;
     else if (empty) verdict = 'FAIL returned nothing';
-    else verdict = `ok ${JSON.stringify(value).slice(0, 110)}`;
+    else verdict = `ok ${choose ? '(after choose) ' : ''}${JSON.stringify(value).slice(0, 110)}`;
   } catch (error) {
     verdict = `FAIL ${error instanceof Error ? `${error.name}: ${error.message.slice(0, 160)}` : String(error)}`;
   }

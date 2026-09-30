@@ -11,7 +11,7 @@ claude mcp add --transport http arcmira https://mcp.arcmira.com/mcp
 One remote URL. Sign in through your host, or send an account key. The server is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1`; every gate the API raises is forwarded untouched with the link that lifts it.
 
 - Endpoint: `https://mcp.arcmira.com/mcp` (Streamable HTTP)
-- Plugin for Claude Code, Codex, Cursor and Gemini: [`plugins/arcmira`](plugins/arcmira) (Apache-2.0), one skill generated from the same client reference
+- Plugin for Claude Code, Codex, Cursor and Gemini: [`plugins/arcmira`](plugins/arcmira) (Apache-2.0): the client-reference skill plus five task skills, generated from the same source as `describe`
 - Registry name: `io.github.arcmira/arcmira`
 - Overview: https://arcmira.com/mcp
 - Setup for each host: https://arcmira.com/agent-setup
@@ -135,12 +135,40 @@ The ten tools (`resolve_entities`, `search_transcripts`, `list_mentions`, `entit
 
 ## Plugin
 
-`plugins/arcmira` bundles the MCP URL and one skill for Claude Code, Codex, Cursor, Agent Plugins hosts and Gemini CLI. The skill is generated from `src/reference.ts`, the same text `describe` serves, by `scripts/build-skill.ts`; CI fails when it drifts.
+`plugins/arcmira` bundles the MCP URL and six skills for Claude Code, Codex, Cursor, Agent Plugins hosts and Gemini CLI:
+
+| Skill | For |
+| --- | --- |
+| `arcmira` | The client reference: the id rule, every method, worked programs |
+| `sponsor-research` | Who sponsors a show, or which shows a brand sponsors, how often, since when |
+| `company-watch` | What shows said about a company this week: shows, counts, momentum, quotes |
+| `find-quotes` | Exact spoken quotes with speaker, date, a timestamped link, clip start and end |
+| `person-research` | Interview or meeting prep: appearances, a person's own words, who discusses them |
+| `compare-shows` | Two shows side by side: size, topics, overlap, shared sponsors |
+
+Every skill starts from names, never ids: each program resolves the name, returns a short `choose` list when close candidates compete, and names the entity it used. The skills are generated from `src/reference.ts` and `src/skills.ts` by `scripts/build-skill.ts`; CI fails when a file drifts or a program calls a method the reference does not document, and `pnpm examples:check` runs every program against production.
 
 ```bash
 claude plugin marketplace add arcmira/mcp
 claude plugin install arcmira@arcmira
 ```
+
+## Stay up to date
+
+Arcmira ships changes weekly. Keep auto-update on.
+
+- **The MCP server needs nothing.** It is remote: hosts fetch its tools and instructions on connect, and `describe` returns the reference from the server on every call, opening with a version line. The MCP server alone is always current.
+- **Claude Code plugin.** Auto-update is off by default for a third-party marketplace. Turn it on: run `/plugin`, open **Marketplaces**, pick `arcmira`, and choose **Enable auto-update**. Or set it in `~/.claude/settings.json`:
+
+  ```json
+  { "extraKnownMarketplaces": { "arcmira": { "source": { "source": "github", "repo": "arcmira/mcp" }, "autoUpdate": true } } }
+  ```
+
+  Update now: `claude plugin update arcmira@arcmira`.
+- **Codex plugin.** `codex plugin marketplace upgrade arcmira`, then restart Codex.
+- **Skills installed with `npx skills add arcmira/mcp`.** `npx skills update`.
+
+Each release bumps the version in every plugin manifest (a test enforces it), because Claude Code only updates a plugin whose version changed.
 
 ## Develop
 
@@ -150,7 +178,8 @@ pnpm dev            # wrangler dev on :8790 with a local Worker Loader
 pnpm test           # node:test, sandbox programs run under a fake loader
 pnpm typecheck
 pnpm manifest:check # every client call matches the live OpenAPI document
-pnpm skill:check    # plugins/arcmira/skills/arcmira/SKILL.md matches src/reference.ts
+pnpm skill:check    # every plugins/arcmira/skills/*/SKILL.md matches src/reference.ts and src/skills.ts
+ARCMIRA_KEY=arc_sk_... pnpm examples:check   # every worked program and task-skill program runs against production
 pnpm sandbox:check  # src/sandbox/client-source.ts matches src/sandbox/client.js
 ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/smoke.ts http://localhost:8790/mcp
 ```
