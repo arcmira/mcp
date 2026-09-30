@@ -18,7 +18,7 @@ export const ID_RULE = `ID RULE. Filters take verbatim ids only: entity ids look
   // r.best is set only for an unambiguous match; check r.best.type and r.best.name against what the user meant.
   // If r.best is null, pick from r.candidates by type and name, or return the options.
   const id = r.best.id;                      // for a show: resolve with { type: "channel" } and use best.youtube_channel_id
-Resolve the exact name the user said ("ICE", "Mercury"), not a paraphrase; use what they meant only to check the type and name. Omit type for a brand (the catalog types some companies as product). When two candidates fit the same meaning (the catalog holds duplicates), query both and say which ids you used, or take the one with the higher appearance_count.`;
+Resolve the exact name the user said ("ICE", "Mercury"), not a paraphrase; use what they meant only to check the type and name. Omit type for a brand (the catalog types some companies as product). When two candidates fit the same meaning (the catalog holds duplicates), query both and say which ids you used, or take the one with the higher appearance_count. best can be the wrong row when a close candidate outranks it ("Sam" returns a bare Sam row while Sam Altman has far more appearances): list the close candidates for the user, or check each against the data. Always say in the answer which entity you used.`;
 
 export interface MethodDoc {
   name: string;
@@ -45,13 +45,13 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'mentions',
     signature: 'arcmira.mentions({ entityId, channelId?, after?, before?, limit?, cursor? })',
-    returns: '{ entity{id, name, page}, data[{media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds}], has_more, next_cursor }',
+    returns: '{ entity{id, name, page}, data[{media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds, is_appearance, description}], has_more, next_cursor }',
     notes: ['When and where a name came up: one row per catalog mention, newest first, several rows per episode, limit 1..100. Never count rows to answer how many episodes: occurrences gives count per window. Rows carry no wording; for a quote use search. Read the episode title before asserting a lone row: a title far from the entity (a jungle episode for a bank) is a homonym the catalog mislabelled.'],
   },
   {
     name: 'momentum',
     signature: 'arcmira.momentum(entityId)',
-    returns: '{ entity, verdict (accelerating | flat | fading | none), as_of, volume{mentions_30d, mentions_prior_30d, mentions_90d, total}, top_shows[{channel_id, channel_name, mentions}] }',
+    returns: '{ entity, verdict (accelerating | flat | fading | none), as_of, volume{mentions_7d, mentions_30d, mentions_prior_30d, mentions_90d, total}, top_shows[{channel_id, channel_name, mentions}] }',
     notes: ['The last 30 days against the prior 30, as of as_of, across the shows Arcmira indexes.'],
   },
   {
@@ -63,7 +63,7 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'recommendations',
     signature: 'arcmira.recommendations(entityId, { kind?, channelId?, after?, before?, limit?, cursor? })',
-    returns: '{ entity, data[{mention_class (ad_read = sponsored, endorsement = organic), verbatim_quote, promo_code, media{video_id, title, published_at, source_channel{name}}, start_seconds}], has_more }',
+    returns: '{ entity, data[{mention_class (ad_read = sponsored, endorsement = organic), verbatim_quote, promo_code, media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds}], has_more, next_cursor }',
     notes: ['Who recommends one entity on air. kind: sponsored | organic | all (default all), limit 1..50. Pro plan; a free key gets recommendations_not_enabled with its unlock link.'],
   },
   {
