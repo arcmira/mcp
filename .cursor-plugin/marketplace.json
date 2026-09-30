@@ -1,0 +1,13 @@
+{
+  "name": "arcmira",
+  "owner": {
+    "name": "Arcmira"
+  },
+  "plugins": [
+    {
+      "name": "arcmira",
+      "source": "./plugins/arcmira",
+      "description": "Search YouTube and podcast transcripts from your agent: what shows said, who was mentioned, sponsors, recommendations and momentum."
+    }
+  ]
+}
