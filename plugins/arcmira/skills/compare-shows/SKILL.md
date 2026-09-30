@@ -25,6 +25,7 @@ Users give names; filters take ids only (ent_..., UC..., 11-character video ids)
 4. Two or more fit: either check each against the data (run the query for each and keep the one the context and the data support), or stop and show the user a short list, one line per candidate: name, type, and one distinguishing fact (appearance count or top show), then ask which.
 5. Nothing close (a show typed "All In"): retry with spelling variants ("All-In", "All-In Podcast") before you ask. Still nothing, or only a different name: say it is not in the Arcmira index and offer the nearest names; never answer for a similar-named show without saying so.
 6. Say which entity the answer is about (name, type, id) in the answer, and name any close candidate you set aside. Never switch entities silently.
+7. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element). Drop rows about another sense.
 
 For this task:
 
