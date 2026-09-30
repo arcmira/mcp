@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+`GET /.well-known/openai-apps-challenge` answers the domain-verification token OpenAI issues for an app submission, as plain text and nothing else, read from the `OPENAI_APPS_CHALLENGE` Worker secret. The path stays a 404 while the secret is unset. No tool changes.
+
 ## 0.6.0
 
 `list_recommendations`, the tenth tool, lists who recommends one entity on air. Each row is one spoken recommendation with its show, video, `start_seconds`, `watch_url`, verbatim `quote`, `speaker_role`, `promo_code`, `offer`, `confidence`, and `kind`. `sponsored` is a paid ad read. `organic` is a recommendation nobody paid for. `kind` on the input keeps one side, `channelId` checks one show and fills `indexed_through`, and `dateFrom`, `dateTo`, and `limit` (1 to 50) narrow it. It fronts `GET /v1/entities/{id}/recommendations`, needs a Pro plan, and forwards `recommendations_not_enabled` with its unlock link to a free key. The result is JSON in both the text block and `structuredContent`. `list_sponsors` is unchanged and its description now points to the new tool for one brand across every show. The server instructions name the new tool and what sponsored and organic mean.

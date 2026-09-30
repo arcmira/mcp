@@ -9,6 +9,8 @@ export interface Env {
   ARCMIRA_API_BASE?: string;
   /** The running Worker version (wrangler version_metadata). Absent under local dev. */
   CF_VERSION_METADATA?: { id: string; tag: string; timestamp: string };
+  /** The domain-verification token OpenAI issues for an app submission (a Worker secret). Unset answers 404. */
+  OPENAI_APPS_CHALLENGE?: string;
 }
 
 /** The host on the other end of the MCP connection, as its initialize handshake named it. */
