@@ -9,6 +9,9 @@ import { MCP_PATH, createServer } from './server.ts';
 
 const BROWSER_ORIGINS = ['claude.ai', 'chatgpt.com', 'localhost', '127.0.0.1'];
 
+/** OpenAI's domain check for an app submission reads the token here, as plain text and nothing else. */
+const OPENAI_APPS_CHALLENGE_PATH = '/.well-known/openai-apps-challenge';
+
 function landing(): Response {
   return Response.json({
     name: 'Arcmira MCP',
@@ -43,6 +46,9 @@ export default {
       return Response.json(protectedResourceMetadata(url.origin, env), { headers: { 'cache-control': 'public, max-age=300' } });
     }
     if (url.pathname === AUTHORIZATION_SERVER_PATH) return authorizationServerMetadata(env);
+    if (url.pathname === OPENAI_APPS_CHALLENGE_PATH && env.OPENAI_APPS_CHALLENGE) {
+      return new Response(env.OPENAI_APPS_CHALLENGE.trim(), { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
+    }
     if (SERVER_CARD_PATHS.has(url.pathname)) return serverCardResponse(url.origin);
     if (url.pathname === '/' || url.pathname === '/health') return landing();
     return Response.json({ error: { code: 'not_found', message: `Nothing at ${url.pathname}. The MCP endpoint is ${MCP_PATH}.` } }, { status: 404 });
