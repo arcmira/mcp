@@ -80,7 +80,7 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 | Method | Fronts | Use it for |
 |---|---|---|
 | `arcmira.resolve(q, { type?, limit? })` | `GET /v1/entities/search` | A name, `@handle`, URL or `UC` id to typed rows; `best` is set only for an unambiguous match |
-| `arcmira.search({ query, channelIds?, entityIds?, speakerIds?, kind?, after?, before?, source?, limit? })` | `GET /v1/transcripts/search` | Spoken slices for one topic, with watch links and dates |
+| `arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, entityIds?, after?, before?, source?, limit? })` | `GET /v1/transcripts/search` | Spoken slices for one topic, or about an entity, or spoken by a person, with watch links and dates |
 | `arcmira.mentions({ entityId, channelId?, after?, before?, limit?, cursor? })` | `GET /v1/mentions` | Has X mentioned Y, first seen, last seen |
 | `arcmira.momentum(entityId)` | `GET /v1/entities/{id}/momentum` | Last 30 days against the prior 30, with a verdict |
 | `arcmira.sponsors(channelId, { minAdReads?, status?, limit? })` | `GET /v1/channels/{id}/sponsors` | Recurring sponsors of one show |

@@ -150,12 +150,13 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
           : "No single match. Pick the candidates row that matches the user's meaning by type and name, or ask the user.";
       return { query: q, confidence, best, candidates, note };
     },
-    async search({ query, channelIds, entityIds, speakerIds, kind, after, before, source, limit = 5 } = {}) {
+    async search({ query, channelIds, about, entityIds, speakerIds, kind, after, before, source, limit = 5 } = {}) {
       if (typeof query !== 'string' || query.length < 2) throw new ArcmiraError('search needs query, a topic or phrase of 2 or more characters', 'invalid_query');
       if (kind !== undefined && !SEARCH_KINDS.has(kind)) throw new ArcmiraError('kind is mention, recommendation_sponsored or recommendation_organic', 'invalid_kind');
       return get('/v1/transcripts/search', {
         q: query,
         channel_ids: list(channelIds, needChannelId, 'channelIds', 8),
+        about: list(about, needEntityId, 'about', 8),
         entity_ids: list(entityIds, needEntityId, 'entityIds', 8),
         by: list(speakerIds, needEntityId, 'speakerIds', 8),
         kind,

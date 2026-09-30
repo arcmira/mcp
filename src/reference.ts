@@ -38,10 +38,10 @@ export const METHODS: readonly MethodDoc[] = [
   },
   {
     name: 'search',
-    signature: 'arcmira.search({ query, channelIds?, entityIds?, speakerIds?, kind?, after?, before?, source?, limit? })',
-    returns: '{ chunks[{text, video_id, title, published_at, start_seconds, watchUrl, channel_id}] }',
+    signature: 'arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, entityIds?, after?, before?, source?, limit? })',
+    returns: '{ chunks[{text, video_id, title, published_at, start_seconds, watchUrl, channel_id, about[{id,name,type}], speakers_by[{id,name,type}]}], filters }',
     notes: [
-      'Spoken slices for one topic or phrase; one topic per call. channelIds up to 8 UC ids, entityIds up to 8 ent_ ids (what the slice is about), speakerIds up to 8 person ent_ ids (who is speaking).',
+      'Spoken slices for one topic or phrase; one topic per call. channelIds up to 8 UC ids. about: up to 8 ent_ ids the passage is about (a brand, a person, a topic). speakerIds: up to 8 person ent_ ids for who is speaking. entityIds scopes to a person\'s appearances.',
       'kind: mention | recommendation_sponsored | recommendation_organic keeps one class of slice. after/before are ISO dates. limit 1..20 (default 5). source: arcmira_premium | creator_captions | third_party_quick.',
       'Search finds wording. For "has X ever been mentioned", counts, or sponsors, use the catalog methods below; they are exact and cheaper.',
     ],
