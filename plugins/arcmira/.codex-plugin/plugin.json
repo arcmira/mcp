@@ -1,0 +1,36 @@
+{
+  "name": "arcmira",
+  "version": "0.7.0",
+  "description": "Search YouTube and podcast transcripts from your agent: what shows said, who was mentioned, sponsors, recommendations and momentum.",
+  "author": {
+    "name": "Arcmira",
+    "url": "https://arcmira.com"
+  },
+  "homepage": "https://arcmira.com/docs/mcp-server",
+  "repository": "https://github.com/arcmira/mcp",
+  "license": "Apache-2.0",
+  "keywords": [
+    "youtube",
+    "podcast",
+    "transcripts",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Arcmira",
+    "shortDescription": "Search YouTube and podcast transcripts",
+    "developerName": "Arcmira",
+    "category": "Education & Research",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": [
+      "What did TBPN say about stablecoins in the last 90 days?",
+      "Which sponsors do All-In Podcast and TBPN share?",
+      "Is talk about Linear accelerating or fading on podcasts?"
+    ],
+    "websiteURL": "https://arcmira.com",
+    "supportURL": "https://github.com/arcmira/mcp/issues"
+  }
+}

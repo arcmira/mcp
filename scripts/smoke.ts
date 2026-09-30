@@ -1,43 +1,56 @@
 /**
- * Directory-reviewer dry run over the blessed entities, as an MCP client would see it.
+ * Directory-reviewer dry run, as an MCP client sees it.
  *
  *   ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/smoke.ts [mcp-url]
  *
- * Lists the tools, then makes one call per tool and one call per gate row the key can hit.
- * With no key the transport must answer 401 with the OAuth challenge, and the script stops there.
- * Prints one line per call and never prints the key. Exit 1 when any call is not what the
- * manifest promises.
+ * Lists the tools, reads describe, then runs one execute program per method plus the error
+ * paths a host will hit (a name where an id belongs, a retired tool name, a gate). With no key
+ * the transport must answer 401 with the OAuth challenge, and the script stops there. Prints
+ * one line per call and never prints the key. Exit 1 when any call is not what the manifest
+ * promises. Each execute is one or two production calls; the whole run is about 20.
  */
 import { Client } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import pkg from '../package.json' with { type: 'json' };
+import { METHODS } from '../src/reference.ts';
 
 const url = new URL(process.argv[2] ?? 'https://mcp.arcmira.com/mcp');
 const key = process.env.ARCMIRA_KEY ?? '';
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
-const MTS = 'UClWkDGXEzsh77GAhs90wpXw';
 
-const CALLS: Array<{ label: string; tool: string; args: Record<string, unknown>; expect: 'ok' | 'gate' | 'either' }> = [
-  { label: 'resolve handle', tool: 'resolve_entities', args: { q: '@TBPNLive' }, expect: 'ok' },
-  { label: 'resolve url', tool: 'resolve_entities', args: { q: 'https://www.youtube.com/channel/UClWkDGXEzsh77GAhs90wpXw' }, expect: 'ok' },
-  { label: 'resolve name', tool: 'resolve_entities', args: { q: 'Ramp', type: 'organization' }, expect: 'ok' },
-  { label: 'coverage tbpn', tool: 'index_status', args: { youtubeChannelId: TBPN }, expect: 'ok' },
-  { label: 'mentions ramp on tbpn', tool: 'list_mentions', args: { entityId: 'ent_14', channelId: TBPN, limit: 5 }, expect: 'ok' },
-  { label: 'momentum ramp', tool: 'entity_momentum', args: { entityIds: ['ent_14'] }, expect: 'ok' },
-  { label: 'counts brands both', tool: 'count_occurrences', args: { channelIds: [TBPN, MTS], entityTypes: ['organization', 'product'], limit: 5 }, expect: 'ok' },
-  { label: 'sponsors tbpn', tool: 'list_sponsors', args: { youtubeChannelId: TBPN }, expect: 'either' },
-  { label: 'recs ramp organic', tool: 'list_recommendations', args: { entityId: 'ent_14', kind: 'organic', limit: 5 }, expect: 'either' },
-  { label: 'recs ramp sponsored', tool: 'list_recommendations', args: { entityId: 'ent_14', kind: 'sponsored', channelId: TBPN, limit: 3 }, expect: 'either' },
-  { label: 'search recent', tool: 'search_transcripts', args: { query: 'Ramp corporate cards', channelIds: [TBPN], recency: 'year', maxResults: 3 }, expect: 'either' },
-  { label: 'gate: premium source', tool: 'search_transcripts', args: { query: 'Ramp', channelIds: [TBPN], source: 'arcmira_premium' }, expect: 'either' },
-  { label: 'gate: fresh window', tool: 'search_transcripts', args: { query: 'Ramp', channelIds: [TBPN], recency: 'recent' }, expect: 'either' },
-  { label: 'gate: sponsor filter', tool: 'list_sponsors', args: { youtubeChannelId: TBPN, status: 'active' }, expect: 'either' },
-  { label: 'gate: mentions dateTo', tool: 'list_mentions', args: { entityId: 'ent_14', dateTo: '2026-01-01' }, expect: 'either' },
-  { label: 'gate: job on key', tool: 'index_status', args: { jobId: '00000000-0000-4000-8000-000000000000' }, expect: 'either' },
-  { label: 'captions tbpn', tool: 'get_transcript', args: { video: 'https://www.youtube.com/watch?v=cdLeJU_1UH8' }, expect: 'either' },
-  { label: 'captions german', tool: 'get_transcript', args: { video: 'VbaNcJXVmI4', language: 'de,en' }, expect: 'either' },
-  { label: 'premium on free', tool: 'get_transcript', args: { video: 'cdLeJU_1UH8', quality: 'premium' }, expect: 'either' },
-  { label: 'premium paid', tool: 'get_transcript', args: { video: 'cdLeJU_1UH8', quality: 'premium', range: { start: 0, end: 300 } }, expect: 'either' },
+interface Probe {
+  label: string;
+  tool: 'describe' | 'execute';
+  args: Record<string, unknown>;
+  /** ok: a result. error: isError with this code in the text. either: a result or a gate. */
+  expect: 'ok' | 'either' | { code: string };
+  /** A string the text must contain. */
+  contains?: string;
+}
+
+const PROBES: Probe[] = [
+  { label: 'describe whole', tool: 'describe', args: {}, expect: 'ok', contains: 'ID RULE' },
+  { label: 'describe topic', tool: 'describe', args: { topic: 'sponsors' }, expect: 'ok', contains: 'arcmira.sponsors(' },
+  { label: 'resolve', tool: 'execute', args: { code: 'const r = await arcmira.resolve("Ramp", { type: "organization" }); return { confidence: r.confidence, best: r.best && { id: r.best.id, name: r.best.name } };' }, expect: 'ok', contains: 'ent_14' },
+  { label: 'dates', tool: 'execute', args: { code: 'return { today: arcmira.today(), ago: arcmira.daysAgo(90) };' }, expect: 'ok', contains: 'today' },
+  { label: 'console.log', tool: 'execute', args: { code: 'console.log("hello", { a: 1 }); return 2;' }, expect: 'ok', contains: 'hello {"a":1}\nRETURN: 2' },
+  { label: 'status channel', tool: 'execute', args: { code: `const s = await arcmira.status({ channelId: "${TBPN}" }); return { indexed: s.channel.searchable_videos, through: s.channel.indexed_through };` }, expect: 'ok', contains: 'indexed' },
+  { label: 'status me', tool: 'execute', args: { code: 'const me = await arcmira.status(); return Object.keys(me);' }, expect: 'ok' },
+  { label: 'episodes', tool: 'execute', args: { code: `const e = await arcmira.episodes("${TBPN}", { limit: 2 }); return e.episodes.map(x => x.video_id);` }, expect: 'ok', contains: 'RETURN: ["' },
+  { label: 'mentions', tool: 'execute', args: { code: `const m = await arcmira.mentions({ entityId: "ent_14", channelId: "${TBPN}", limit: 3 }); return { n: m.data.length, first: m.data[0]?.media?.title };` }, expect: 'ok' },
+  { label: 'momentum', tool: 'execute', args: { code: 'const m = await arcmira.momentum("ent_14"); return { verdict: m.verdict, d30: m.volume.mentions_30d };' }, expect: 'ok', contains: 'verdict' },
+  { label: 'occurrences', tool: 'execute', args: { code: `const o = await arcmira.occurrences({ channelIds: ["${TBPN}"], types: ["organization"], limit: 3 }); return o.rows.map(r => [r.name, r.count]);` }, expect: 'ok' },
+  { label: 'sponsors', tool: 'execute', args: { code: `const s = await arcmira.sponsors("${TBPN}", { limit: 3 }); return s.sponsors.map(x => [x.entity.name, x.ad_reads]);` }, expect: 'either' },
+  { label: 'recommendations', tool: 'execute', args: { code: 'const r = await arcmira.recommendations("ent_14", { kind: "organic", limit: 3 }); return r.data.length;' }, expect: 'either' },
+  { label: 'search', tool: 'execute', args: { code: `const s = await arcmira.search({ query: "corporate cards", channelIds: ["${TBPN}"], limit: 2 }); return s.chunks.map(c => c.watchUrl);` }, expect: 'either' },
+  { label: 'transcript window', tool: 'execute', args: { code: 'const t = await arcmira.transcript("cdLeJU_1UH8", { start: 0, end: 30 }); return { lines: (t.lines ?? t.paragraphs ?? []).length };' }, expect: 'either' },
+  { label: 'two calls in parallel', tool: 'execute', args: { code: 'const [a, b] = await Promise.all([arcmira.momentum("ent_14"), arcmira.momentum("ent_323")]); return [a.verdict, b.verdict];' }, expect: 'ok' },
+  { label: 'id_required', tool: 'execute', args: { code: 'return await arcmira.momentum("Ramp");' }, expect: { code: 'id_required' }, contains: 'arcmira.resolve' },
+  { label: 'invalid_video', tool: 'execute', args: { code: 'return await arcmira.transcript("not a video");' }, expect: { code: 'invalid_video' } },
+  { label: 'thrown error', tool: 'execute', args: { code: 'throw new Error("boom");' }, expect: { code: 'program_error' }, contains: 'boom' },
+  { label: 'syntax error', tool: 'execute', args: { code: 'const = ;' }, expect: { code: 'syntax_error' } },
+  { label: 'no network', tool: 'execute', args: { code: 'const r = await fetch("https://example.com/"); return { status: r.status, body: await r.text() };' }, expect: 'ok', contains: 'outbound_refused' },
+  { label: 'call budget', tool: 'execute', args: { code: 'for (let i = 0; i < 50; i++) await arcmira.momentum("ent_14");' }, expect: { code: 'call_budget' } },
 ];
 
 if (!key) {
@@ -54,59 +67,63 @@ const client = new Client({ name: 'arcmira-mcp-smoke', version: pkg.version });
 const transport = new StreamableHTTPClientTransport(url, { requestInit: { headers: { authorization: `Bearer ${key}` } } });
 await client.connect(transport);
 
-const tools = await client.listTools();
-const names = tools.tools.map((tool) => tool.name);
-console.log(`tools/list: ${names.join(', ')}`);
 let failed = false;
+const tools = await client.listTools();
+const names = tools.tools.map((tool) => tool.name).sort();
+console.log(`tools/list: ${names.join(', ')}`);
+if (names.join(',') !== 'describe,execute') {
+  failed = true;
+  console.log('  expected exactly describe and execute');
+}
 for (const tool of tools.tools) {
   const hints = tool.annotations ?? {};
-  const okHints = hints.readOnlyHint === true && hints.destructiveHint === false && hints.idempotentHint === true && hints.openWorldHint === false;
-  if (!okHints) {
+  if (!(hints.readOnlyHint === true && hints.destructiveHint === false && hints.idempotentHint === true && hints.openWorldHint === false)) {
     failed = true;
     console.log(`  ${tool.name}: hints wrong ${JSON.stringify(hints)}`);
   }
 }
-
-function summarize(structured: unknown, texts: string[]): string {
-  const body = (structured ?? safeParse(texts[texts.length - 1] ?? '')) as Record<string, unknown> | null;
-  if (body === null) return (texts[0] ?? '').slice(0, 160);
-  const error = body.error as Record<string, unknown> | undefined;
-  if (error) {
-    const unlock = (error.unlock ?? {}) as Record<string, unknown>;
-    return `${error.code} gate=${error.gate ?? '-'} param=${error.param ?? '-'} unlock=${unlock.url ?? '-'}`;
-  }
-  const parts: string[] = [];
-  for (const key of ['entities', 'chunks', 'mentions', 'cards', 'rows', 'sponsors', 'recommendations', 'lines', 'paragraphs', 'speakers', 'languages']) {
-    if (Array.isArray(body[key])) parts.push(`${key}=${(body[key] as unknown[]).length}`);
-  }
-  if (texts.length === 2) parts.push(`transcript_lines=${texts[0].match(/^\[\d+\] /gm)?.length ?? 0}`);
-  if (body.channel) parts.push(`channel=${JSON.stringify(body.channel).slice(0, 80)}`);
-  if (body.transcription) parts.push('transcription');
-  if (body.premium_job) parts.push(`premium_job=${(body.premium_job as Record<string, unknown>).job_id}`);
-  if (body.as_of !== undefined) parts.push(`as_of=${body.as_of}`);
-  if (body.access) parts.push(`access=${(body.access as Record<string, unknown>).code}`);
-  return parts.join(' ') || JSON.stringify(body).slice(0, 160);
+const instructions = client.getInstructions() ?? '';
+if (!instructions.includes('describe')) {
+  failed = true;
+  console.log('  instructions do not name describe');
 }
 
-function safeParse(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
+function textOf(result: Awaited<ReturnType<Client['callTool']>>): string {
+  return (result.content as Array<{ type: string; text?: string }>).flatMap((part) => (part.type === 'text' && part.text !== undefined ? [part.text] : [])).join('\n');
+}
+
+const describeText = textOf(await client.callTool({ name: 'describe', arguments: {} }));
+for (const method of METHODS) {
+  if (!describeText.includes(`arcmira.${method.name}(`)) {
+    failed = true;
+    console.log(`  describe lacks ${method.name}`);
   }
 }
 
-for (const call of CALLS) {
+for (const probe of PROBES) {
   const started = Date.now();
-  const result = await client.callTool({ name: call.tool, arguments: call.args });
-  const texts = (result.content as Array<{ type: string; text?: string }>).flatMap((part) => (part.type === 'text' && part.text !== undefined ? [part.text] : []));
+  const result = await client.callTool({ name: probe.tool, arguments: probe.args });
+  const text = textOf(result);
   const isError = result.isError === true;
-  const expect = call.expect;
-  // A host that finds structuredContent may show the model only that, so it must hold everything the text blocks do.
-  const hidden = result.structuredContent !== undefined && (texts.length !== 1 || texts[0] !== JSON.stringify(result.structuredContent));
-  const verdict = hidden ? 'HIDDEN' : expect === 'either' ? 'ok' : (expect === 'gate') === isError ? 'ok' : 'UNEXPECTED';
+  let verdict = 'ok';
+  if (result.structuredContent !== undefined) verdict = 'HIDDEN';
+  else if (probe.expect === 'ok' && isError) verdict = 'UNEXPECTED';
+  else if (typeof probe.expect === 'object' && !(isError && text.includes(`"code":"${probe.expect.code}"`))) verdict = 'UNEXPECTED';
+  else if (probe.contains && !text.includes(probe.contains)) verdict = 'MISSING';
   if (verdict !== 'ok') failed = true;
-  console.log(`${verdict.padEnd(10)} ${call.label.padEnd(24)} ${call.tool.padEnd(19)} ${isError ? 'isError' : 'result '} ${String(Date.now() - started).padStart(5)}ms  ${summarize(result.structuredContent, texts)}`);
+  const summary = text.replace(/\s+/g, ' ').slice(0, 110);
+  console.log(`${verdict.padEnd(10)} ${probe.label.padEnd(22)} ${probe.tool.padEnd(8)} ${isError ? 'isError' : 'result '} ${String(Date.now() - started).padStart(5)}ms  ${summary}`);
 }
+
+const retired = await fetch(url, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${key}` },
+  body: JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'resolve_entities', arguments: { q: 'Ramp' } } }),
+});
+const retiredBody = await retired.text();
+const retiredOk = retired.status === 200 && retiredBody.includes('tool_retired');
+if (!retiredOk) failed = true;
+console.log(`${(retiredOk ? 'ok' : 'UNEXPECTED').padEnd(10)} retired tool name      raw      ${retired.status} ${retiredBody.slice(0, 100)}`);
+
 await client.close();
 process.exit(failed ? 1 : 0);
