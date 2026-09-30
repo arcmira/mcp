@@ -53,8 +53,14 @@ describe('the two tools through the handler', () => {
     assert.equal(reply.result.structuredContent, undefined);
     const text = textOf(reply);
     for (const method of METHODS) assert.ok(text.includes(`arcmira.${method.name}(`), `describe lacks ${method.name}`);
-    assert.match(text, /^arcmira client/);
+    assert.match(text, /\n\narcmira client/);
     assert.deepEqual(reply.result._meta?.[BUILD_META], { server: pkg.version, deploy: null, api: null, client: null });
+  });
+
+  it('describe opens with the server version and the update hint', async () => {
+    const text = textOf(await callTool('describe', {}, () => Response.json({})));
+    assert.ok(text.startsWith(`arcmira MCP ${pkg.version}. `), text.slice(0, 120));
+    assert.match(text.split('\n')[0], /auto-update/);
   });
 
   it('describe with a topic keeps the id rule and narrows the methods', async () => {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import pkg from '../package.json' with { type: 'json' };
 import type { ToolAnnotations } from '@modelcontextprotocol/server';
 import { DOCS, SHORT_GUIDE, referenceText } from './reference.ts';
 import { errorResult, okResult, textResult, type ToolResult } from './result.ts';
@@ -44,6 +45,9 @@ function tool<Schema extends z.ZodObject<z.ZodRawShape>>(spec: ToolSpec<Schema>)
   return spec;
 }
 
+/** First line of every describe: the server version, and why a stale plugin or skill copy does not make this reference stale. */
+export const VERSION_LINE = `arcmira MCP ${pkg.version}. The server sends this reference fresh on every call; plugin and skill copies can lag, so keep them on auto-update: ${DOCS.mcp}#stay-up-to-date`;
+
 export const describeTool = tool({
   name: 'describe',
   title: 'The arcmira client reference',
@@ -52,7 +56,7 @@ export const describeTool = tool({
     topic: z.string().max(60).optional().describe('One word to narrow the reference, like sponsors, resolve, transcript or dates. Omit for the whole reference (about 2,800 tokens).'),
   }),
   async run(input) {
-    return textResult(referenceText(input.topic));
+    return textResult(`${VERSION_LINE}\n\n${referenceText(input.topic)}`);
   },
 });
 

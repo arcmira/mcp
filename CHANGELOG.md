@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.4
+
+Five task skills ship in the plugin beside `arcmira`: `sponsor-research`, `company-watch`, `find-quotes`, `person-research` and `compare-shows`, picked from what people ask the site chat and the API. Each is generated from `src/skills.ts` by `scripts/build-skill.ts` against the same method table as the reference, so a method or field cannot drift. Every one starts from a name, never an id: it resolves the name, returns a short choose list when candidates are close (name, type, appearances), and states the entity it used. A test fails when a program calls a method the reference does not have, and `pnpm examples:check` now runs the skill programs too (14 programs, all ok against production on 2026-09-30).
+
+The reference gains the fields the programs read (`momentum` `volume.mentions_7d`, `mentions` rows `is_appearance` and `description`, `recommendations` `media.channel_id` and `next_cursor`), and the id rule says `best` can be the wrong person when a close candidate has far more appearances (a bare "Sam" row outranks Sam Altman) and that the answer names the entity it used.
+
+`describe` opens with one line: the server version, that the reference is sent fresh on every call, and that plugin and skill copies should stay on auto-update. No client sends a plugin or skill version, so there is no "update your plugin" hint. Every plugin manifest carries the package version, and a test keeps them equal, so a release reaches plugin users. The README has a Stay up to date section with the command for each host.
+
+Eval (monorepo `scripts/mcp-code-mode-bakeoff/skills-ab.mjs`, five name-only tasks with ambiguous names: Mercury, Linear, Chamath, "Sam, the CEO of OpenAI", "All In"): the plugin before this release (arcmira skill only) against this one, one run each on the live 0.7.3 server. Sonnet 5 of 5 in both arms, with 44% fewer input tokens with the task skills. Haiku 1 of 5 without them and 4 of 5 with them, with 63% fewer input tokens; the one miss was a judge error (the quote is verbatim in the transcript lines the run returned). No run picked the wrong entity in either arm.
+
 ## 0.7.3
 
 The reference matches the live response shapes. `search` chunks are camelCase on the wire (`videoId`, `videoTitle`, `publishedAt`, `startSeconds`, `channelId`, `channelName`, `watchUrl`), and the 0.7.0 to 0.7.2 reference named them `video_id`, `title`, `published_at`, `start_seconds`, so the first worked example returned undefined for the title and the date. `sponsors` rows carry `sponsor_status.status`, not `status`; `transcript` premium lines carry `speaker` as an id into `speakers[{id, name}]`, and the speaker example maps it to the name. The plugin skill is regenerated.
