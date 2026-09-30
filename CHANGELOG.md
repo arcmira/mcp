@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.6
+
+The five task skills carry the homonym rule too: before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element). 0.7.5 put it in `describe` and the `arcmira` skill only.
+
 ## 0.7.5
 
 Answer rules from the 2026-09-30 eval audit, in `describe`, the tool descriptions, the server instructions and every plugin skill:
