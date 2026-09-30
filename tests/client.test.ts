@@ -20,6 +20,13 @@ function recording(body: Record<string, unknown> = { data: [] }, init: ResponseI
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
 
 describe('the sandbox client', () => {
+  it('a string where the options object belongs names the signature', async () => {
+    const { arcmira } = mod.createArcmira({ base: 'https://api.test', fetch: async () => Response.json({}) });
+    const shape = (error: Error & { code: string }) => error.code === 'invalid_request' && /arcmira\.(search|mentions)\(\{ (query|entityId)/.test(error.message);
+    await assert.rejects(arcmira.search('stablecoins', { channelId: TBPN }), shape);
+    await assert.rejects(arcmira.mentions('ent_14'), shape);
+  });
+
   it('refuses a name where an id belongs before any network call, naming resolve', async () => {
     const { urls, fetch } = recording();
     const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch });
@@ -46,7 +53,7 @@ describe('the sandbox client', () => {
     await arcmira.recommendations('ent_14', { kind: 'organic' });
     await arcmira.episodes(TBPN, { limit: 1 });
     await arcmira.transcript('https://www.youtube.com/watch?v=dQw4w9WgXcQ', { quality: 'premium', start: 0, end: 60, timestamps: false });
-    await arcmira.occurrences({ videoIds: ['dQw4w9WgXcQ'], types: ['organization', 'product'] });
+    await arcmira.occurrences({ videoIds: ['dQw4w9WgXcQ'], types: ['organization', 'product'], before: '2026-08-31' });
     await arcmira.status({ channelId: TBPN });
     await arcmira.status();
     const seen = urls.map((u) => `${u.pathname}?${u.searchParams}`);
@@ -59,7 +66,7 @@ describe('the sandbox client', () => {
       '/v1/entities/ent_14/recommendations?mention_class=endorsement&limit=10',
       `/v1/channels/${TBPN}/videos?limit=1`,
       '/v1/transcripts/dQw4w9WgXcQ?quality=premium&timestamps=false&start=0&end=60',
-      '/v1/mentions/counts?video_ids=dQw4w9WgXcQ&entity_types=organization%2Cproduct&limit=20',
+      '/v1/mentions/counts?video_ids=dQw4w9WgXcQ&entity_types=organization%2Cproduct&published_before=2026-09-01&limit=20',
       `/v1/channels/${TBPN}/coverage?`,
       '/v1/me?',
     ]);

@@ -61,7 +61,9 @@ describe('the two tools through the handler', () => {
     const text = textOf(await callTool('describe', { topic: 'sponsors' }, () => Response.json({})));
     assert.match(text, /ID RULE/);
     assert.ok(text.includes('arcmira.sponsors('));
-    assert.ok(!text.includes('arcmira.momentum('));
+    assert.ok(text.includes('Recurring sponsors of one show'));
+    assert.ok(text.includes('arcmira.momentum('), 'every signature stays so no method is hidden');
+    assert.ok(!text.includes('The last 30 days against the prior 30'), 'notes of other methods are dropped');
   });
 
   it('execute runs a program in the loader, and the build names the API behind it', async () => {
