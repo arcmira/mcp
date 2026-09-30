@@ -70,7 +70,7 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 
 | Tool | Input | Returns |
 |---|---|---|
-| `describe` | `topic?` | The arcmira client reference: the id rule, ten methods with arguments and return fields, ten worked example programs, the quirks that cost answers, error codes, and doc links. About 1,800 tokens; `topic` narrows it. Never bills. |
+| `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, ten methods with arguments and return fields, eight worked example programs, the quirks that cost answers, error codes, and doc links. About 2,800 tokens; `topic` narrows it to one method and its examples. Never bills. |
 | `execute` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Limits: 30 seconds, 40 API calls, 20,000 characters of output. |
 
 Both tools declare `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: false`. Two tools cost about 1,500 tokens of definitions per conversation; the ten tools they replace cost 8,163.

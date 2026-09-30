@@ -66,6 +66,21 @@ function isoDay(value, param) {
   return value.slice(0, 10);
 }
 
+/** before is the last day counted everywhere in this client; /v1 published_before is exclusive, so send the next day. /v1 date_to is already inclusive. */
+function dayAfterInclusive(value, param) {
+  const day = isoDay(value, param);
+  if (day === undefined) return undefined;
+  return new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+}
+
+function needOptions(method, value, signature) {
+  if (value === undefined) return {};
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ArcmiraError(`arcmira.${method} takes one options object, got ${JSON.stringify(value)}. Call it as ${signature}.`, 'invalid_request');
+  }
+  return value;
+}
+
 const KINDS = { sponsored: 'ad_read', organic: 'endorsement', all: 'all' };
 const SEARCH_KINDS = new Set(['mention', 'recommendation_sponsored', 'recommendation_organic']);
 
@@ -150,7 +165,8 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
           : "No single match. Pick the candidates row that matches the user's meaning by type and name, or ask the user.";
       return { query: q, confidence, best, candidates, note };
     },
-    async search({ query, channelIds, about, entityIds, speakerIds, kind, after, before, source, limit = 5 } = {}) {
+    async search(options) {
+      const { query, channelIds, about, entityIds, speakerIds, kind, after, before, source, limit = 5 } = needOptions('search', options, 'arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, after?, before?, limit? })');
       if (typeof query !== 'string' || query.length < 2) throw new ArcmiraError('search needs query, a topic or phrase of 2 or more characters', 'invalid_query');
       if (kind !== undefined && !SEARCH_KINDS.has(kind)) throw new ArcmiraError('kind is mention, recommendation_sponsored or recommendation_organic', 'invalid_kind');
       return get('/v1/transcripts/search', {
@@ -161,12 +177,13 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         by: list(speakerIds, needEntityId, 'speakerIds', 8),
         kind,
         published_after: isoDay(after, 'after'),
-        published_before: isoDay(before, 'before'),
+        published_before: dayAfterInclusive(before, 'before'),
         source,
         limit,
       });
     },
-    async mentions({ entityId, channelId, after, before, limit = 10, cursor } = {}) {
+    async mentions(options) {
+      const { entityId, channelId, after, before, limit = 10, cursor } = needOptions('mentions', options, 'arcmira.mentions({ entityId, channelId?, after?, before?, limit?, cursor? })');
       return get('/v1/mentions', {
         entity_id: needEntityId(entityId, 'entityId'),
         channel_id: channelId === undefined ? undefined : needChannelId(channelId, 'channelId'),
@@ -197,13 +214,14 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       return get(`/v1/channels/${needChannelId(channelId, 'channelId')}/videos`, {
         limit,
         published_after: isoDay(after, 'after'),
-        published_before: isoDay(before, 'before'),
+        published_before: dayAfterInclusive(before, 'before'),
       });
     },
     async transcript(video, { quality, language, timestamps, start, end } = {}) {
       return get(`/v1/transcripts/${videoIdOf(video)}`, { quality, language, timestamps: timestamps === false ? 'false' : undefined, start, end });
     },
-    async occurrences({ channelIds, entityIds, videoIds, types, mode, after, before, limit = 20 } = {}) {
+    async occurrences(options) {
+      const { channelIds, entityIds, videoIds, types, mode, after, before, limit = 20 } = needOptions('occurrences', options, 'arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, after?, before?, limit? })');
       const channel_ids = list(channelIds, needChannelId, 'channelIds', 8);
       const entity_ids = list(entityIds, needEntityId, 'entityIds', 20);
       const video_ids = list(videoIds, (v) => videoIdOf(v), 'videoIds', 20);
@@ -215,11 +233,12 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         entity_types: Array.isArray(types) ? types.join(',') : types,
         mode,
         published_after: isoDay(after, 'after'),
-        published_before: isoDay(before, 'before'),
+        published_before: dayAfterInclusive(before, 'before'),
         limit,
       });
     },
-    async status({ channelId, jobId } = {}) {
+    async status(options) {
+      const { channelId, jobId } = needOptions('status', options, 'arcmira.status({ channelId }) or arcmira.status({ jobId })');
       if (channelId) return get(`/v1/channels/${needChannelId(channelId, 'channelId')}/coverage`);
       if (jobId) return get(`/v1/transcriptions/${encodeURIComponent(jobId)}`);
       return get('/v1/me');
