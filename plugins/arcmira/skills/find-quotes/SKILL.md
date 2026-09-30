@@ -20,10 +20,11 @@ Use it through the arcmira MCP server (`describe`, then `execute` with a program
 Users give names; filters take ids only (ent_..., UC..., 11-character video ids), and a name where an id belongs throws `id_required`.
 
 1. Resolve the exact name the user said. `best` is only a guess when other candidates are close: "Sam" resolves to a bare "Sam" row while Sam Altman has sixteen times the appearances, and "Chamath" returns no `best` and several spellings of one person.
-2. Weigh `best` against the other candidates and against what the user said around the name (the OpenAI CEO, a sponsor, a show). One candidate fits: use it.
-3. Two or more fit: either check each against the data (run the query for each and keep the one the context and the data support), or stop and show the user a short list, one line per candidate: name, type, and one distinguishing fact (appearance count or top show), then ask which.
-4. Nothing close (a show typed "All In"): retry with spelling variants ("All-In", "All-In Podcast") before you ask.
-5. Say which entity the answer is about (name, type, id) in the answer, and name any close candidate you set aside. Never switch entities silently.
+2. A bare first name is always ambiguous: list the people it could be with their appearance counts (and description, when candidates carry one), never take `best`.
+3. Weigh `best` against the other candidates and against what the user said around the name (the OpenAI CEO, a sponsor, a show). One candidate fits: use it.
+4. Two or more fit: either check each against the data (run the query for each and keep the one the context and the data support), or stop and show the user a short list, one line per candidate: name, type, and one distinguishing fact (appearance count or top show), then ask which.
+5. Nothing close (a show typed "All In"): retry with spelling variants ("All-In", "All-In Podcast") before you ask. Still nothing, or only a different name: say it is not in the Arcmira index and offer the nearest names; never answer for a similar-named show without saying so.
+6. Say which entity the answer is about (name, type, id) in the answer, and name any close candidate you set aside. Never switch entities silently.
 
 For this task:
 

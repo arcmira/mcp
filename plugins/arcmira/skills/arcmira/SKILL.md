@@ -18,16 +18,17 @@ Use this skill when the user asks:
 - whether talk about something is accelerating or fading;
 - how to use the arcmira MCP server or the arcmira CLI.
 
-Answer from Arcmira, not the open web. An empty result means the index has no match.
+This server holds the transcript data. For anything said on a show, use it before any web search, and answer from Arcmira, not the open web. An empty result means the index has no match.
 
 ## Procedure
 
 1. Resolve every name in the question with `arcmira.resolve`. Filters take ids only.
-2. Check each `r.best` against what the user meant and against the other candidates: the type (person, organization, product, topic, channel), the name, and the appearance count. When `r.best` is null or a close candidate competes, show the user a short list (name, type, one distinguishing fact) or check each candidate against the data. Say in the answer which entity you used.
-3. Write one `execute` program per question. Resolve, check, and run every query the question needs inside that one program.
-4. Return only the fields the answer needs, not whole responses.
-5. State the date the index runs through (`indexed_through` or `as_of`). Build date windows from `arcmira.today()` and `arcmira.daysAgo(n)`, not from a guessed current date.
-6. Link each name in the answer to the `page` field the result carries. Do not build arcmira.com URLs by hand.
+2. Check each `r.best` against what the user meant and against the other candidates: the type (person, organization, product, topic, channel), the name, and the appearance count. When `r.best` is null or a close candidate competes, show the user a short list (name, type, one distinguishing fact) or check each candidate against the data. A bare first name is always ambiguous: list the people it could be with their counts. A name that resolves to nothing, or only to a similar name, is not in the index: say so and offer the nearest names. Say in the answer which entity you used.
+3. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
+4. Write one `execute` program per question. Resolve, check, and run every query the question needs inside that one program.
+5. Return only the fields the answer needs, not whole responses.
+6. State the date the index runs through (`indexed_through` or `as_of`). Build date windows from `arcmira.today()` and `arcmira.daysAgo(n)`, not from a guessed current date.
+7. Link each name in the answer to the `page` field the result carries. Do not build arcmira.com URLs by hand.
 
 ## The ID rule
 
@@ -37,7 +38,8 @@ ID RULE. Filters take verbatim ids only: entity ids look like ent_14, channel id
   // r.best is set only for an unambiguous match; check r.best.type and r.best.name against what the user meant.
   // If r.best is null, pick from r.candidates by type and name, or return the options.
   const id = r.best.id;                      // for a show: resolve with { type: "channel" } and use best.youtube_channel_id
-Resolve the exact name the user said ("ICE", "Mercury"), not a paraphrase; use what they meant only to check the type and name. Omit type for a brand (the catalog types some companies as product). When two candidates fit the same meaning (the catalog holds duplicates), query both and say which ids you used, or take the one with the higher appearance_count. best can be the wrong row when a close candidate outranks it ("Sam" returns a bare Sam row while Sam Altman has far more appearances): list the close candidates for the user, or check each against the data. Always say in the answer which entity you used.
+Resolve the exact name the user said ("ICE", "Mercury"), not a paraphrase; use what they meant only to check the type and name. Omit type for a brand (the catalog types some companies as product). When two candidates fit the same meaning (the catalog holds duplicates), query both and say which ids you used, or take the one with the higher appearance_count. best can be the wrong row when a close candidate outranks it: list the close candidates for the user, or check each against the data.
+NAMES THAT DO NOT PIN ONE ENTITY. A bare first name ("Sam") is ambiguous: never take best for a one-word person query. List the people it could be with their appearance_count (a candidate's description, when present, tells them apart), or ask with those options. When a named show or person resolves to nothing, or only to a different name (another show with a similar name), say it is not in the Arcmira index and offer the nearest candidate names; never answer for a partial-name match without saying so. When you ask, give a short option list (name, type, appearances), never a generic "which one?". Always say in the answer which entity you used.
 ```
 
 ## Methods
@@ -46,7 +48,7 @@ Every method is async and returns parsed JSON. The program runs as the body of a
 
 | Method | Call | Returns | Notes |
 | --- | --- | --- | --- |
-| `resolve` | `arcmira.resolve(q, { type?, limit? })` | `{ query, confidence, best, candidates[{id, name, type, appearance_count, youtube_channel_id, page}], note }` | q is a name, @handle, YouTube URL or UC id. type: person \| organization \| product \| topic \| channel; pass it only for a person or a show. limit 1..15. |
+| `resolve` | `arcmira.resolve(q, { type?, limit? })` | `{ query, confidence, best, candidates[{id, name, type, appearance_count, youtube_channel_id, page, description?}], note }` | q is a name, @handle, YouTube URL or UC id. type: person \| organization \| product \| topic \| channel; pass it only for a person or a show. limit 1..15. |
 | `search` | `arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, after?, before?, source?, limit? })` | `{ chunks[{text, videoId, videoTitle, publishedAt, startSeconds, watchUrl, channelId, channelName, about[], speakers_by[]}], as_of }` | Spoken passages that match the words in query (a topic, a phrase). channelIds: up to 8 UC ids. about: up to 8 ent_ ids of a brand or person the passage is about; speakerIds: up to 8 person ids who said it; kind: mention \| recommendation_sponsored \| recommendation_organic. Never put a topic word in about; it goes in query. If a search with about, speakerIds or kind returns no chunks, rerun it with query and channelIds only before saying nothing was found. limit 1..20 (default 5). source: arcmira_premium \| creator_captions \| third_party_quick. |
 | `mentions` | `arcmira.mentions({ entityId, channelId?, after?, before?, limit?, cursor? })` | `{ entity{id, name, page}, data[{media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds, is_appearance, description}], has_more, next_cursor }` | When and where a name came up: one row per catalog mention, newest first, several rows per episode, limit 1..100. Never count rows to answer how many episodes: occurrences gives count per window. Rows carry no wording; for a quote use search. Read the episode title before asserting a lone row: a title far from the entity (a jungle episode for a bank) is a homonym the catalog mislabelled. |
 | `momentum` | `arcmira.momentum(entityId)` | `{ entity, verdict (accelerating \| flat \| fading \| none), as_of, volume{mentions_7d, mentions_30d, mentions_prior_30d, mentions_90d, total}, top_shows[{channel_id, channel_name, mentions}] }` | The last 30 days against the prior 30, as of as_of, across the shows Arcmira indexes. |
@@ -142,6 +144,7 @@ return out.sort((a, b) => (b.last30 ?? -1) - (a.last30 ?? -1));
 
 - Dates: arcmira.today() and arcmira.daysAgo(n) give ISO dates from the server clock; never guess today. after and before are both counted (August is after 2026-08-01, before 2026-08-31), in UTC. The index is not live: cite indexed_through or as_of before saying nothing happened recently.
 - Momentum, mentions and counts measure the shows Arcmira indexes, not the internet; say so when it matters. An empty result means the index has no match: never fill it from memory or the web.
+- Before asserting a mention, read its description or the passage text and say which sense of the name it is (Mercury the bank, not the planet or the element). Drop rows about another sense.
 - Every plan gate throws with .code and .unlock.url, the page that lifts it. Relay the link.
 - Results carry names beside ids and arcmira.com page links; link names to those pages and never invent an arcmira.com URL.
 

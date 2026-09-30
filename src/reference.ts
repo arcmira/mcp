@@ -18,7 +18,8 @@ export const ID_RULE = `ID RULE. Filters take verbatim ids only: entity ids look
   // r.best is set only for an unambiguous match; check r.best.type and r.best.name against what the user meant.
   // If r.best is null, pick from r.candidates by type and name, or return the options.
   const id = r.best.id;                      // for a show: resolve with { type: "channel" } and use best.youtube_channel_id
-Resolve the exact name the user said ("ICE", "Mercury"), not a paraphrase; use what they meant only to check the type and name. Omit type for a brand (the catalog types some companies as product). When two candidates fit the same meaning (the catalog holds duplicates), query both and say which ids you used, or take the one with the higher appearance_count. best can be the wrong row when a close candidate outranks it ("Sam" returns a bare Sam row while Sam Altman has far more appearances): list the close candidates for the user, or check each against the data. Always say in the answer which entity you used.`;
+Resolve the exact name the user said ("ICE", "Mercury"), not a paraphrase; use what they meant only to check the type and name. Omit type for a brand (the catalog types some companies as product). When two candidates fit the same meaning (the catalog holds duplicates), query both and say which ids you used, or take the one with the higher appearance_count. best can be the wrong row when a close candidate outranks it: list the close candidates for the user, or check each against the data.
+NAMES THAT DO NOT PIN ONE ENTITY. A bare first name ("Sam") is ambiguous: never take best for a one-word person query. List the people it could be with their appearance_count (a candidate's description, when present, tells them apart), or ask with those options. When a named show or person resolves to nothing, or only to a different name (another show with a similar name), say it is not in the Arcmira index and offer the nearest candidate names; never answer for a partial-name match without saying so. When you ask, give a short option list (name, type, appearances), never a generic "which one?". Always say in the answer which entity you used.`;
 
 export interface MethodDoc {
   name: string;
@@ -31,7 +32,7 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'resolve',
     signature: 'arcmira.resolve(q, { type?, limit? })',
-    returns: '{ query, confidence, best, candidates[{id, name, type, appearance_count, youtube_channel_id, page}], note }',
+    returns: '{ query, confidence, best, candidates[{id, name, type, appearance_count, youtube_channel_id, page, description?}], note }',
     notes: ['q is a name, @handle, YouTube URL or UC id. type: person | organization | product | topic | channel; pass it only for a person or a show. limit 1..15.'],
   },
   {
@@ -159,6 +160,7 @@ return out.sort((a, b) => (b.last30 ?? -1) - (a.last30 ?? -1));`,
 export const QUIRKS = [
   'Dates: arcmira.today() and arcmira.daysAgo(n) give ISO dates from the server clock; never guess today. after and before are both counted (August is after 2026-08-01, before 2026-08-31), in UTC. The index is not live: cite indexed_through or as_of before saying nothing happened recently.',
   'Momentum, mentions and counts measure the shows Arcmira indexes, not the internet; say so when it matters. An empty result means the index has no match: never fill it from memory or the web.',
+  'Before asserting a mention, read its description or the passage text and say which sense of the name it is (Mercury the bank, not the planet or the element). Drop rows about another sense.',
   'Every plan gate throws with .code and .unlock.url, the page that lifts it. Relay the link.',
   'Results carry names beside ids and arcmira.com page links; link names to those pages and never invent an arcmira.com URL.',
 ];
@@ -207,8 +209,9 @@ export function referenceText(topic?: string): string {
 
 export const SHORT_GUIDE = [
   'Arcmira is the search engine for the spoken web: indexed YouTube and podcast transcripts with a catalog of who is mentioned where, who sponsors whom, and who recommends what on air.',
+  'This server holds the transcript data: for anything said on a show, use it before any web search.',
   'Two tools. describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first execute. execute runs JavaScript you write against that client and returns what you print or return.',
-  'Write one program per question: resolve every name it carries (arcmira.resolve), check each .best against what the user meant, run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
+  'Write one program per question: resolve every name it carries (arcmira.resolve), check each .best against what the user meant (a bare first name is ambiguous; a name that resolves to nothing is not in the index), run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
   'Use arcmira.today() and arcmira.daysAgo(n) for date windows. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Every gate throws with .unlock.url; relay that link and never fill a gap from the open web.',
   'Connect with no key and the host signs you in through OAuth, or send Authorization: Bearer <key>. With no account, POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"} and then /v1/signups/verify with the code.',
   `Good first ids: TBPN is channel UC-DRzaGnL_vtBUpCFH5M0tg, All-In Podcast is UCESLZhusAkFfsNsApnjF_Cg, Ramp is ent_14. Docs: ${DOCS.mcp} and ${DOCS.llms}.`,
