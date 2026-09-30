@@ -47,9 +47,9 @@ function tool<Schema extends z.ZodObject<z.ZodRawShape>>(spec: ToolSpec<Schema>)
 export const describeTool = tool({
   name: 'describe',
   title: 'The arcmira client reference',
-  description: `The reference for the arcmira client that execute exposes: the id rule (resolve a name to an id before filtering on it), every method with its arguments and return fields, ten worked example programs, the quirks that cost answers (date windows, inclusive dates, catalog duplicates), error codes, and doc links. Call it once before your first execute; pass topic to narrow it to one method or example. Reads nothing from the index and never bills. Docs: ${DOCS.mcp}`,
+  description: `The reference for the arcmira client that execute exposes: the id rule (resolve a name to an id before filtering on it), which method answers which question, every method with its arguments and return fields, eight worked example programs, the quirks that cost answers, error codes and doc links. Call it once before your first execute; pass topic to narrow it to one method and its examples. Reads nothing from the index and never bills. Docs: ${DOCS.mcp}`,
   inputSchema: z.object({
-    topic: z.string().max(60).optional().describe('One word to narrow the reference, like sponsors, resolve, transcript or dates. Omit for the whole reference (about 1,800 tokens).'),
+    topic: z.string().max(60).optional().describe('One word to narrow the reference, like sponsors, resolve, transcript or dates. Omit for the whole reference (about 2,800 tokens).'),
   }),
   async run(input) {
     return textResult(referenceText(input.topic));
@@ -59,7 +59,7 @@ export const describeTool = tool({
 export const executeTool = tool({
   name: 'execute',
   title: 'Run a program against Arcmira',
-  description: `Run JavaScript against the arcmira client and get back what it printed (console.log) plus its return value as JSON. The code is the body of an async function with arcmira and ArcmiraError in scope: use await, return one compact value. Write one program per question: resolve every name it carries with arcmira.resolve, check each .best against what the user meant, run every query the question needs (in parallel with Promise.all where independent), and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required. Use arcmira.today() and arcmira.daysAgo(n) for date windows. Limits: 30 seconds, 40 API calls, 20,000 characters of output. Every plan gate comes back as ERROR with an unlock url to relay. Read describe first for the method list and examples.`,
+  description: `Run JavaScript against the arcmira client and get back what it printed (console.log) plus its return value as JSON. The code is the body of an async function with arcmira and ArcmiraError in scope: use await and return one compact value. Write one program per question: resolve every name it carries with arcmira.resolve, check each .best against what the user meant, run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required. Use arcmira.today() and arcmira.daysAgo(n) for date windows. Limits: 30 seconds, 40 API calls, 20,000 characters of output. A plan gate comes back as ERROR with an unlock url to relay. Read describe first for the method list and examples.`,
   inputSchema: z.object({
     code: z.string().min(1).max(40_000).describe('JavaScript source, the body of async function (arcmira, ArcmiraError, console) { ... }. Return a value or console.log lines. No import or export.'),
   }),

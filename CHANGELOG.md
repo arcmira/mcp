@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.2
+
+The short description is the 0.6.0 text again in `server.json`, the server card and `package.json`: "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations." Code mode stays in the long description and the README.
+
+`describe` is shorter and never hides a method. The 0.7.0 bake-off over the remote surface scored 55 to 56 of 60 against 59 for the prototype. The transcripts traced the misses to two things: a reference three times the prototype's length, and `topic`, which dropped every method whose notes did not mention the word, so an agent that asked for `mentions` never saw `occurrences` or `status` and counted mention rows to size a show or a month. The reference now carries one note per method and eight worked examples (the show example returns `status().channel.searchable_videos` beside the latest episode; the month example returns its window so the answer states it), the `search` note says a topic word goes in `query` and a filtered search that finds nothing is rerun without the filter, the `mentions` note says counting episodes is `occurrences`, and `topic` keeps every signature while narrowing the notes and examples to the method named. The tool descriptions and the plugin skill follow.
+
+Two client changes. A string where the options object belongs (`arcmira.search("stablecoins", {...})`) throws `invalid_request` naming the signature instead of `invalid_query`. `before` is the last day counted on every method, the way "the 1st through the 31st" reads: the client sends `published_before` as the next day (v1 treats it as exclusive) and `date_to` as given (v1 treats it as inclusive), so a month is `after: "2026-08-01", before: "2026-08-31"` everywhere.
+
+Bake-off on the local build (reports/mcp-code-mode-0.7.2-2026-09-30 in the monorepo): shorter reference alone, haiku 16 of 20; plus the topic and client changes, haiku 19 of 20; the full matrix 57 of 60 (opus 20, sonnet 19, haiku 18); with `before` inclusive, 60 of 60 with no wrong-entity answer. Same 20 tasks, gold and judge as the 2026-09-29 bake-off.
+
 ## 0.7.1
 
 `arcmira.search` takes `about` (up to 8 entity ids the passage is about), the filter /v1 added for code mode the same night, beside `speakerIds` (`by`) and `kind`. Chunks carry `about[]` and `speakers_by[]` as `{ id, name, type }` where the passage has tags. The reference and the plugin skill name it.
