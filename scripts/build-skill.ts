@@ -45,16 +45,17 @@ Use this skill when the user asks:
 - whether talk about something is accelerating or fading;
 - how to use the arcmira MCP server or the arcmira CLI.
 
-Answer from Arcmira, not the open web. An empty result means the index has no match.
+This server holds the transcript data. For anything said on a show, use it before any web search, and answer from Arcmira, not the open web. An empty result means the index has no match.
 
 ## Procedure
 
 1. Resolve every name in the question with \`arcmira.resolve\`. Filters take ids only.
-2. Check each \`r.best\` against what the user meant and against the other candidates: the type (person, organization, product, topic, channel), the name, and the appearance count. When \`r.best\` is null or a close candidate competes, show the user a short list (name, type, one distinguishing fact) or check each candidate against the data. Say in the answer which entity you used.
-3. Write one \`execute\` program per question. Resolve, check, and run every query the question needs inside that one program.
-4. Return only the fields the answer needs, not whole responses.
-5. State the date the index runs through (\`indexed_through\` or \`as_of\`). Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`, not from a guessed current date.
-6. Link each name in the answer to the \`page\` field the result carries. Do not build arcmira.com URLs by hand.
+2. Check each \`r.best\` against what the user meant and against the other candidates: the type (person, organization, product, topic, channel), the name, and the appearance count. When \`r.best\` is null or a close candidate competes, show the user a short list (name, type, one distinguishing fact) or check each candidate against the data. A bare first name is always ambiguous: list the people it could be with their counts. A name that resolves to nothing, or only to a similar name, is not in the index: say so and offer the nearest names. Say in the answer which entity you used.
+3. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
+4. Write one \`execute\` program per question. Resolve, check, and run every query the question needs inside that one program.
+5. Return only the fields the answer needs, not whole responses.
+6. State the date the index runs through (\`indexed_through\` or \`as_of\`). Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`, not from a guessed current date.
+7. Link each name in the answer to the \`page\` field the result carries. Do not build arcmira.com URLs by hand.
 
 ## The ID rule
 

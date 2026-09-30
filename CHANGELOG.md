@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.5
+
+Answer rules from the 2026-09-30 eval audit, in `describe`, the tool descriptions, the server instructions and every plugin skill:
+
+- A name that resolves to nothing, or only to a different name (another show with a similar name), is not in the index. Say so and offer the nearest names; never answer for a partial-name match without saying so.
+- A bare first name ("Sam") is ambiguous. List the people it could be with their appearance counts, or ask with those options; never take `best` for a one-word person query. `resolve` candidates may carry a short `description` to tell them apart.
+- Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
+- Both tool descriptions and the skill say this server holds the transcript data, and to prefer it over web search for anything said on a show.
+- The "say which entity you used" rule stays. A question to the user is a short option list (name, type, appearances), not a generic "which one?".
+
 ## 0.7.4
 
 Five task skills ship in the plugin beside `arcmira`: `sponsor-research`, `company-watch`, `find-quotes`, `person-research` and `compare-shows`, picked from what people ask the site chat and the API. Each is generated from `src/skills.ts` by `scripts/build-skill.ts` against the same method table as the reference, so a method or field cannot drift. Every one starts from a name, never an id: it resolves the name, returns a short choose list when candidates are close (name, type, appearances), and states the entity it used. A test fails when a program calls a method the reference does not have, and `pnpm examples:check` now runs the skill programs too (14 programs, all ok against production on 2026-09-30).
