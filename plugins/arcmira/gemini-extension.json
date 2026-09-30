@@ -1,0 +1,11 @@
+{
+  "name": "arcmira",
+  "version": "0.7.0",
+  "description": "Search YouTube and podcast transcripts from your agent: what shows said, who was mentioned, sponsors, recommendations and momentum.",
+  "mcpServers": {
+    "arcmira": {
+      "httpUrl": "https://mcp.arcmira.com/mcp"
+    }
+  },
+  "contextFileName": "skills/arcmira/SKILL.md"
+}

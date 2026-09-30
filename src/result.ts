@@ -47,6 +47,11 @@ export function withRateLimit(result: ToolResult, rateLimit: RateLimit | null): 
   return { ...result, _meta: { ...result._meta, [RATE_LIMIT_META]: rateLimit } };
 }
 
+/** Plain text with no structured copy: what describe and a rendered program return. */
+export function textResult(text: string): ToolResult {
+  return { content: [{ type: 'text', text }] };
+}
+
 /** A usable answer, including a 200 that carries an access block for what was withheld. */
 export function okResult(body: Record<string, unknown>): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(body) }], structuredContent: body };

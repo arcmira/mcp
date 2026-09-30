@@ -5,6 +5,7 @@ import server from '../server.json' with { type: 'json' };
 import { DEFAULT_API_BASE, SRC } from './api.ts';
 import { PROTECTED_RESOURCE_PATH } from './auth.ts';
 import { READ_ONLY, TOOLS } from './tools.ts';
+import { SHORT_GUIDE } from './reference.ts';
 
 /**
  * The static server card, for directory scanners that cannot enumerate tools behind the 401
@@ -36,6 +37,7 @@ export function serverCard(origin: string): Record<string, unknown> {
       bearer: { header: 'Authorization', description: server.remotes[0].headers[0].description },
       signUp: { method: 'POST', url: `${DEFAULT_API_BASE}/v1/signups?src=${SRC}`, description: 'Mails a six digit code to an email address. POST that code to /v1/signups/verify for a free account key.' },
     },
+    instructions: SHORT_GUIDE,
     tools: TOOLS.map((tool) => ({
       name: tool.name,
       title: tool.title,
