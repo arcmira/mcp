@@ -1,6 +1,6 @@
 {
   "name": "@arcmira/mcp",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "Remote MCP server for YouTube and podcast transcripts: full transcripts, mentions, momentum, sponsors, organic recommendations. OAuth or an account key.",
   "keywords": [
     "mcp",
@@ -36,6 +36,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types --import ./tests/register.mjs tests/*.test.ts",
     "manifest:check": "node --experimental-strip-types scripts/check-manifest.ts",
+    "examples:check": "node --experimental-strip-types scripts/check-examples.ts",
     "identity:check": "bash scripts/check-commit-identity.sh",
     "skill:build": "node --experimental-strip-types scripts/build-skill.ts",
     "skill:check": "node --experimental-strip-types scripts/build-skill.ts --check",
