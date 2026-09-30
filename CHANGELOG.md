@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.3
+
+The reference matches the live response shapes. `search` chunks are camelCase on the wire (`videoId`, `videoTitle`, `publishedAt`, `startSeconds`, `channelId`, `channelName`, `watchUrl`), and the 0.7.0 to 0.7.2 reference named them `video_id`, `title`, `published_at`, `start_seconds`, so the first worked example returned undefined for the title and the date. `sponsors` rows carry `sponsor_status.status`, not `status`; `transcript` premium lines carry `speaker` as an id into `speakers[{id, name}]`, and the speaker example maps it to the name. The plugin skill is regenerated.
+
+New: `pnpm examples:check` (`scripts/check-examples.ts`) runs every worked example against production through the sandbox client with `ARCMIRA_KEY` and fails on a thrown error, an empty result, or any undefined leaf in what the program returns. Eight examples, twenty calls. Run it before a release; the shapes come from the API, not from this repo, so no test here can stand in for it.
+
 ## 0.7.2
 
 The short description is the 0.6.0 text again in `server.json`, the server card and `package.json`: "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations." Code mode stays in the long description and the README.

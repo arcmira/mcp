@@ -37,7 +37,7 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'search',
     signature: 'arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, after?, before?, source?, limit? })',
-    returns: '{ chunks[{text, video_id, title, published_at, start_seconds, watchUrl, channel_id, about[], speakers_by[]}] }',
+    returns: '{ chunks[{text, videoId, videoTitle, publishedAt, startSeconds, watchUrl, channelId, channelName, about[], speakers_by[]}], as_of }',
     notes: [
       'Spoken passages that match the words in query (a topic, a phrase). channelIds: up to 8 UC ids. about: up to 8 ent_ ids of a brand or person the passage is about; speakerIds: up to 8 person ids who said it; kind: mention | recommendation_sponsored | recommendation_organic. Never put a topic word in about; it goes in query. If a search with about, speakerIds or kind returns no chunks, rerun it with query and channelIds only before saying nothing was found. limit 1..20 (default 5). source: arcmira_premium | creator_captions | third_party_quick.',
     ],
@@ -57,8 +57,8 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'sponsors',
     signature: 'arcmira.sponsors(channelId, { minAdReads?, status?, limit? })',
-    returns: '{ channel, sponsors[{entity{id, name, page}, ad_reads, first_seen, last_seen, status}], meta{total} }',
-    notes: ['Recurring sponsors of one show, ranked by ad_reads. status: active | lapsed.'],
+    returns: '{ channel{name, page}, sponsors[{entity{id, name, page}, ad_reads, videos, first_seen, last_seen, sponsor_status{status}}], meta{total} }',
+    notes: ['Recurring sponsors of one show, ranked by ad_reads. status: active | lapsed filters on sponsor_status.status.'],
   },
   {
     name: 'recommendations',
@@ -75,8 +75,8 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'transcript',
     signature: 'arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })',
-    returns: '{ video, lines[{start, text, speaker?}] | paragraphs[], speakers[], languages, source, revision }',
-    notes: ['quality: captions (default) | premium (diarized, every line names its speaker; paid plans). start/end in seconds bill only that window: pass them for "the first minute".'],
+    returns: '{ video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name}], quality, source, language, as_of }',
+    notes: ['quality: captions (default) | premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end in seconds bill only that window: pass them for "the first minute".'],
   },
   {
     name: 'occurrences',
@@ -98,7 +98,7 @@ export const EXAMPLES: ReadonlyArray<{ title: string; code: string }> = [
   {
     title: 'One search, compact result',
     code: `const hits = await arcmira.search({ query: "stablecoins", channelIds: ["UC-DRzaGnL_vtBUpCFH5M0tg"], after: arcmira.daysAgo(90), limit: 3 });
-return hits.chunks.map(c => ({ said: c.text, video: c.title, date: c.published_at, url: c.watchUrl }));`,
+return hits.chunks.map(c => ({ said: c.text, video: c.videoTitle, date: c.publishedAt, url: c.watchUrl }));`,
   },
   {
     title: 'Resolve, verify, then filter',
@@ -131,7 +131,8 @@ return a.sponsors.filter(s => inB.has(s.entity.id)).map(s => ({ name: s.entity.n
     title: 'Who speaks in the first minute (Premium)',
     code: `const ep = await arcmira.episodes("UC-DRzaGnL_vtBUpCFH5M0tg", { limit: 1 });
 const t = await arcmira.transcript(ep.episodes[0].video_id, { quality: "premium", start: 0, end: 60 });
-return { video: ep.episodes[0].title, speakers: t.speakers, opening: (t.lines ?? []).slice(0, 8).map(l => \`[\${l.start}] \${l.speaker ?? "?"}: \${l.text}\`) };`,
+const name = new Map((t.speakers ?? []).map(s => [s.id, s.name]));
+return { video: ep.episodes[0].title, speakers: (t.speakers ?? []).map(s => s.name), opening: t.lines.slice(0, 8).map(l => \`[\${l.start}] \${name.get(l.speaker) ?? "?"}: \${l.text}\`) };`,
   },
   {
     title: 'A month window (after and before are both counted); return the window so the answer states it',
