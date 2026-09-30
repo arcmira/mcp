@@ -12,8 +12,8 @@ import { READ_ONLY, SERVER_INSTRUCTIONS, TOOLS } from '../src/tools.ts';
 import server from '../server.json' with { type: 'json' };
 
 const openapiUrl = process.argv[2] ?? 'https://api.arcmira.com/v1/openapi.json';
-/** Query params /v1 is adding for code mode (inbox K-contract, 2026-09-30); a warning until the OpenAPI document names them. */
-const PENDING_PARAMS = new Set(['by', 'kind']);
+/** Query params /v1 added for code mode on 2026-09-30; a warning, not a failure, while the OpenAPI document catches up. */
+const PENDING_PARAMS = new Set(['about', 'by', 'kind']);
 /** Operations that take no src: they are not entry points and mint no unlock links. */
 const NO_SRC = new Set(['get_me']);
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
@@ -70,7 +70,7 @@ for (const method of METHODS) {
 type Arcmira = Record<string, (...args: unknown[]) => Promise<unknown>>;
 const SAMPLE_CALLS: Record<string, (a: Arcmira) => Promise<unknown>> = {
   resolve: (a) => a.resolve('Ramp', { type: 'organization', limit: 8 }),
-  search: (a) => a.search({ query: 'Ramp', channelIds: [TBPN], entityIds: ['ent_14'], speakerIds: ['ent_99'], kind: 'mention', after: '2026-01-01', before: '2026-09-01', source: 'creator_captions', limit: 5 }),
+  search: (a) => a.search({ query: 'Ramp', channelIds: [TBPN], about: ['ent_14'], entityIds: ['ent_14'], speakerIds: ['ent_99'], kind: 'mention', after: '2026-01-01', before: '2026-09-01', source: 'creator_captions', limit: 5 }),
   mentions: (a) => a.mentions({ entityId: 'ent_14', channelId: TBPN, after: '2026-01-01', before: '2026-09-01', limit: 10, cursor: 'c' }),
   momentum: (a) => a.momentum('ent_14'),
   sponsors: (a) => a.sponsors(TBPN, { minAdReads: 3, status: 'active', limit: 10 }),

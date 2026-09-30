@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+
+`arcmira.search` takes `about` (up to 8 entity ids the passage is about), the filter /v1 added for code mode the same night, beside `speakerIds` (`by`) and `kind`. Chunks carry `about[]` and `speakers_by[]` as `{ id, name, type }` where the passage has tags. The reference and the plugin skill name it.
+
 ## 0.7.0
 
 Code mode. The ten tools are replaced by two. `describe` returns the reference for a typed JavaScript client whose methods mirror the arcmira CLI commands (`resolve`, `search`, `mentions`, `momentum`, `sponsors`, `recommendations`, `episodes`, `transcript`, `occurrences`, `status`, plus `today()` and `daysAgo(n)`): the id rule first, every method with its arguments and return fields, ten worked example programs, the quirks that cost answers, error codes and doc links; `topic` narrows it. `execute` runs a program against that client in a fresh Dynamic Worker isolate whose only network is `GET api.arcmira.com/v1/*` through the parent's proxy, which adds the caller's credential, so the program never sees the key. Limits: 30 seconds, 5 seconds of CPU, 40 API calls (`call_budget`), 20,000 characters of output. Filters accept verbatim ids only; a name throws `id_required` naming `arcmira.resolve`. A gate throws with the API's code and `unlock`, and `execute` returns it as `ERROR` with `isError: true`. The result is one text block (`console.log` lines, then `RETURN` or `ERROR`) and no `structuredContent`; `_meta["arcmira.com/execution"]` carries the call count and API build; the rate-limit and build `_meta` keys are unchanged.

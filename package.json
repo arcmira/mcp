@@ -1,6 +1,6 @@
 {
   "name": "@arcmira/mcp",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Remote MCP server for YouTube and podcast transcripts in code mode: describe the typed client, execute a program. Search, mentions, momentum, sponsors, recommendations, transcripts. OAuth or an account key.",
   "keywords": [
     "mcp",
