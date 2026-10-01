@@ -10,6 +10,9 @@ export const ENTITY_ID = /^ent_\d+$/;
 export const CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/;
 export const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 
+/** API errors name the /v1 query key; a program wrote the client option, so the error names that. */
+const OPTION_FOR_WIRE_PARAM = new Map([['date_from', 'after'], ['published_after', 'after'], ['date_to', 'before'], ['published_before', 'before']]);
+
 export class ArcmiraError extends Error {
   constructor(message, code, extra = {}) {
     super(message);
@@ -114,11 +117,13 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
     onCall?.({ path, query, status: res.status, ms: Date.now() - started });
     if (res.ok && body) return body;
     const err = body?.error ?? {};
-    throw new ArcmiraError(err.message ?? `HTTP ${res.status}`, err.code ?? 'http_error', {
+    const option = OPTION_FOR_WIRE_PARAM.get(err.param);
+    const message = err.message ?? `HTTP ${res.status}`;
+    throw new ArcmiraError(option ? message.replace(new RegExp(`\\b${err.param}\\b`, 'g'), option) : message, err.code ?? 'http_error', {
       status: res.status,
       unlock: err.unlock,
       gate: err.gate,
-      param: err.param,
+      param: option ?? err.param,
       retry_after_seconds: err.retry_after_seconds,
       doc_url: err.doc_url,
       request_id: err.request_id,
