@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DOCS, ERRORS, EXAMPLES, ID_RULE, METHODS, QUIRKS } from '../src/reference.ts';
+import { ACCESS_GUIDANCE, DOCS, ERRORS, EXAMPLES, ID_RULE, METHODS, QUIRKS } from '../src/reference.ts';
 import { PICK_STEPS, TASK_SKILLS, type TaskSkill } from '../src/skills.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -136,7 +136,9 @@ ${t.good.map((g) => `- ${g}`).join('\n')}
 
 ${t.traps.map((g) => `- ${g}`).join('\n')}
 
-Plan gates throw with \`.unlock.url\`: relay the link. Never fill a gap from memory or the web. Docs: ${DOCS.mcp}
+${ACCESS_GUIDANCE}
+
+Never fill an index gap from memory or the web. Docs: ${DOCS.mcp}
 `;
 }
 

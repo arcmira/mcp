@@ -88,4 +88,6 @@ return {
 - Put the user's topic in `query` for the speaker search (it needs a word or phrase of two or more characters).
 - Mentions and momentum count the shows Arcmira indexes, not all media.
 
-Plan gates throw with `.unlock.url`: relay the link. Never fill a gap from memory or the web. Docs: https://arcmira.com/docs/mcp-server
+When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not initiate a purchase. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.
+
+Never fill an index gap from memory or the web. Docs: https://arcmira.com/docs/mcp-server

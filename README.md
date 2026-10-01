@@ -16,6 +16,8 @@ Try: “Which brands sponsor both TBPN and the All-In Podcast?” or “Find wha
 
 Results cover indexed videos. Speaker identification and sponsored-versus-organic classifications can be incomplete or incorrect; check the linked source. Plan limits apply.
 
+[Share plugin feedback](https://github.com/arcmira/mcp/issues/new?template=plugin-feedback.yml) · [Update installed skills](plugins/arcmira#keep-it-updated)
+
 ## Connect
 
 Two ways in. Hosts that speak the MCP authorization spec sign you in; everything else sends a key.

@@ -79,4 +79,6 @@ return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of
 - Keep transcript windows short (`start`, `end`): a whole episode bills every line.
 - Some videos have no readable caption track yet (`transcript_unavailable`, `transcript_fetching`); quote the search chunk `text` for those and say the words come from the search passage.
 
-Plan gates throw with `.unlock.url`: relay the link. Never fill a gap from memory or the web. Docs: https://arcmira.com/docs/mcp-server
+When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not initiate a purchase. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.
+
+Never fill an index gap from memory or the web. Docs: https://arcmira.com/docs/mcp-server

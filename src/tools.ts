@@ -63,7 +63,7 @@ export const describeTool = tool({
 export const executeTool = tool({
   name: 'execute',
   title: 'Run a program against Arcmira',
-  description: `Runs JavaScript against Arcmira's read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output contains console.log lines and the return value, or an error with any applicable plan-unlock URL. Methods and examples are documented by describe. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and 20,000 characters of output.`,
+  description: `Runs JavaScript against Arcmira's read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output contains console.log lines and the return value, or an error with account-access details. Methods and examples are documented by describe. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and 20,000 characters of output.`,
   inputSchema: z.object({
     code: z.string().min(1).max(40_000).describe('JavaScript source, the body of async function (arcmira, ArcmiraError, console) { ... }. Return a value or console.log lines. No import or export.'),
   }),
