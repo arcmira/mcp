@@ -6,8 +6,8 @@
  * fails before a user sees it. The method table lives in the arcmira skill and in describe; these
  * skills carry only the procedure, the program and the bar for a good answer.
  *
- * Users give names, never ids. Every program starts from a name, stops with a short `choose` list
- * when close candidates compete, and takes the pick back through ID on the second run.
+ * Users give names, never ids. Every program starts from a name, stops with the resolve `ask` when
+ * several entities fit, says when it assumed one, and takes the pick back through ID on the second run.
  */
 
 export interface TaskSkill {
@@ -26,25 +26,28 @@ export interface TaskSkill {
 
 /** How every task skill turns a name into the one entity the user meant. */
 export const PICK_STEPS = [
-  'Resolve the exact name the user said. `best` is only a guess when other candidates are close: "Sam" resolves to a bare "Sam" row while Sam Altman has sixteen times the appearances, and "Chamath" returns no `best` and several spellings of one person.',
-  'A bare first name is always ambiguous: list the people it could be with their appearance counts (and description, when candidates carry one), never take `best`.',
-  'Weigh `best` against the other candidates and against what the user said around the name (the OpenAI CEO, a sponsor, a show). One candidate fits: use it.',
-  'Two or more fit: either check each against the data (run the query for each and keep the one the context and the data support), or stop and show the user a short list, one line per candidate: name, type, and one distinguishing fact (appearance count or top show), then ask which.',
-  'Nothing close (a show typed "All In"): retry with spelling variants ("All-In", "All-In Podcast") before you ask. Still nothing, or only a different name: say it is not in the Arcmira index and offer the nearest names; never answer for a similar-named show without saying so.',
-  'Say which entity the answer is about (name, type, id) in the answer, and name any close candidate you set aside. Never switch entities silently.',
+  'Resolve the exact name the user said, and pass their own words about it as `context` when they gave any ("Sam, the My First Million co-host" is `resolve("Sam", { context: "the My First Million co-host" })`).',
+  '`best`: the name means that row. Use it and name it.',
+  '`suggested`: no row is certain but one stands out. Use it and tell the user you assumed it, quoting `suggested.evidence` ("Sam Altman, assuming the most mentioned Sam: 4,399 appearances, 11x the next").',
+  '`ask`: several rows fit and none stands out. Return `ask.options` for the user to pick and stop, or check every option id against the data in one program (occurrences or momentum with all the ids) and answer per row, naming each.',
+  'None of the three: the name is not in the Arcmira index. Say so and ask for another spelling or a link; never answer for a different entity without saying so.',
+  'Say which entity the answer is about (name, type, id) in the answer. Never switch entities silently.',
   'Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element). Drop rows about another sense.',
 ];
 
-/** The guard every program opens with: a `choose` list when candidates compete, else the one id. ID reruns it with the pick. */
+/** The guard every program opens with: ask options when several rows fit, else the one id and whether it was assumed. ID reruns it with the pick. */
 function pick(name: string, type?: 'person' | 'channel'): string {
-  const opts = type ? `, { type: "${type}", limit: 10 }` : ', { limit: 10 }';
-  const idOf = (row: string) => (type === 'channel' ? `${row}.youtube_channel_id` : `${row}.id`);
-  return `const NAME = "${name}", ID = null;   // after a choose list, set ID to the pick and run again
-const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-const r = ID ? null : await arcmira.resolve(NAME${opts});
-const close = r ? r.candidates.filter(c => ${idOf('c')} && ${idOf('c')} !== ${idOf('r.best?')} && norm(c.name).includes(norm(NAME)) && c.appearance_count * 4 >= (r.best?.appearance_count ?? 0)).sort((a, b) => b.appearance_count - a.appearance_count) : [];
-if (r && (!r.best || !${idOf('r.best')} || close.length > 0)) return { choose: [r.best, ...close].filter(c => c && ${idOf('c')}).slice(0, 5).map(c => ({ id: ${idOf('c')}, name: c.name, type: c.type, appearances: c.appearance_count })) };
-const id = ID ?? ${idOf('r.best')};`;
+  const opts = type ? `{ type: "${type}", context: CONTEXT }` : '{ context: CONTEXT }';
+  const channel = type === 'channel';
+  const options = channel
+    ? 'r.ask && { question: r.ask.question, options: r.ask.options.map(o => ({ ...o, channel_id: r.candidates.find(c => c.id === o.id)?.youtube_channel_id ?? null })) }'
+    : 'r.ask';
+  return `const NAME = "${name}", CONTEXT = undefined, ID = null;   // CONTEXT: the user's own words about the name. After an ask, set ID to the picked option's ${channel ? 'channel_id' : 'id'} and run again
+const r = ID ? null : await arcmira.resolve(NAME, ${opts});
+const e = r && (r.best ?? r.suggested);
+if (r && !e) return { ask: ${options} };
+const id = ID ?? e.${channel ? 'youtube_channel_id' : 'id'};
+const assumed = Boolean(r?.suggested), why = r?.suggested?.evidence ?? null;`;
 }
 
 export const TASK_SKILLS: readonly TaskSkill[] = [
@@ -66,7 +69,7 @@ export const TASK_SKILLS: readonly TaskSkill[] = [
         code: `${pick('TBPN', 'channel')}
 const s = await arcmira.sponsors(id);   // limit is a Pro+ filter; slice instead
 return {
-  show: s.channel.name, channel_id: id, page: s.channel.page, sponsors_total: s.meta.total,
+  show: s.channel.name, channel_id: id, page: s.channel.page, assumed, why, sponsors_total: s.meta.total,
   sponsors: s.sponsors.slice(0, 10).map(x => ({ name: x.entity.name, id: x.entity.id, page: x.entity.page, ad_reads: x.ad_reads, episodes: x.videos, first_seen: x.first_seen, last_seen: x.last_seen, status: x.sponsor_status?.status ?? null })),
 };`,
       },
@@ -92,7 +95,7 @@ for (const x of reads) {
   shows.set(name, row);
 }
 return {
-  brand: { id, name: entity?.name ?? NAME, type: entity?.type ?? null }, window: { after, through: arcmira.today() }, ad_reads_total: reads.length,
+  brand: { id, name: entity?.name ?? e?.name ?? null, type: entity?.type ?? e?.type ?? null, assumed, why }, window: { after, through: arcmira.today() }, ad_reads_total: reads.length,
   shows: [...shows.values()].sort((a, b) => b.ad_reads - a.ad_reads).slice(0, 10).map(s => ({ ...s, episodes: s.episodes.size })),
   sample_read: reads[0] ? { said: reads[0].verbatim_quote, show: reads[0].media.source_channel?.name ?? null, date: reads[0].media.published_at, promo_code: reads[0].promo_code } : null,
 };`,
@@ -135,7 +138,7 @@ let quotes = await arcmira.search({ query: m.entity.name, about: [id], after, li
 const quotesTagged = quotes.chunks.length > 0;   // false: the fallback matched the words, which can be a namesake; say so
 if (!quotesTagged) quotes = await arcmira.search({ query: m.entity.name, after, limit: 5 });
 return {
-  entity: { id, name: m.entity.name, type: m.entity.type, page: m.entity.page },
+  entity: { id, name: m.entity.name, type: m.entity.type, page: m.entity.page, assumed, why },
   window: { after, through: arcmira.today() },
   momentum: { verdict: m.verdict, last_7d: m.volume.mentions_7d, last_30d: m.volume.mentions_30d, prior_30d: m.volume.mentions_prior_30d, as_of: m.as_of },
   shows: occ.rows.map(x => ({ show: x.channel_name, channel_id: x.channel_id, episodes: x.count, times_said: x.occurrences })),
@@ -166,7 +169,7 @@ return {
     asks: ['find a quote, with the source and a timestamp', 'the moment a show talked about a topic, to clip or cite', 'what a specific person said about a topic, in their words'],
     ids: [
       'A speaker resolves with `{ type: "person" }`; pass the id as `speakerIds` (who said it). A person or brand the passage is about goes in `about`. A show goes in `channelIds` as its UC id.',
-      'People are often named by first name ("Chamath"). When the candidates are spellings of one person, take the one with the most appearances and say so; when they are different people, ask.',
+      'People are often named by first name ("Chamath"). Pass what the user said about them as `context`; resolve suggests the person when one stands out and asks when several fit.',
       'The topic words go in `query`, never in `about`. If a filtered search returns no chunks, rerun it with fewer filters before saying nothing was found.',
     ],
     programs: [
@@ -181,14 +184,14 @@ for (const c of hits.chunks.slice(0, 2)) {
     const t = await arcmira.transcript(c.videoId, { start: Math.max(0, c.startSeconds - 10), end: c.startSeconds + 50 });
     moment.clip = { start: t.lines[0]?.start ?? c.startSeconds, end: t.lines.at(-1)?.end ?? c.startSeconds + 60 };
     moment.lines = t.lines.map(l => \`[\${Math.round(l.start)}s] \${l.text}\`);
-  } catch (e) {
+  } catch (err) {
     moment.clip = { start: c.startSeconds, end: c.startSeconds + 60 };
     moment.passage = c.text;
-    moment.transcript = e.code;
+    moment.transcript = err.code;
   }
   moments.push(moment);
 }
-return { speaker_id: id, as_of: hits.as_of, moments };`,
+return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of, ...(moments.length ? { moments } : { none: hits.note ?? null }) };`,
       },
     ],
     good: [
@@ -213,8 +216,7 @@ return { speaker_id: id, as_of: hits.as_of, moments };`,
       'Three lenses on one person id. `momentum` gives attention and the shows that mention them most. `mentions` rows with `is_appearance` are episodes they were on. `search` with `speakerIds` returns their own words; `about` returns what others said about them.',
     asks: ['prep for an interview, a podcast booking or a meeting with someone', 'what has a person said recently, and where', 'who talks about a person, and is attention rising'],
     ids: [
-      'Resolve with `{ type: "person" }`. A first name alone ("Sam") matches many people: use what the user said about them (runs OpenAI, hosts a show) to pick from the choose list, and ask when nothing in the request settles it.',
-      'The catalog can hold one person under several spellings; take the row with the most appearances and say which id you used.',
+      'Resolve with `{ type: "person" }`. A first name alone ("Sam") matches many people: pass what the user said about them (runs OpenAI, hosts a show) as `context`, and when resolve still answers `ask`, show its options.',
     ],
     programs: [
       {
@@ -235,12 +237,12 @@ if (ep) {
     const t = await arcmira.transcript(ep.media.video_id, { start: Math.max(0, ep.start_seconds - 5), end: ep.start_seconds + 90 });
     const s = Math.floor(t.lines[0]?.start ?? ep.start_seconds);
     fromAppearance = { episode: t.video.title, show: t.video.channel_name, date: t.video.published_at, url: \`\${t.video.watch_url}\${t.video.watch_url.includes("?") ? "&" : "?"}t=\${s}\`, lines: t.lines.map(l => \`[\${Math.round(l.start)}s] \${l.text}\`), speaker_labelled: t.lines.some(l => l.speaker) };
-  } catch (e) {
-    fromAppearance = { episode: ep.media.title, error: e.code };
+  } catch (err) {
+    fromAppearance = { episode: ep.media.title, error: err.code };
   }
 }
 return {
-  person: { id, name: m.entity.name, page: m.entity.page },
+  person: { id, name: m.entity.name, page: m.entity.page, assumed, why },
   attention: { verdict: m.verdict, last_30d: m.volume.mentions_30d, prior_30d: m.volume.mentions_prior_30d, as_of: m.as_of, top_shows: m.top_shows.map(s => [s.channel_name, s.mentions]) },
   appeared_on: [...appeared.values()].slice(0, 8),
   appeared_on_partial: rows.has_more,   // true: only the newest 40 mention rows were read
@@ -271,22 +273,22 @@ return {
       '`status` sizes each show, `episodes` gives the latest, `occurrences` with both channel ids ranks what each covers and returns `shared` for what both mention, and `sponsors` of each, joined on entity id, gives shared sponsors.',
     asks: ['compare two shows, or a show against a competitor', 'what two podcasts both talk about, or who they both advertise', 'a digest of what one or two shows covered this week or month'],
     ids: [
-      'Resolve each show with `{ type: "channel" }` and use `youtube_channel_id`. Users shorten show names ("All In", "MTS"): retry the full or hyphenated name when nothing close comes back, and check each `best.name` against the show meant, since a clip or fan channel can share the name.',
+      'Resolve each show with `{ type: "channel" }` and use `youtube_channel_id`. Users shorten show names ("All In", "MTS"); resolve suggests a show by its initials or closest spelling, so say when a show was assumed. When nothing comes back, retry the full or hyphenated name before saying the show is not in the index.',
       'Pass both UC ids in one `occurrences` call and read `shared`.',
     ],
     programs: [
       {
         title: 'Two shows, last 30 days',
-        code: `const SHOWS = ["TBPN", "All-In Podcast"], IDS = [null, null];   // after a choose list, put the picked UC id in IDS and run again
-const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-const ids = [], names = [];
+        code: `const SHOWS = ["TBPN", "All-In Podcast"], IDS = [null, null];   // after an ask, put the picked option's channel_id in IDS and run again
+const ids = [], names = [], assumed = [];
 for (const [i, n] of SHOWS.entries()) {
-  if (IDS[i]) { ids.push(IDS[i]); names.push(n); continue; }
-  const r = await arcmira.resolve(n, { type: "channel", limit: 10 });
-  const close = r.candidates.filter(c => c.youtube_channel_id && c.youtube_channel_id !== r.best?.youtube_channel_id && norm(c.name).includes(norm(n)) && c.appearance_count * 4 >= (r.best?.appearance_count ?? 0));
-  if (!r.best?.youtube_channel_id || close.length > 0) return { unresolved: n, choose: [r.best, ...close].filter(c => c?.youtube_channel_id).slice(0, 5).map(c => ({ name: c.name, channel_id: c.youtube_channel_id, appearances: c.appearance_count })) };
-  ids.push(r.best.youtube_channel_id);
-  names.push(r.best.name);
+  if (IDS[i]) { ids.push(IDS[i]); names.push(n); assumed.push(null); continue; }
+  const r = await arcmira.resolve(n, { type: "channel" });
+  const e = r.best ?? r.suggested;
+  if (!e) return { unresolved: n, ask: r.ask && { question: r.ask.question, options: r.ask.options.map(o => ({ ...o, channel_id: r.candidates.find(c => c.id === o.id)?.youtube_channel_id ?? null })) } };
+  ids.push(e.youtube_channel_id);
+  names.push(e.name);
+  assumed.push(r.suggested ? r.suggested.evidence : null);
 }
 const after = arcmira.daysAgo(30);
 const [s0, s1, e0, e1, occ, sp0, sp1] = await Promise.all([
@@ -298,7 +300,7 @@ const [s0, s1, e0, e1, occ, sp0, sp1] = await Promise.all([
 const inOther = new Map(sp1.sponsors.map(x => [x.entity.id, x.ad_reads]));
 return {
   window: { after, through: arcmira.today() },
-  shows: ids.map((id, i) => ({ name: names[i], channel_id: id, videos_indexed: [s0, s1][i].channel.searchable_videos, indexed_through: [s0, s1][i].channel.indexed_through, latest: [e0, e1][i].episodes[0]?.title ?? null,
+  shows: ids.map((id, i) => ({ name: names[i], channel_id: id, assumed: Boolean(assumed[i]), why: assumed[i], videos_indexed: [s0, s1][i].channel.searchable_videos, indexed_through: [s0, s1][i].channel.indexed_through, latest: [e0, e1][i].episodes[0]?.title ?? null,
     top: occ.rows.filter(x => x.channel_id === id).slice(0, 5).map(x => [x.name, x.count]) })),
   both_discussed: occ.shared.slice(0, 5).map(x => ({ name: x.name, id: x.entity_id, episodes_by_show: x.by_channel.map(c => [c.channel_name, c.count]) })),
   shared_sponsors: sp0.sponsors.filter(x => inOther.has(x.entity.id)).map(x => ({ name: x.entity.name, id: x.entity.id, ad_reads: [x.ad_reads, inOther.get(x.entity.id)] })),
