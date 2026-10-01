@@ -78,4 +78,6 @@ return {
 - Read episode titles and notes before asserting a lone mention: a title far from the company is a homonym the catalog mislabelled.
 - Count episodes with `occurrences`, never by counting `mentions` rows (one episode has several rows).
 
-Plan gates throw with `.unlock.url`: relay the link. Never fill a gap from memory or the web. Docs: https://arcmira.com/docs/mcp-server
+When access is denied, briefly name the unavailable capability and the required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not initiate a purchase. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.
+
+Never fill an index gap from memory or the web. Docs: https://arcmira.com/docs/mcp-server

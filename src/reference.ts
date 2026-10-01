@@ -13,6 +13,8 @@ export const DOCS = {
   openapi: 'https://api.arcmira.com/v1/openapi.json',
 } as const;
 
+export const ACCESS_GUIDANCE = 'When access is denied, briefly name the unavailable capability and the required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not initiate a purchase. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.';
+
 export const ID_RULE = `ID RULE. Filters take verbatim ids only: entity ids look like ent_14, channel ids like UC-DRzaGnL_vtBUpCFH5M0tg (UC plus 22 characters), video ids are 11 characters or a YouTube URL. A name where an id belongs throws id_required before any network call. Resolve first, then query:
   const r = await arcmira.resolve("Sam", { context: "the My First Million co-host" });
   const e = r.best ?? r.suggested;          // for a show: resolve with { type: "channel" } and use e.youtube_channel_id
@@ -63,7 +65,7 @@ export const METHODS: readonly MethodDoc[] = [
     name: 'recommendations',
     signature: 'arcmira.recommendations(entityId, { kind?, channelId?, after?, before?, limit?, cursor? })',
     returns: '{ entity, data[{mention_class (ad_read = sponsored, endorsement = organic), verbatim_quote, promo_code, media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds}], has_more, next_cursor }',
-    notes: ['Who recommends one entity on air. kind: sponsored | organic | all (default all), limit 1..50. Pro plan; a free key gets recommendations_not_enabled with its unlock link.'],
+    notes: ['Who recommends one entity on air. kind: sponsored | organic | all (default all), limit 1..50. Account access applies; a gate reports the required tier in unlock.tier.'],
   },
   {
     name: 'episodes',
@@ -172,7 +174,7 @@ export const QUIRKS = [
   'Dates: arcmira.today() and arcmira.daysAgo(n) give ISO dates from the server clock; never guess today. after and before are both counted (August is after 2026-08-01, before 2026-08-31), in UTC. The index is not live: cite indexed_through or as_of before saying nothing happened recently.',
   'Momentum, mentions and counts measure the shows Arcmira indexes, not the internet; say so when it matters. An empty result means the index has no match: never fill it from memory or the web.',
   'Before asserting a mention, read its description or the passage text and say which sense of the name it is (Mercury the bank, not the planet or the element). Drop rows about another sense.',
-  'Every plan gate throws with .code and .unlock.url, the page that lifts it. Relay the link.',
+  ACCESS_GUIDANCE,
   'Results carry names beside ids and arcmira.com page links; link names to those pages and never invent an arcmira.com URL.',
 ];
 
@@ -223,7 +225,8 @@ export const SHORT_GUIDE = [
   'This server holds the transcript data: for anything said on a show, use it before any web search.',
   'Two tools. describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first execute. execute runs JavaScript you write against that client and returns what you print or return.',
   'Write one program per question: resolve every name it carries (arcmira.resolve, with the user\'s own words about the name as context), use best, or suggested and tell the user you assumed it, or return ask.options for the user to pick (a name that resolves to nothing is not in the index), run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
-  'Use arcmira.today() and arcmira.daysAgo(n) for date windows. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Every gate throws with .unlock.url; relay that link and never fill a gap from the open web.',
+  'Use arcmira.today() and arcmira.daysAgo(n) for date windows. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Never fill an index gap from memory or the open web.',
+  ACCESS_GUIDANCE,
   'Connect with no key and the host signs you in through OAuth, or send Authorization: Bearer <key>. With no account, POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"} and then /v1/signups/verify with the code.',
   `Good first ids: TBPN is channel UC-DRzaGnL_vtBUpCFH5M0tg, All-In Podcast is UCESLZhusAkFfsNsApnjF_Cg, Ramp is ent_14. Docs: ${DOCS.mcp} and ${DOCS.llms}.`,
 ].join(' ');
