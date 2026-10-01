@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.8
+
+`context` on `arcmira.resolve` holds only words from the user's message. In the 0.7.7 bake-off, several agents asked about "Theo's channel" filled in their own guess ("Theo Von" with context "comedian", or context "Theo Browne channel"). The resolver then confirmed that guess, and those agents answered for one Theo without saying another exists. `describe`, the tool notes and every plugin skill now say so: a bare "Theo" is `resolve("Theo")` with no context, and its ask goes back to the user.
+
+The server side shipped at the same time and needs no client change. A person and the channel named after them no longer compete (`John Coogan` is `best`, the person), and rows with no appearances are never `ask` options.
+
 ## 0.7.7
 
 `arcmira.resolve` calls `GET /v1/entities/resolve` and returns the server's answer as it comes: `{ query, context, confidence, best, suggested, ask, candidates, note }`. The client no longer picks a row itself; `pickResolved` and the `/v1/entities/search` call are gone. `resolve(q, { type, context, limit })` takes `context`, the user's own words about the name ("Sam" with "the My First Million co-host").
