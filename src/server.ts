@@ -25,7 +25,7 @@ export function createServer(caller: Caller, deploy: string | null = null): McpS
   for (const tool of TOOLS) {
     server.registerTool(
       tool.name,
-      { title: tool.title, description: tool.description, inputSchema: tool.inputSchema, annotations: READ_ONLY },
+      { title: tool.title, description: tool.description, inputSchema: tool.inputSchema, annotations: { ...READ_ONLY, title: tool.title } },
       async (input) => {
         // The handshake has completed by the time a tool runs, so the host's name is known here.
         caller.api?.setClient(server.server.getClientVersion());

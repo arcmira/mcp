@@ -43,7 +43,7 @@ export function serverCard(origin: string): Record<string, unknown> {
       title: tool.title,
       description: tool.description,
       inputSchema: z.toJSONSchema(tool.inputSchema),
-      annotations: READ_ONLY,
+      annotations: { ...READ_ONLY, title: tool.title },
     })),
   };
 }

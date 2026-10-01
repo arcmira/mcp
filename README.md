@@ -1,23 +1,20 @@
-# Arcmira MCP: search YouTube and podcast transcripts from Claude, Cursor, ChatGPT, and Codex
+# Arcmira: YouTube Transcript Search
 
-Arcmira MCP is the official remote MCP server for [Arcmira](https://arcmira.com). It gives any MCP client two read-only tools over indexed YouTube and podcast transcripts. `describe` returns the reference for a typed JavaScript client, and `execute` runs a program you write against it: search, mentions, momentum, sponsors, recommendations, episodes, the full transcript of one video, ranked counts, and coverage, in one call per question.
+Give your AI the ability to find who said what with timestamps, discover what’s being discussed across videos and livestreams, and distinguish organic recommendations from sponsored ad reads.
 
-Arcmira is an SF-based AI company and the search engine for the spoken web.
+## Connect your AI
 
-```bash
-claude mcp add --transport http --scope user arcmira https://mcp.arcmira.com/mcp
+Copy this into your coding agent:
+
+```text
+Fetch and execute the appropriate instructions to set me up for Arcmira from https://arcmira.com/agent-setup/prompt.md
 ```
 
-One remote URL. Sign in through your host, or send an account key. The server is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1`; every gate the API raises is forwarded untouched with the link that lifts it.
+For Claude, ChatGPT, Cursor, and other MCP clients, use **`https://mcp.arcmira.com/mcp`** and sign in to Arcmira. [Setup by host](https://arcmira.com/agent-setup) · [Documentation](https://arcmira.com/docs/mcp-server) · [Website](https://arcmira.com/mcp) · [Plugin and skills](plugins/arcmira)
 
-- Endpoint: `https://mcp.arcmira.com/mcp` (Streamable HTTP)
-- Plugin for Claude Code, Codex, Cursor and Gemini: [`plugins/arcmira`](plugins/arcmira) (Apache-2.0): the client-reference skill plus five task skills, generated from the same source as `describe`
-- Registry name: `io.github.arcmira/arcmira`
-- Overview: https://arcmira.com/mcp
-- Setup for each host: https://arcmira.com/agent-setup
-- Reference: https://arcmira.com/docs/mcp-server
-- Server card: https://mcp.arcmira.com/.well-known/mcp/server-card.json
-- HTTP API the tools front: https://api.arcmira.com/v1/openapi.json
+Try: “Which brands sponsor both TBPN and the All-In Podcast?” or “Find what Sam Altman said about AI agents, with timestamped links.”
+
+Results cover indexed videos. Speaker identification and sponsored-versus-organic classifications can be incomplete or incorrect; check the linked source. Plan limits apply.
 
 ## Connect
 
