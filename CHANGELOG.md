@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.7
+
+`arcmira.resolve` calls `GET /v1/entities/resolve` and returns the server's answer as it comes: `{ query, context, confidence, best, suggested, ask, candidates, note }`. The client no longer picks a row itself; `pickResolved` and the `/v1/entities/search` call are gone. `resolve(q, { type, context, limit })` takes `context`, the user's own words about the name ("Sam" with "the My First Million co-host").
+
+Every answer is one of three. `best` is the row the name means. `suggested` is the row that stands out when none is certain, with `reason` (`dominant`, `only_word_match`, `context`, `acronym` or `spelling`), `evidence` and `assumed: true`. `ask` holds a question and options when several rows fit and none stands out. Candidates carry `match` (`exact`, `word`, `substring`, `acronym` or `spelling`) and no longer carry a `suggested` flag. The server now handles first names ("Sam" suggests Sam Altman), a name next to a better-known person or show ("Jordan" asks, "Lex" suggests Lex Fridman), show initials ("MFM"), misspellings ("Jensen Hwang") and context ("Mercury" with "the Queen frontman").
+
+The resolve rule in `describe`, the tool description, the server instructions and every plugin skill is rewritten around the three answers. Use `best` and name it. Use `suggested` and tell the user you assumed it, quoting the evidence. Return `ask.options` for the user to pick, or check every option id against the data in one program and answer per row. Pass `context` whenever the user said something about the name. The rules the server now enforces (never take `best` for a one-word person query; `best` can be the wrong row) are gone. Every example program opens with `const e = r.best ?? r.suggested; if (!e) return { ask: r.ask };` and returns `assumed` and `why` beside the entity name. The task skills set `CONTEXT` in their pick block and return `ask` in place of the old `choose` list; for a show, each option carries its `channel_id`.
+
+`search` with `speakerIds` is documented as the backend now serves it: only passages where that person says the query words, each line of `chunk.text` starting with "Name: ", and a `note` on an empty result that says whether the person has labeled lines. A worked example quotes John Coogan's own lines.
+
 ## 0.7.6
 
 The five task skills carry the homonym rule too: before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element). 0.7.5 put it in `describe` and the `arcmira` skill only.

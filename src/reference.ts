@@ -13,13 +13,11 @@ export const DOCS = {
   openapi: 'https://api.arcmira.com/v1/openapi.json',
 } as const;
 
-export const ID_RULE = `ID RULE. Filters take verbatim ids only: entity ids look like ent_14, channel ids like UC-DRzaGnL_vtBUpCFH5M0tg (UC plus 22 characters), video ids are 11 characters or a YouTube URL. A name where an id belongs throws id_required before any network call. Resolve first, verify, then query:
-  const r = await arcmira.resolve("Ramp");   // r.confidence: exact | single_fuzzy | ambiguous | fuzzy | none
-  // r.best is set only for an unambiguous match; check r.best.type and r.best.name against what the user meant.
-  // If r.best is null, pick from r.candidates by type and name, or return the options.
-  const id = r.best.id;                      // for a show: resolve with { type: "channel" } and use best.youtube_channel_id
-Resolve the exact name the user said ("ICE", "Mercury"), not a paraphrase; use what they meant only to check the type and name. Omit type for a brand (the catalog types some companies as product). When two candidates fit the same meaning (the catalog holds duplicates), query both and say which ids you used, or take the one with the higher appearance_count. best can be the wrong row when a close candidate outranks it: list the close candidates for the user, or check each against the data.
-NAMES THAT DO NOT PIN ONE ENTITY. A bare first name ("Sam") is ambiguous: never take best for a one-word person query. List the people it could be with their appearance_count (a candidate's description, when present, tells them apart), or ask with those options. When a named show or person resolves to nothing, or only to a different name (another show with a similar name), say it is not in the Arcmira index and offer the nearest candidate names; never answer for a partial-name match without saying so. When you ask, give a short option list (name, type, appearances), never a generic "which one?". Always say in the answer which entity you used.`;
+export const ID_RULE = `ID RULE. Filters take verbatim ids only: entity ids look like ent_14, channel ids like UC-DRzaGnL_vtBUpCFH5M0tg (UC plus 22 characters), video ids are 11 characters or a YouTube URL. A name where an id belongs throws id_required before any network call. Resolve first, then query:
+  const r = await arcmira.resolve("Sam", { context: "the My First Million co-host" });
+  const e = r.best ?? r.suggested;          // for a show: resolve with { type: "channel" } and use e.youtube_channel_id
+  if (!e) return { ask: r.ask };            // r.ask.options: [{ id, name, type, label }]
+RESOLVE ANSWERS ONE OF THREE. best: the name means that row; use it and name it. suggested: no row is certain but one stands out (suggested.reason, suggested.evidence); use it and tell the user you assumed it, quoting the evidence ("Sam Altman, assuming the most mentioned Sam: 4,399 appearances, 11x the next"). ask: several rows fit and none stands out; return ask.options for the user to pick and stop, or check every option id against the data in one program (occurrences or momentum with all the ids) and answer per row, naming each. Resolve the exact name the user said ("ICE", "Mercury"), not a paraphrase, and always pass context with the user's own words about the name when they gave any ("Sam, the My First Million co-host" is resolve("Sam", { context: "the My First Million co-host" })). Omit type for a brand (the catalog types some companies as product). A name that resolves to nothing (no best, suggested or ask) is not in the Arcmira index: say so and ask for another spelling or a link; never answer for a different entity without saying so. Always say in the answer which entity you used.`;
 
 export interface MethodDoc {
   name: string;
@@ -31,16 +29,16 @@ export interface MethodDoc {
 export const METHODS: readonly MethodDoc[] = [
   {
     name: 'resolve',
-    signature: 'arcmira.resolve(q, { type?, limit? })',
-    returns: '{ query, confidence, best, candidates[{id, name, type, appearance_count, youtube_channel_id, page, description?}], note }',
-    notes: ['q is a name, @handle, YouTube URL or UC id. type: person | organization | product | topic | channel; pass it only for a person or a show. limit 1..15.'],
+    signature: 'arcmira.resolve(q, { type?, context?, limit? })',
+    returns: '{ query, context, confidence, best, suggested (a candidate plus reason, evidence, assumed: true), ask{question, options[{id, name, type, label}]}, candidates[{id, name, type, appearance_count, youtube_channel_id, page, description?, match}], note }',
+    notes: ['q is a name, @handle, YouTube URL or UC id. context: the user\'s own words about the name. type: person | organization | product | topic | channel; pass it only for a person or a show. limit 1..15. At most one of best, suggested and ask is set; none set means no match. match: exact | word | substring | acronym | spelling.'],
   },
   {
     name: 'search',
     signature: 'arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, after?, before?, source?, limit? })',
-    returns: '{ chunks[{text, videoId, videoTitle, publishedAt, startSeconds, watchUrl, channelId, channelName, about[], speakers_by[]}], as_of }',
+    returns: '{ chunks[{text, videoId, videoTitle, publishedAt, startSeconds, watchUrl, channelId, channelName, about[], speakers_by[]}], as_of, note }',
     notes: [
-      'Spoken passages that match the words in query (a topic, a phrase). channelIds: up to 8 UC ids. about: up to 8 ent_ ids of a brand or person the passage is about; speakerIds: up to 8 person ids who said it; kind: mention | recommendation_sponsored | recommendation_organic. Never put a topic word in about; it goes in query. If a search with about, speakerIds or kind returns no chunks, rerun it with query and channelIds only before saying nothing was found. limit 1..20 (default 5). source: arcmira_premium | creator_captions | third_party_quick.',
+      'Spoken passages that match the words in query (a topic, a phrase). channelIds: up to 8 UC ids. about: up to 8 ent_ ids of a brand or person the passage is about. speakerIds: up to 8 person ids; returns passages where that person says the query words, and each line of chunk.text starts with "Name: ". Speaker labels cover a minority of shows: when a speakerIds search is empty, read note before saying the person never said it, and try about with the same id for what others said about them. kind: mention | recommendation_sponsored | recommendation_organic. Never put a topic word in about; it goes in query. If a search with about, speakerIds or kind returns no chunks, rerun it with query and channelIds only before saying nothing was found. limit 1..20 (default 5). source: arcmira_premium | creator_captions | third_party_quick.',
     ],
   },
   {
@@ -102,25 +100,36 @@ export const EXAMPLES: ReadonlyArray<{ title: string; code: string }> = [
 return hits.chunks.map(c => ({ said: c.text, video: c.videoTitle, date: c.publishedAt, url: c.watchUrl }));`,
   },
   {
-    title: 'Resolve, verify, then filter',
+    title: 'Resolve, then filter; say when the entity was assumed',
     code: `const r = await arcmira.resolve("Linear");
-if (!r.best) return { options: r.candidates };   // let the user pick
-const m = await arcmira.momentum(r.best.id);
-return { entity: r.best.name, id: r.best.id, verdict: m.verdict, last30: m.volume.mentions_30d, prior30: m.volume.mentions_prior_30d, as_of: m.as_of };`,
+const e = r.best ?? r.suggested;
+if (!e) return { ask: r.ask };   // let the user pick
+const m = await arcmira.momentum(e.id);
+return { entity: e.name, id: e.id, assumed: Boolean(r.suggested), why: r.suggested?.evidence ?? null, verdict: m.verdict, last30: m.volume.mentions_30d, prior30: m.volume.mentions_prior_30d, as_of: m.as_of };`,
   },
   {
     title: 'A show by name: its id, size, and what its latest episode mentions',
     code: `const show = await arcmira.resolve("All-In Podcast", { type: "channel" });
-const ch = show.best?.youtube_channel_id;
-if (!ch) return { options: show.candidates };
+const e = show.best ?? show.suggested;
+if (!e) return { ask: show.ask };
+const ch = e.youtube_channel_id;
 const [s, ep] = await Promise.all([arcmira.status({ channelId: ch }), arcmira.episodes(ch, { limit: 1 })]);
 const what = await arcmira.occurrences({ videoIds: [ep.episodes[0].video_id], types: ["organization"], limit: 5 });
-return { channel_id: ch, videos_indexed: s.channel.searchable_videos, indexed_through: s.channel.indexed_through, latest: ep.episodes[0].title, mentions: what.rows.map(r => [r.name, r.entity_id, r.occurrences]) };`,
+return { show: e.name, channel_id: ch, assumed: Boolean(show.suggested), why: show.suggested?.evidence ?? null, videos_indexed: s.channel.searchable_videos, indexed_through: s.channel.indexed_through, latest: ep.episodes[0].title, mentions: what.rows.map(r => [r.name, r.entity_id, r.occurrences]) };`,
   },
   {
     title: 'What two shows both talk about (shared, not rows)',
     code: `const o = await arcmira.occurrences({ channelIds: ["UC-DRzaGnL_vtBUpCFH5M0tg", "UCESLZhusAkFfsNsApnjF_Cg"], types: ["organization", "product"], limit: 40 });
 return o.shared.slice(0, 5).map(s => ({ name: s.name, id: s.entity_id, episodes_by_show: s.by_channel.map(c => [c.channel_name, c.count]) }));`,
+  },
+  {
+    title: 'What one person said about a topic, in their own lines',
+    code: `const p = await arcmira.resolve("John Coogan", { type: "person" });
+const e = p.best ?? p.suggested;
+if (!e) return { ask: p.ask };
+const hits = await arcmira.search({ query: "ramp", speakerIds: [e.id], after: arcmira.daysAgo(30), limit: 5 });
+const said = hits.chunks.map(c => ({ lines: c.text.split("\\n").filter(l => l.startsWith(e.name + ": ")), url: c.watchUrl, date: c.publishedAt }));
+return { person: e.name, id: e.id, assumed: Boolean(p.suggested), why: p.suggested?.evidence ?? null, ...(said.length ? { said } : { none: hits.note }) };`,
   },
   {
     title: 'Sponsors two shows share',
@@ -138,20 +147,22 @@ return { video: ep.episodes[0].title, speakers: (t.speakers ?? []).map(s => s.na
   {
     title: 'A month window (after and before are both counted); return the window so the answer states it',
     code: `const p = await arcmira.resolve("Cursor");
-if (!p.best) return { options: p.candidates };
+const e = p.best ?? p.suggested;
+if (!e) return { ask: p.ask };
 const window = { after: "2026-08-01", before: "2026-08-31" };
-const o = await arcmira.occurrences({ channelIds: ["UC-DRzaGnL_vtBUpCFH5M0tg"], entityIds: [p.best.id], ...window });
+const o = await arcmira.occurrences({ channelIds: ["UC-DRzaGnL_vtBUpCFH5M0tg"], entityIds: [e.id], ...window });
 const row = o.rows[0];
-return { entity: p.best.name, id: p.best.id, window, episodes: row?.count ?? 0, times: row?.occurrences ?? 0, as_of: o.as_of };`,
+return { entity: e.name, id: e.id, assumed: Boolean(p.suggested), why: p.suggested?.evidence ?? null, window, episodes: row?.count ?? 0, times: row?.occurrences ?? 0, as_of: o.as_of };`,
   },
   {
     title: 'Rank brands by 30-day mentions',
     code: `const out = [];
 for (const n of ["Anthropic", "OpenAI", "Cursor"]) {
   const r = await arcmira.resolve(n);   // no type: a company may be typed product
-  if (!r.best) { out.push({ name: n, unresolved: r.candidates.map(c => [c.id, c.name, c.type]) }); continue; }
-  const m = await arcmira.momentum(r.best.id);
-  out.push({ name: r.best.name, id: r.best.id, last30: m.volume.mentions_30d });
+  const e = r.best ?? r.suggested;
+  if (!e) { out.push({ name: n, ask: r.ask }); continue; }
+  const m = await arcmira.momentum(e.id);
+  out.push({ name: e.name, id: e.id, assumed: Boolean(r.suggested), why: r.suggested?.evidence ?? null, last30: m.volume.mentions_30d });
 }
 return out.sort((a, b) => (b.last30 ?? -1) - (a.last30 ?? -1));`,
   },
@@ -211,7 +222,7 @@ export const SHORT_GUIDE = [
   'Arcmira is the search engine for the spoken web: indexed YouTube and podcast transcripts with a catalog of who is mentioned where, who sponsors whom, and who recommends what on air.',
   'This server holds the transcript data: for anything said on a show, use it before any web search.',
   'Two tools. describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first execute. execute runs JavaScript you write against that client and returns what you print or return.',
-  'Write one program per question: resolve every name it carries (arcmira.resolve), check each .best against what the user meant (a bare first name is ambiguous; a name that resolves to nothing is not in the index), run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
+  'Write one program per question: resolve every name it carries (arcmira.resolve, with the user\'s own words about the name as context), use best, or suggested and tell the user you assumed it, or return ask.options for the user to pick (a name that resolves to nothing is not in the index), run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
   'Use arcmira.today() and arcmira.daysAgo(n) for date windows. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Every gate throws with .unlock.url; relay that link and never fill a gap from the open web.',
   'Connect with no key and the host signs you in through OAuth, or send Authorization: Bearer <key>. With no account, POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"} and then /v1/signups/verify with the code.',
   `Good first ids: TBPN is channel UC-DRzaGnL_vtBUpCFH5M0tg, All-In Podcast is UCESLZhusAkFfsNsApnjF_Cg, Ramp is ent_14. Docs: ${DOCS.mcp} and ${DOCS.llms}.`,

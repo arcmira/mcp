@@ -19,12 +19,12 @@ Use it through the arcmira MCP server (`describe`, then `execute` with a program
 
 Users give names; filters take ids only (ent_..., UC..., 11-character video ids), and a name where an id belongs throws `id_required`.
 
-1. Resolve the exact name the user said. `best` is only a guess when other candidates are close: "Sam" resolves to a bare "Sam" row while Sam Altman has sixteen times the appearances, and "Chamath" returns no `best` and several spellings of one person.
-2. A bare first name is always ambiguous: list the people it could be with their appearance counts (and description, when candidates carry one), never take `best`.
-3. Weigh `best` against the other candidates and against what the user said around the name (the OpenAI CEO, a sponsor, a show). One candidate fits: use it.
-4. Two or more fit: either check each against the data (run the query for each and keep the one the context and the data support), or stop and show the user a short list, one line per candidate: name, type, and one distinguishing fact (appearance count or top show), then ask which.
-5. Nothing close (a show typed "All In"): retry with spelling variants ("All-In", "All-In Podcast") before you ask. Still nothing, or only a different name: say it is not in the Arcmira index and offer the nearest names; never answer for a similar-named show without saying so.
-6. Say which entity the answer is about (name, type, id) in the answer, and name any close candidate you set aside. Never switch entities silently.
+1. Resolve the exact name the user said, and pass their own words about it as `context` when they gave any ("Sam, the My First Million co-host" is `resolve("Sam", { context: "the My First Million co-host" })`).
+2. `best`: the name means that row. Use it and name it.
+3. `suggested`: no row is certain but one stands out. Use it and tell the user you assumed it, quoting `suggested.evidence` ("Sam Altman, assuming the most mentioned Sam: 4,399 appearances, 11x the next").
+4. `ask`: several rows fit and none stands out. Return `ask.options` for the user to pick and stop, or check every option id against the data in one program (occurrences or momentum with all the ids) and answer per row, naming each.
+5. None of the three: the name is not in the Arcmira index. Say so and ask for another spelling or a link; never answer for a different entity without saying so.
+6. Say which entity the answer is about (name, type, id) in the answer. Never switch entities silently.
 7. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element). Drop rows about another sense.
 
 For this task:
@@ -34,17 +34,17 @@ For this task:
 
 ## Worked program
 
-Pass each block to `execute` as one program, with the name swapped for the user's. It opens with the pick: when close candidates compete it returns `choose` and runs nothing else. Pick from that list by the user's context or ask them, then run it again with `ID` set to the pick. Build date windows from `arcmira.daysAgo(n)` and `arcmira.today()`.
+Pass each block to `execute` as one program, with the name swapped for the user's. It opens with the pick: set `CONTEXT` to the user's own words about the name. When several entities fit it returns `ask` and runs nothing else. Show those options to the user, then run it again with `ID` set to the pick. When the result carries `assumed: true`, tell the user which entity was assumed and why (`why`). Build date windows from `arcmira.daysAgo(n)` and `arcmira.today()`.
 
 ### The last seven days about one company
 
 ```javascript
-const NAME = "Linear", ID = null;   // after a choose list, set ID to the pick and run again
-const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-const r = ID ? null : await arcmira.resolve(NAME, { limit: 10 });
-const close = r ? r.candidates.filter(c => c.id && c.id !== r.best?.id && norm(c.name).includes(norm(NAME)) && c.appearance_count * 4 >= (r.best?.appearance_count ?? 0)).sort((a, b) => b.appearance_count - a.appearance_count) : [];
-if (r && (!r.best || !r.best.id || close.length > 0)) return { choose: [r.best, ...close].filter(c => c && c.id).slice(0, 5).map(c => ({ id: c.id, name: c.name, type: c.type, appearances: c.appearance_count })) };
-const id = ID ?? r.best.id;
+const NAME = "Linear", CONTEXT = undefined, ID = null;   // CONTEXT: the user's own words about the name. After an ask, set ID to the picked option's id and run again
+const r = ID ? null : await arcmira.resolve(NAME, { context: CONTEXT });
+const e = r && (r.best ?? r.suggested);
+if (r && !e) return { ask: r.ask };
+const id = ID ?? e.id;
+const assumed = Boolean(r?.suggested), why = r?.suggested?.evidence ?? null;
 const after = arcmira.daysAgo(7);
 const [m, occ, notes] = await Promise.all([
   arcmira.momentum(id),
@@ -55,7 +55,7 @@ let quotes = await arcmira.search({ query: m.entity.name, about: [id], after, li
 const quotesTagged = quotes.chunks.length > 0;   // false: the fallback matched the words, which can be a namesake; say so
 if (!quotesTagged) quotes = await arcmira.search({ query: m.entity.name, after, limit: 5 });
 return {
-  entity: { id, name: m.entity.name, type: m.entity.type, page: m.entity.page },
+  entity: { id, name: m.entity.name, type: m.entity.type, page: m.entity.page, assumed, why },
   window: { after, through: arcmira.today() },
   momentum: { verdict: m.verdict, last_7d: m.volume.mentions_7d, last_30d: m.volume.mentions_30d, prior_30d: m.volume.mentions_prior_30d, as_of: m.as_of },
   shows: occ.rows.map(x => ({ show: x.channel_name, channel_id: x.channel_id, episodes: x.count, times_said: x.occurrences })),

@@ -79,7 +79,7 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 
 | Method | Fronts | Use it for |
 |---|---|---|
-| `arcmira.resolve(q, { type?, limit? })` | `GET /v1/entities/search` | A name, `@handle`, URL or `UC` id to typed rows; `best` is set only for an unambiguous match |
+| `arcmira.resolve(q, { type?, context?, limit? })` | `GET /v1/entities/resolve` | A name, `@handle`, URL or `UC` id to one of three answers: `best`, `suggested` (with `reason` and `evidence`), or `ask` with options |
 | `arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, entityIds?, after?, before?, source?, limit? })` | `GET /v1/transcripts/search` | Spoken slices for one topic, or about an entity, or spoken by a person, with watch links and dates |
 | `arcmira.mentions({ entityId, channelId?, after?, before?, limit?, cursor? })` | `GET /v1/mentions` | Has X mentioned Y, first seen, last seen |
 | `arcmira.momentum(entityId)` | `GET /v1/entities/{id}/momentum` | Last 30 days against the prior 30, with a verdict |
@@ -92,13 +92,14 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 
 `arcmira.today()` and `arcmira.daysAgo(n)` give ISO dates from the server clock for date windows.
 
-Filters take verbatim ids only. A name where an id belongs throws `id_required` before any network call, and the message names the fix. Resolve first, verify `best` against what the user meant, then query:
+Filters take verbatim ids only. A name where an id belongs throws `id_required` before any network call, and the message names the fix. Resolve first, then query. `resolve` answers `best` (the name means one row), `suggested` (one row stands out; say you assumed it and why), or `ask` (several fit; let the user pick):
 
 ```javascript
-const r = await arcmira.resolve("Linear", { type: "organization" });
-if (!r.best) return { options: r.candidates };
-const m = await arcmira.momentum(r.best.id);
-return { entity: r.best.name, id: r.best.id, verdict: m.verdict, last30: m.volume.mentions_30d, prior30: m.volume.mentions_prior_30d, as_of: m.as_of };
+const r = await arcmira.resolve("Linear");
+const e = r.best ?? r.suggested;
+if (!e) return { ask: r.ask };
+const m = await arcmira.momentum(e.id);
+return { entity: e.name, id: e.id, assumed: Boolean(r.suggested), why: r.suggested?.evidence ?? null, verdict: m.verdict, last30: m.volume.mentions_30d, prior30: m.volume.mentions_prior_30d, as_of: m.as_of };
 ```
 
 Example prompts once the server is connected:
@@ -146,7 +147,7 @@ The ten tools (`resolve_entities`, `search_transcripts`, `list_mentions`, `entit
 | `person-research` | Interview or meeting prep: appearances, a person's own words, who discusses them |
 | `compare-shows` | Two shows side by side: size, topics, overlap, shared sponsors |
 
-Every skill starts from names, never ids: each program resolves the name, returns a short `choose` list when close candidates compete, and names the entity it used. The skills are generated from `src/reference.ts` and `src/skills.ts` by `scripts/build-skill.ts`; CI fails when a file drifts or a program calls a method the reference does not document, and `pnpm examples:check` runs every program against production.
+Every skill starts from names, never ids: each program resolves the name, returns `ask` options when several entities fit and none stands out, says when it assumed one, and names the entity it used. The skills are generated from `src/reference.ts` and `src/skills.ts` by `scripts/build-skill.ts`; CI fails when a file drifts or a program calls a method the reference does not document, and `pnpm examples:check` runs every program against production.
 
 ```bash
 claude plugin marketplace add arcmira/mcp
