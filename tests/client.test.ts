@@ -111,4 +111,26 @@ describe('the sandbox client', () => {
     assert.equal(arcmira.daysAgo(90), '2026-07-02');
     await assert.rejects(arcmira.episodes(TBPN, { after: 'last week' }), (e: Error & { code: string }) => e.code === 'invalid_date');
   });
+
+  it('a gate error names the client option, not the /v1 query key', async () => {
+    const gate = (param: string, message: string) => async () =>
+      Response.json({ error: { code: 'freshness_requires_paid', param, message } }, { status: 402 });
+    const cases: Array<[string, string, string]> = [
+      ['date_from', 'Media published after 2026-09-01 requires Hobby. Open unlock.url to try Hobby for free, or set date_from to 2026-09-01 or earlier.', 'after'],
+      ['published_after', 'set published_after to 2026-09-01 or earlier.', 'after'],
+      ['date_to', 'set date_to to 2026-09-01 or earlier.', 'before'],
+      ['published_before', 'set published_before to 2026-09-01 or earlier.', 'before'],
+    ];
+    for (const [param, message, option] of cases) {
+      const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: gate(param, message) });
+      await assert.rejects(arcmira.mentions({ entityId: 'ent_14', after: '2026-09-25' }), (e: Error & { code: string; param: string }) => {
+        assert.equal(e.code, 'freshness_requires_paid');
+        assert.equal(e.param, option);
+        assert.equal(e.message, message.replace(param, option));
+        return true;
+      });
+    }
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: gate('limit', 'limit takes 1 to 100.') });
+    await assert.rejects(arcmira.mentions({ entityId: 'ent_14' }), (e: Error & { param: string }) => e.param === 'limit' && e.message === 'limit takes 1 to 100.');
+  });
 });

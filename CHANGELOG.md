@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.11
+
+- A revoked key's 401 body says to create a new key at https://arcmira.com/dashboard/api and send it with `Authorization: Bearer`. It no longer points at `unlock.url`, which is the sign-up page. The `unlock` object is unchanged.
+- In `execute`, an API error whose `param` is `date_from` or `published_after` now names `after`, and one whose `param` is `date_to` or `published_before` names `before`, in both `param` and the message. A program reads "set after to 2026-09-01 or earlier", the option it wrote. Other params are unchanged.
+- The README's `claude mcp add` lines pass `--scope user`, so the server works outside the directory it was added in.
+
 ## 0.7.10
 
 The Codex `shortDescription` reads "Search YouTube transcripts" (26 characters), inside the OpenAI plugin directory's 30-character subtitle limit. No other text and no server behavior changed; the version moves so plugin hosts pick up the new text.

@@ -5,7 +5,7 @@ Arcmira MCP is the official remote MCP server for [Arcmira](https://arcmira.com)
 Arcmira is an SF-based AI company and the search engine for the spoken web.
 
 ```bash
-claude mcp add --transport http arcmira https://mcp.arcmira.com/mcp
+claude mcp add --transport http --scope user arcmira https://mcp.arcmira.com/mcp
 ```
 
 One remote URL. Sign in through your host, or send an account key. The server is a stateless facade over the public HTTP API at `https://api.arcmira.com/v1`; every gate the API raises is forwarded untouched with the link that lifts it.
@@ -26,7 +26,7 @@ Two ways in. Hosts that speak the MCP authorization spec sign you in; everything
 **Sign in through the host.** Add `https://mcp.arcmira.com/mcp` with no key. The server answers 401 with an OAuth challenge, the host registers itself against `api.arcmira.com`, opens arcmira.com for sign-in and consent, and connects with a token that carries the permissions you allowed. Tokens refresh on their own; revoke a host under Settings, Connected apps.
 
 ```bash
-claude mcp add --transport http arcmira https://mcp.arcmira.com/mcp
+claude mcp add --transport http --scope user arcmira https://mcp.arcmira.com/mcp
 ```
 
 ```bash
@@ -50,7 +50,7 @@ curl -X POST "https://api.arcmira.com/v1/signups/verify" \
 ```
 
 ```bash
-claude mcp add --transport http arcmira https://mcp.arcmira.com/mcp --header "Authorization: Bearer $ARCMIRA_API_KEY"
+claude mcp add --transport http --scope user arcmira https://mcp.arcmira.com/mcp --header "Authorization: Bearer $ARCMIRA_API_KEY"
 ```
 
 ```json

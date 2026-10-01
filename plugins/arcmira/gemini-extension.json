@@ -1,6 +1,6 @@
 {
   "name": "arcmira",
-  "version": "0.7.10",
+  "version": "0.7.11",
   "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations.",
   "mcpServers": {
     "arcmira": {

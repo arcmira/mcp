@@ -83,7 +83,7 @@ const CREDENTIAL_MESSAGES: Record<CredentialFailure, string> = {
   invalid:
     'The key sent is not a live account key. Send a valid key with Authorization: Bearer, or POST unlock.action.url with an email to create an account.',
   revoked:
-    'The key sent has been revoked. Mint a new key at unlock.url, or POST unlock.action.url with an email to create an account.',
+    'The key sent has been revoked. Create a new key at https://arcmira.com/dashboard/api and send it with Authorization: Bearer.',
 };
 
 /**
