@@ -108,7 +108,7 @@ return {
       'Quotes one ad read verbatim with its promo code when there is one, and links each name to the `page` the result carries.',
     ],
     traps: [
-      '`recommendations` is a paid method: a free key throws `recommendations_not_enabled` with `.unlock.url`. Relay the link and answer the show direction with `sponsors`.',
+      '`recommendations` can return `recommendations_not_enabled`. Explain the account-access limit and required tier reported by the API; a channel sponsor list does not answer which shows recommend a brand.',
       'An ad read is sponsored; an unpaid on-air endorsement is `kind: "organic"`. Do not mix them in one count.',
       'Page with `cursor` until `has_more` is false before you count reads; one page is at most 50 rows.',
     ],

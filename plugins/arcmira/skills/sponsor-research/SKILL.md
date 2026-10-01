@@ -96,8 +96,10 @@ return {
 
 ## Traps
 
-- `recommendations` is a paid method: a free key throws `recommendations_not_enabled` with `.unlock.url`. Relay the link and answer the show direction with `sponsors`.
+- `recommendations` can return `recommendations_not_enabled`. Explain the account-access limit and required tier reported by the API; a channel sponsor list does not answer which shows recommend a brand.
 - An ad read is sponsored; an unpaid on-air endorsement is `kind: "organic"`. Do not mix them in one count.
 - Page with `cursor` until `has_more` is false before you count reads; one page is at most 50 rows.
 
-Plan gates throw with `.unlock.url`: relay the link. Never fill a gap from memory or the web. Docs: https://arcmira.com/docs/mcp-server
+When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not initiate a purchase. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.
+
+Never fill an index gap from memory or the web. Docs: https://arcmira.com/docs/mcp-server

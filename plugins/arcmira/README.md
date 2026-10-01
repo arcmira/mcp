@@ -55,6 +55,12 @@ Arcmira ships changes weekly. The MCP server is remote and always current; the s
 - Which shows has Mercury sponsored in the last 90 days?
 - I'm interviewing Sam Altman next week. What has he said recently, and where?
 
+## Help improve the skills
+
+[Share plugin feedback](https://github.com/arcmira/mcp/issues/new?template=plugin-feedback.yml) with your host, plugin version, and what you expected versus what happened. Use a public or redacted example. For private support, [contact Arcmira](https://arcmira.com/contact).
+
+The skills are versioned files. Updates reach installed copies through your host's update mechanism; directory releases may also require review. Maintainers edit `src/reference.ts` and `src/skills.ts`, run `pnpm skill:build`, check the generated files, and release a new version. Please include the version when reporting feedback so we can reproduce it.
+
 [Documentation](https://arcmira.com/docs/mcp-server) · [Support](https://arcmira.com/contact) · [Privacy](https://arcmira.com/privacy) · [Terms](https://arcmira.com/terms)
 
 Coverage depends on the index and your account access. Speaker attribution and sponsorship classifications can be incomplete or incorrect; inspect cited passages and surrounding context.
