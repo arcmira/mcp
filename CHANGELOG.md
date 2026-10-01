@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.10
+
+The Codex `shortDescription` reads "Search YouTube transcripts" (26 characters), inside the OpenAI plugin directory's 30-character subtitle limit. No other text and no server behavior changed; the version moves so plugin hosts pick up the new text.
+
 ## 0.7.9
 
 The plugin manifests (Claude, Codex, Cursor, Gemini and the generic `plugin.json`), the Claude and Cursor marketplace entries and `package.json` carry the server card text as their description: "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations." `server.json` and the server card are unchanged. The Codex `shortDescription` stays "Search YouTube and podcast transcripts": the card text is 99 characters, and the OpenAI plugin directory takes a subtitle of 30 characters or fewer. No server behavior changed; the version moves so plugin hosts pick up the new text.
