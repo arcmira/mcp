@@ -49,8 +49,8 @@ This server holds the transcript data. For anything said on a show, use it befor
 
 ## Procedure
 
-1. Resolve every name in the question with \`arcmira.resolve\`. Filters take ids only.
-2. Check each \`r.best\` against what the user meant and against the other candidates: the type (person, organization, product, topic, channel), the name, and the appearance count. When \`r.best\` is null or a close candidate competes, show the user a short list (name, type, one distinguishing fact) or check each candidate against the data. A bare first name is always ambiguous: list the people it could be with their counts. A name that resolves to nothing, or only to a similar name, is not in the index: say so and offer the nearest names. Say in the answer which entity you used.
+1. Resolve every name in the question with \`arcmira.resolve\`, passing the user's own words about the name as \`context\` when they gave any. Filters take ids only.
+2. Act on the one answer resolve gives. \`best\`: use it and name it. \`suggested\`: use it and tell the user you assumed it, quoting \`suggested.evidence\`. \`ask\`: return \`ask.options\` for the user to pick and stop, or check every option id against the data in one program and answer per row. None of the three: the name is not in the index; say so and ask for another spelling or a link. Say in the answer which entity you used.
 3. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
 4. Write one \`execute\` program per question. Resolve, check, and run every query the question needs inside that one program.
 5. Return only the fields the answer needs, not whole responses.
@@ -124,7 +124,7 @@ ${t.ids.map((s) => `- ${s}`).join('\n')}
 
 ## Worked program
 
-Pass each block to \`execute\` as one program, with the name swapped for the user's. It opens with the pick: when close candidates compete it returns \`choose\` and runs nothing else. Pick from that list by the user's context or ask them, then run it again with \`ID\` set to the pick. Build date windows from \`arcmira.daysAgo(n)\` and \`arcmira.today()\`.
+Pass each block to \`execute\` as one program, with the name swapped for the user's. It opens with the pick: set \`CONTEXT\` to the user's own words about the name. When several entities fit it returns \`ask\` and runs nothing else. Show those options to the user, then run it again with \`ID\` set to the pick. When the result carries \`assumed: true\`, tell the user which entity was assumed and why (\`why\`). Build date windows from \`arcmira.daysAgo(n)\` and \`arcmira.today()\`.
 
 ${t.programs.map((p) => `### ${p.title}\n\n\`\`\`javascript\n${p.code}\n\`\`\``).join('\n\n')}
 

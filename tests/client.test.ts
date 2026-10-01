@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 type Arcmira = Record<string, (...args: any[]) => Promise<any>> & { today(): string; daysAgo(n: number): string };
 const mod = (await import(new URL('../src/sandbox/client.js', import.meta.url).href)) as {
   createArcmira(o: { base: string; fetch?: unknown; maxCalls?: number; now?: () => Date }): { arcmira: Arcmira; meter: { calls: number; rate_limit: unknown; api_build: string | null } };
-  pickResolved(q: string, rows: Array<Record<string, unknown>>): { best: unknown; confidence: string };
   ArcmiraError: new (...args: any[]) => Error & { code: string };
 };
 
@@ -58,7 +57,7 @@ describe('the sandbox client', () => {
     await arcmira.status();
     const seen = urls.map((u) => `${u.pathname}?${u.searchParams}`);
     assert.deepEqual(seen, [
-      '/v1/entities/search?q=Ramp&type=organization&limit=8',
+      '/v1/entities/resolve?q=Ramp&type=organization&limit=8',
       `/v1/transcripts/search?q=cards&channel_ids=${TBPN}&published_after=2026-08-01&limit=3`,
       `/v1/mentions?entity_id=ent_14&channel_id=${TBPN}&date_to=2026-09-01&limit=10`,
       '/v1/entities/ent_14/momentum?',
@@ -73,15 +72,18 @@ describe('the sandbox client', () => {
     assert.equal(meter.calls, 11);
   });
 
-  it('resolve picks best only for a suggested row or a single exact name match', () => {
-    const ramp = { id: 'ent_14', name: 'Ramp', type: 'organization' };
-    const rampCard = { id: 'ent_99', name: 'Ramp Card', type: 'product' };
-    assert.deepEqual(mod.pickResolved('ramp', [rampCard, ramp]), { best: ramp, confidence: 'exact' });
-    assert.deepEqual(mod.pickResolved('Mercury', [{ id: 'a', name: 'Mercury', type: 'organization' }, { id: 'b', name: 'Mercury', type: 'topic' }]).confidence, 'ambiguous');
-    assert.deepEqual(mod.pickResolved('Rmp', [rampCard]), { best: rampCard, confidence: 'single_fuzzy' });
-    assert.deepEqual(mod.pickResolved('Rmp', [rampCard, ramp]), { best: null, confidence: 'fuzzy' });
-    assert.deepEqual(mod.pickResolved('Rmp', []), { best: null, confidence: 'none' });
-    assert.deepEqual(mod.pickResolved('x', [rampCard, { ...ramp, suggested: true }]).best, { ...ramp, suggested: true });
+  it('resolve sends context and returns the server answer verbatim', async () => {
+    const suggested = { id: 'ent_7', name: 'Sam Parr', type: 'person', appearance_count: 900, match: 'word', reason: 'context', evidence: 'the context matches its description', assumed: true };
+    const ask = { question: 'Which Sam do you mean?', options: [{ id: 'ent_7', name: 'Sam Parr', type: 'person', label: 'Sam Parr (person)' }] };
+    const body = { query: 'Sam', context: 'the My First Million co-host', confidence: 'ambiguous', best: null, suggested, ask: null, candidates: [{ id: 'ent_1', name: 'Sam', type: 'person', appearance_count: 265, match: 'exact' }], note: 'n' };
+    const { urls, fetch } = recording(body);
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch });
+    assert.deepEqual(await arcmira.resolve('Sam', { context: 'the My First Million co-host' }), body);
+    assert.equal(`${urls[0]?.pathname}?${urls[0]?.searchParams}`, '/v1/entities/resolve?q=Sam&context=the+My+First+Million+co-host&limit=8');
+    const asked = { ...body, context: null, suggested: null, ask };
+    const second = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: recording(asked).fetch });
+    assert.deepEqual((await second.arcmira.resolve('Sam')).ask, ask);
+    await assert.rejects(arcmira.resolve('Sam', { context: ['co-host'] }), (e: Error & { code: string }) => e.code === 'invalid_request');
   });
 
   it('turns a v1 error body into an ArcmiraError with the code and unlock, and keeps the rate limit', async () => {

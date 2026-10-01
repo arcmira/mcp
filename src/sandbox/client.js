@@ -22,7 +22,7 @@ export class ArcmiraError extends Error {
 function needEntityId(value, param) {
   if (typeof value !== 'string' || !ENTITY_ID.test(value)) {
     throw new ArcmiraError(
-      `${param} takes a verbatim entity id like ent_14, got ${JSON.stringify(value)}. Call arcmira.resolve("<name>") first, check that .best (or the .candidates row you pick) is the thing the user meant, then pass its .id.`,
+      `${param} takes a verbatim entity id like ent_14, got ${JSON.stringify(value)}. Call arcmira.resolve("<name>") first and pass the .id of .best or .suggested; when it answers .ask, pick from ask.options.`,
       'id_required',
     );
   }
@@ -32,7 +32,7 @@ function needEntityId(value, param) {
 function needChannelId(value, param) {
   if (typeof value !== 'string' || !CHANNEL_ID.test(value)) {
     throw new ArcmiraError(
-      `${param} takes a verbatim YouTube channel id (UC plus 22 characters), got ${JSON.stringify(value)}. Call arcmira.resolve("<show name>", { type: "channel" }) first and pass .best.youtube_channel_id.`,
+      `${param} takes a verbatim YouTube channel id (UC plus 22 characters), got ${JSON.stringify(value)}. Call arcmira.resolve("<show name>", { type: "channel" }) first and pass the .youtube_channel_id of .best or .suggested.`,
       'id_required',
     );
   }
@@ -84,18 +84,6 @@ function needOptions(method, value, signature) {
 const KINDS = { sponsored: 'ad_read', organic: 'endorsement', all: 'all' };
 const SEARCH_KINDS = new Set(['mention', 'recommendation_sponsored', 'recommendation_organic']);
 
-/** Picks the one row a name means, the way the CLI does: a suggested row, else the single exact name match. */
-export function pickResolved(query, rows) {
-  const wanted = query.replace(/^@/, '').trim().toLowerCase();
-  const exact = rows.filter((row) => String(row.name).toLowerCase() === wanted);
-  const suggested = rows.find((row) => row.suggested === true);
-  if (suggested) return { best: suggested, confidence: 'exact' };
-  if (exact.length === 1) return { best: exact[0], confidence: 'exact' };
-  if (exact.length > 1) return { best: null, confidence: 'ambiguous' };
-  if (rows.length === 1) return { best: rows[0], confidence: 'single_fuzzy' };
-  return { best: null, confidence: rows.length === 0 ? 'none' : 'fuzzy' };
-}
-
 /**
  * @param {{ base: string, fetch?: typeof fetch, maxCalls?: number, now?: () => Date, onCall?: (call: object) => void }} options
  */
@@ -145,25 +133,11 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       if (!Number.isFinite(n) || n < 0) throw new ArcmiraError('daysAgo takes a non-negative number of days', 'invalid_date');
       return new Date(now().getTime() - n * 86_400_000).toISOString().slice(0, 10);
     },
-    async resolve(q, { type, limit = 8 } = {}) {
+    async resolve(q, { type, context, limit = 8 } = {}) {
       if (typeof q !== 'string' || q.trim().length < 2) throw new ArcmiraError('resolve needs a name of 2 or more characters', 'invalid_name');
-      const body = await get('/v1/entities/search', { q, type, limit });
-      const candidates = (body.data ?? []).map((row) => ({
-        id: row.id,
-        name: row.name,
-        type: row.type,
-        appearance_count: row.appearance_count,
-        youtube_channel_id: row.youtube_channel_id ?? null,
-        page: row.page ?? null,
-        suggested: row.suggested === true,
-      }));
-      const { best, confidence } = pickResolved(q, candidates);
-      const note = best
-        ? `best is the ${confidence} match. Check its type and name against what the user meant before filtering on it.`
-        : confidence === 'none'
-          ? 'No match. Try another spelling or type; never invent an id.'
-          : "No single match. Pick the candidates row that matches the user's meaning by type and name, or ask the user.";
-      return { query: q, confidence, best, candidates, note };
+      if (context !== undefined && typeof context !== 'string') throw new ArcmiraError('context takes the user\'s own words about the name, as one string', 'invalid_request');
+      const body = await get('/v1/entities/resolve', { q, type, context, limit });
+      return { query: body.query, context: body.context, confidence: body.confidence, best: body.best, suggested: body.suggested, ask: body.ask, candidates: body.candidates, note: body.note };
     },
     async search(options) {
       const { query, channelIds, about, entityIds, speakerIds, kind, after, before, source, limit = 5 } = needOptions('search', options, 'arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, after?, before?, limit? })');

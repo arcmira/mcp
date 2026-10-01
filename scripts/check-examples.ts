@@ -41,17 +41,19 @@ for (const [i, example] of PROGRAMS.entries()) {
   let verdict: string;
   try {
     let value = await new AsyncFunction('arcmira', 'ArcmiraError', 'console', example.code)(arcmira, ArcmiraError, console_);
-    const choose = (value as { choose?: Array<{ id: string }> } | null)?.choose;
-    if (choose && choose.length === 0) throw new Error('choose came back empty: the pick guard offered nothing to choose from');
-    if (choose?.[0]?.id && example.code.includes('ID = null')) {
-      lines.push(`choose returned ${choose.length}; rerun with ID = ${choose[0].id}`);
-      value = await new AsyncFunction('arcmira', 'ArcmiraError', 'console', example.code.replace('ID = null', `ID = ${JSON.stringify(choose[0].id)}`))(arcmira, ArcmiraError, console_);
+    const ask = (value as { ask?: { options?: Array<{ id: string; channel_id?: string | null }> } | null } | null)?.ask;
+    if (value && typeof value === 'object' && 'ask' in value && !ask?.options?.length) throw new Error('the name resolved to nothing: no best, suggested or ask');
+    const first = ask?.options?.[0];
+    if (first && example.code.includes('ID = null')) {
+      const pickId = first.channel_id ?? first.id;
+      lines.push(`ask offered ${ask?.options?.length}; rerun with ID = ${pickId}`);
+      value = await new AsyncFunction('arcmira', 'ArcmiraError', 'console', example.code.replace('ID = null', `ID = ${JSON.stringify(pickId)}`))(arcmira, ArcmiraError, console_);
     }
     const holes = undefinedPaths(value);
     const empty = value === undefined || value === null || (Array.isArray(value) && value.length === 0);
     if (holes.length > 0) verdict = `FAIL undefined at ${holes.slice(0, 6).join(', ')}`;
     else if (empty) verdict = 'FAIL returned nothing';
-    else verdict = `ok ${choose ? '(after choose) ' : ''}${JSON.stringify(value).slice(0, 110)}`;
+    else verdict = `ok ${first ? '(after ask) ' : ''}${JSON.stringify(value).slice(0, 110)}`;
   } catch (error) {
     verdict = `FAIL ${error instanceof Error ? `${error.name}: ${error.message.slice(0, 160)}` : String(error)}`;
   }
