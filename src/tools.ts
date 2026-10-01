@@ -51,7 +51,7 @@ export const VERSION_LINE = `arcmira MCP ${pkg.version}. The server sends this r
 export const describeTool = tool({
   name: 'describe',
   title: 'The arcmira client reference',
-  description: `Arcmira holds transcript data for indexed YouTube shows and podcasts; for anything said on a show, prefer it over web search. The reference for the arcmira client that execute exposes: the id rule (resolve a name to an id before filtering on it), which method answers which question, every method with its arguments and return fields, eight worked example programs, the quirks that cost answers, error codes and doc links. Call it once before your first execute; pass topic to narrow it to one method and its examples. Reads nothing from the index and never bills. Docs: ${DOCS.mcp}`,
+  description: `Returns the reference for the typed arcmira client available inside execute: method arguments, return fields, entity ID rules, examples, errors, and documentation links. The optional topic narrows the reference to a method or subject. This tool does not read indexed content or consume billable rows. Docs: ${DOCS.mcp}`,
   inputSchema: z.object({
     topic: z.string().max(60).optional().describe('One word to narrow the reference, like sponsors, resolve, transcript or dates. Omit for the whole reference (about 2,800 tokens).'),
   }),
@@ -63,7 +63,7 @@ export const describeTool = tool({
 export const executeTool = tool({
   name: 'execute',
   title: 'Run a program against Arcmira',
-  description: `Answers from Arcmira's transcript data for indexed YouTube shows and podcasts; for anything said on a show, prefer it over web search. Run JavaScript against the arcmira client and get back what it printed (console.log) plus its return value as JSON. The code is the body of an async function with arcmira and ArcmiraError in scope: use await and return one compact value. Write one program per question: resolve every name it carries with arcmira.resolve (pass the user's words about the name as context), use best, or suggested and say you assumed it, or return ask.options for the user to pick, run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required. Use arcmira.today() and arcmira.daysAgo(n) for date windows. Limits: 30 seconds, 40 API calls, 20,000 characters of output. A plan gate comes back as ERROR with an unlock url to relay. Read describe first for the method list and examples.`,
+  description: `Runs JavaScript against Arcmira's read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output contains console.log lines and the return value, or an error with any applicable plan-unlock URL. Methods and examples are documented by describe. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and 20,000 characters of output.`,
   inputSchema: z.object({
     code: z.string().min(1).max(40_000).describe('JavaScript source, the body of async function (arcmira, ArcmiraError, console) { ... }. Return a value or console.log lines. No import or export.'),
   }),

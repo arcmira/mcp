@@ -1,6 +1,6 @@
 {
   "name": "arcmira",
-  "version": "0.7.11",
+  "version": "0.7.12",
   "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations.",
   "author": {
     "name": "Arcmira",
@@ -11,9 +11,19 @@
   "license": "Apache-2.0",
   "keywords": [
     "youtube",
+    "youtube-transcript-search",
+    "transcript-search",
+    "timestamps",
+    "speaker-attribution",
+    "sponsors",
+    "recommendations",
     "podcast",
-    "transcripts",
     "mcp"
   ],
-  "displayName": "Arcmira"
+  "displayName": "Arcmira: YouTube Transcript Search",
+  "icon": "./assets/icon.png",
+  "privacyPolicyUrl": "https://arcmira.com/privacy",
+  "supportUrl": "https://arcmira.com/contact",
+  "documentationUrl": "https://arcmira.com/docs/mcp-server",
+  "termsOfServiceUrl": "https://arcmira.com/terms"
 }

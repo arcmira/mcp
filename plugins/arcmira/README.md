@@ -1,4 +1,6 @@
-# Arcmira plugin
+# Arcmira: YouTube Transcript Search
+
+Give your AI the ability to find who said what with timestamps, discover what’s being discussed across videos and livestreams, and distinguish organic recommendations from sponsored ad reads.
 
 Arcmira is the search engine for the spoken web. This plugin connects your coding agent to indexed YouTube and podcast transcripts, and to a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air.
 
@@ -27,7 +29,7 @@ codex plugin marketplace add arcmira/mcp
 
 Then open `/plugins` and install Arcmira.
 
-Cursor: install Arcmira from the Cursor Marketplace. The repo root carries `.cursor-plugin/marketplace.json` for team marketplaces.
+Cursor: the marketplace application is awaiting review. The repo root carries `.cursor-plugin/marketplace.json` for team marketplaces.
 
 Gemini CLI: copy this folder to `~/.gemini/extensions/arcmira/`. Gemini reads `gemini-extension.json` and loads the skill as context.
 
@@ -53,7 +55,9 @@ Arcmira ships changes weekly. The MCP server is remote and always current; the s
 - Which shows has Mercury sponsored in the last 90 days?
 - I'm interviewing Sam Altman next week. What has he said recently, and where?
 
-Docs: https://arcmira.com/docs/mcp-server. Issues: https://github.com/arcmira/mcp/issues.
+[Documentation](https://arcmira.com/docs/mcp-server) · [Support](https://arcmira.com/contact) · [Privacy](https://arcmira.com/privacy) · [Terms](https://arcmira.com/terms)
+
+Coverage depends on the index and your account access. Speaker attribution and sponsorship classifications can be incomplete or incorrect; inspect cited passages and surrounding context.
 
 ## License
 
