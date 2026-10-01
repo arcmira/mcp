@@ -1,7 +1,7 @@
 {
   "name": "arcmira",
-  "version": "0.7.8",
-  "description": "Search YouTube and podcast transcripts from your agent: what shows said, who was mentioned, sponsors, recommendations and momentum.",
+  "version": "0.7.9",
+  "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations.",
   "author": {
     "name": "Arcmira",
     "url": "https://arcmira.com"
