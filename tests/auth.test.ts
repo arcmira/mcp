@@ -137,6 +137,8 @@ describe('the handshake checks the account key', () => {
     const response = await initialize('arc_sk_old', me(401, { error: { code: 'invalid_api_key', reason: 'revoked' } }));
     assert.equal(response.status, 401);
     assert.deepEqual(await challengeBody(response), await challengeBody(challenge('https://mcp.arcmira.com', 'revoked')));
+    const body = (await challenge('https://mcp.arcmira.com', 'revoked').json()) as { error: { data: { message: string } } };
+    assert.equal(body.error.data.message, 'The key sent has been revoked. Create a new key at https://arcmira.com/dashboard/api and send it with Authorization: Bearer.');
   });
 
   it('answers no key at all with that same challenge', async () => {
