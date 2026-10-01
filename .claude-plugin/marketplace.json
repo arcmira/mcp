@@ -8,7 +8,7 @@
     {
       "name": "arcmira",
       "source": "./plugins/arcmira",
-      "description": "Search YouTube and podcast transcripts from your agent: what shows said, who was mentioned, sponsors, recommendations and momentum."
+      "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations."
     }
   ]
 }

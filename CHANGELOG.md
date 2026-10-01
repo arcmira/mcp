@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.9
+
+The plugin manifests (Claude, Codex, Cursor, Gemini and the generic `plugin.json`), the Claude and Cursor marketplace entries and `package.json` carry the server card text as their description: "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations." `server.json` and the server card are unchanged. The Codex `shortDescription` stays "Search YouTube and podcast transcripts": the card text is 99 characters, and the OpenAI plugin directory takes a subtitle of 30 characters or fewer. No server behavior changed; the version moves so plugin hosts pick up the new text.
+
 ## 0.7.8
 
 `context` on `arcmira.resolve` holds only words from the user's message. In the 0.7.7 bake-off, several agents asked about "Theo's channel" filled in their own guess ("Theo Von" with context "comedian", or context "Theo Browne channel"). The resolver then confirmed that guess, and those agents answered for one Theo without saying another exists. `describe`, the tool notes and every plugin skill now say so: a bare "Theo" is `resolve("Theo")` with no context, and its ask goes back to the user.
