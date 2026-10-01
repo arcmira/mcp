@@ -13,7 +13,7 @@ import server from '../server.json' with { type: 'json' };
 
 const openapiUrl = process.argv[2] ?? 'https://api.arcmira.com/v1/openapi.json';
 /** Query params /v1 added for code mode on 2026-09-30; a warning, not a failure, while the OpenAPI document catches up. */
-const PENDING_PARAMS = new Set(['about', 'by', 'kind', 'context']);
+const PENDING_PARAMS = new Set(['about', 'by', 'kind']);
 /** Operations that take no src: they are not entry points and mint no unlock links. */
 const NO_SRC = new Set(['get_me']);
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
