@@ -26,7 +26,7 @@ export interface TaskSkill {
 
 /** How every task skill turns a name into the one entity the user meant. */
 export const PICK_STEPS = [
-  'Resolve the exact name the user said, and pass their own words about it as `context` when they gave any ("Sam, the My First Million co-host" is `resolve("Sam", { context: "the My First Million co-host" })`).',
+  'Resolve the exact name the user said, and pass their own words about it as `context` when they gave any ("Sam, the My First Million co-host" is `resolve("Sam", { context: "the My First Million co-host" })`). Context is only words from the user\'s message, never your guess: a bare "Theo" is `resolve("Theo")`, and its ask goes back to the user.',
   '`best`: the name means that row. Use it and name it.',
   '`suggested`: no row is certain but one stands out. Use it and tell the user you assumed it, quoting `suggested.evidence` ("Sam Altman, assuming the most mentioned Sam: 4,399 appearances, 11x the next").',
   '`ask`: several rows fit and none stands out. Return `ask.options` for the user to pick and stop, or check every option id against the data in one program (occurrences or momentum with all the ids) and answer per row, naming each.',
@@ -42,7 +42,7 @@ function pick(name: string, type?: 'person' | 'channel'): string {
   const options = channel
     ? 'r.ask && { question: r.ask.question, options: r.ask.options.map(o => ({ ...o, channel_id: r.candidates.find(c => c.id === o.id)?.youtube_channel_id ?? null })) }'
     : 'r.ask';
-  return `const NAME = "${name}", CONTEXT = undefined, ID = null;   // CONTEXT: the user's own words about the name. After an ask, set ID to the picked option's ${channel ? 'channel_id' : 'id'} and run again
+  return `const NAME = "${name}", CONTEXT = undefined, ID = null;   // CONTEXT: the user's own words about the name, never a guess. After an ask, set ID to the picked option's ${channel ? 'channel_id' : 'id'} and run again
 const r = ID ? null : await arcmira.resolve(NAME, ${opts});
 const e = r && (r.best ?? r.suggested);
 if (r && !e) return { ask: ${options} };
