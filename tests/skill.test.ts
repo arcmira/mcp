@@ -112,3 +112,19 @@ test('README states the whole-reference size the describe input reports', async 
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   assert.ok(readme.includes(REFERENCE_SIZE.replace(/^about/, 'About')), `README should say ${REFERENCE_SIZE}`);
 });
+
+test('README tools table is one table with every tool, and execute states the real output limits', async () => {
+  const { OUTPUT_LIMITS } = await import('../src/output.ts');
+  const { TOOLS, executeTool } = await import('../src/tools.ts');
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const section = readme.slice(readme.indexOf('## Tools'));
+  const table = /\| Tool \| Input \| Returns \|\n(\|.*\|\n)+/.exec(section)?.[0] ?? '';
+  for (const tool of TOOLS) assert.match(table, new RegExp(`^\\| \`${tool.name}\` \\|`, 'm'), `${tool.name} row in the tools table`);
+  assert.equal(OUTPUT_LIMITS, '12,000 characters of output in total, 3,000 per string, and 100 items per array');
+  const executeRow = table.split('\n').find((line) => line.startsWith('| `execute`')) ?? '';
+  for (const [where, text] of [['execute description', executeTool.description], ['README execute row', executeRow]] as const) {
+    assert.ok(text.includes(OUTPUT_LIMITS), `${where} states ${OUTPUT_LIMITS}`);
+    assert.doesNotMatch(text, /20,000/, where);
+  }
+  assert.doesNotMatch(readme, /cut at 20,000/);
+});

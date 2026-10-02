@@ -2,7 +2,13 @@ import type { Execution } from "./sandbox.ts";
 
 export const RESULT_CAP = 20_000;
 export const LOG_CAP = 4_000;
+const OUTPUT_BUDGET = 12_000;
+const STRING_CAP = 3_000;
+const ARRAY_CAP = 100;
 const CUT_LIMIT = 5;
+const count = (n: number) => n.toLocaleString("en-US");
+/** What execute promises about its output, written from the caps renderExecution applies. */
+export const OUTPUT_LIMITS = `${count(OUTPUT_BUDGET)} characters of output in total, ${count(STRING_CAP)} per string, and ${count(ARRAY_CAP)} items per array`;
 
 /** Output truncation drops rows the API returned, so the page's own next_cursor would skip them. */
 const RECOVERY =
@@ -46,7 +52,7 @@ const priority = (key: string) => {
 
 /** Bound data without slicing JSON, retaining outcome and continuation fields before bulk arrays. */
 export function renderExecution(execution: Execution): string {
-  let budget = 12_000;
+  let budget = OUTPUT_BUDGET;
   let truncated = execution.truncated ?? false;
   let cuts = [...(execution.truncated_arrays ?? [])];
   function bounded(value: unknown, depth = 0, path = ""): unknown {
@@ -58,7 +64,7 @@ export function renderExecution(execution: Execution): string {
     )
       return value ?? null;
     if (typeof value === "string") {
-      const size = Math.max(0, Math.min(budget, 3_000));
+      const size = Math.max(0, Math.min(budget, STRING_CAP));
       const text = value.slice(0, size);
       budget -= text.length;
       if (text.length < value.length) truncated = true;
@@ -71,7 +77,7 @@ export function renderExecution(execution: Execution): string {
     if (Array.isArray(value)) {
       const items = [];
       for (const item of value) {
-        if (budget <= 0 || items.length >= 100) {
+        if (budget <= 0 || items.length >= ARRAY_CAP) {
           truncated = true;
           if (cuts.length < CUT_LIMIT)
             cuts.push({ path, returned: items.length, total: value.length });

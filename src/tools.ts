@@ -6,6 +6,7 @@ import type { ToolAnnotations } from '@modelcontextprotocol/server';
 import { DOCS, DOLLAR_RULE, SHORT_GUIDE, referenceText } from './reference.ts';
 import { errorResult, okResult, textResult, type ToolResult } from './result.ts';
 import { renderExecution, runProgram, type Execution, type SandboxHost } from './sandbox.ts';
+import { OUTPUT_LIMITS } from './output.ts';
 
 /** Retrieval and quote tools do not submit preparation jobs. */
 export const READ_ONLY: ToolAnnotations = {
@@ -69,7 +70,7 @@ export const describeTool = tool({
 export const executeTool = tool({
   name: 'execute',
   title: 'Run a program against Arcmira',
-  description: `Runs JavaScript against Arcmira's read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then actual call/rate/build facts and capped logs. Timeouts report unknown calls and may leave reads in flight. GET never purchases Premium. For requested Premium work, use quote_transcript and prepare_transcript with included credits and zero dollar overage; no extra confirmation is needed. Methods and examples are documented by describe. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and 20,000 characters of output.`,
+  description: `Runs JavaScript against Arcmira's read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then actual call/rate/build facts and capped logs. Timeouts report unknown calls and may leave reads in flight. GET never purchases Premium. For requested Premium work, use quote_transcript and prepare_transcript with included credits and zero dollar overage; no extra confirmation is needed. Methods and examples are documented by describe. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`,
   inputSchema: z.object({
     code: z
       .string()
