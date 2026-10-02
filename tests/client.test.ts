@@ -134,3 +134,8 @@ describe('the sandbox client', () => {
     await assert.rejects(arcmira.mentions({ entityId: 'ent_14' }), (e: Error & { param: string }) => e.param === 'limit' && e.message === 'limit takes 1 to 100.');
   });
 });
+
+it('preserves Retry-After even when an upstream error omits the numeric body field', async () => {
+  const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: async () => Response.json({ error: { code: 'rate_limited' } }, { status: 429, headers: { 'retry-after': '9' } }) });
+  await assert.rejects(arcmira.status({}), error => error instanceof Error && 'retry_after' in error && error.retry_after === '9');
+});

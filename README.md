@@ -72,7 +72,12 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 | `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, ten methods with arguments and return fields, eight worked example programs, the quirks that cost answers, error codes, and doc links. About 2,800 tokens; `topic` narrows it to one method and its examples. Never bills. |
 | `execute` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Limits: 30 seconds, 40 API calls, 20,000 characters of output. |
 
-Both tools declare `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: false`. Two tools cost about 1,500 tokens of definitions per conversation; the ten tools they replace cost 8,163.
+`describe`, `execute` and `quote_transcript` are read-only. `prepare_transcript` is explicitly non-read-only, destructive, idempotent for the same persisted key and inputs, and open-world: it spends account balance and can submit external provider work. These hints describe effects; the user must authorize the purchase ceilings.
+
+| `quote_transcript` | `video_id` | Free GET `/v1/transcripts/{video_id}/quote`. Reports whole-video row/credit price and possible on-demand cents. |
+| `prepare_transcript` | `video_id`, `max_rows`, `max_on_demand_cents?`, `idempotency_key` | Only POST `/v1/transcriptions`. Persist the key before calling. Omitted money ceiling means zero. Reuse the exact key and inputs after an uncertain response. Returns `{request, existing?}`: 201 ready, 202 pending, or 200 replay. |
+
+Premium preparation prices the whole video: 75 rows per 15-minute quarter, with four credits per row in credit mode. Consult the free quote for actual units and overage. `start` and `end` select lines and never lower that purchase price. Premium GET never buys; return `state: pending` and its `status_url`, or the `purchase_required` quote/prepare links. Read `.lines` only when `state` is `ready`. The execute sandbox cannot POST, including preparation. Poll `arcmira.status({jobId: request.id})`; `refund_pending` is not a completed refund.
 
 The client's methods are the arcmira CLI's commands, with the same names and the flags as options, so the MCP, the CLI and the SDK teach one vocabulary:
 
@@ -115,14 +120,14 @@ Good first ids: TBPN is channel `UC-DRzaGnL_vtBUpCFH5M0tg`, All-In Podcast is `U
 
 `execute` runs the program in a fresh [Dynamic Worker](https://developers.cloudflare.com/dynamic-workers/) isolate. The isolate's only network is the parent's outbound proxy, which refuses anything that is not `GET https://api.arcmira.com/v1/*` with `outbound_refused` and adds the caller's credential to what it forwards, so the program never holds the key. The isolate gets 5 seconds of CPU, `execute` waits 30 seconds of wall time, the client stops at 40 API calls with `call_budget`, and the rendered output is cut at 20,000 characters with a line that says how to shrink it. A syntax error comes back as `syntax_error` with the function-body rule; a thrown error as `program_error` with its message.
 
-The result is one text block: the `console.log` lines, then `RETURN: <json>` or `ERROR: <json>`. There is no `structuredContent`, so every host reads the same thing. `_meta["arcmira.com/execution"]` carries the call count and the API build.
+The result is valid bounded JSON with `ok` and `value` or `error` first, then actual `calls`, `rate_limit`, `api_build`, truncation facts and capped logs. Large results retain continuation and recovery fields. Execution metadata uses the same meter. Timeout reports `calls: null` and `outcome_uncertain: true`; in-flight reads may still finish and consume rows. Authentication 429/503 asks clients to retry with the same credential; only invalid credentials trigger reconnect.
 
 ## Gates
 
 A gate inside a program throws an `ArcmiraError` with the API's error fields, and `execute` returns it as `ERROR` with `isError: true`:
 
 ```
-ERROR: {"name":"ArcmiraError","code":"recommendations_not_enabled","message":"Sponsor recommendations require Pro.","unlock":{"tier":"pro","url":"https://arcmira.com/pricing?src=mcp-tool","offer":null},"gate":"plan","status":403,...}
+{"ok":false,"error":{"code":"recommendations_not_enabled","message":"Sponsor recommendations require Pro.","gate":"plan"},"calls":1,"outcome_uncertain":false}
 ```
 
 Switch on `code`, relay `unlock.url` to the human, and honor `retry_after_seconds` on `rate_limited`. A 200 that withheld something (Premium transcript text, the paid-versus-organic split, sponsors past the free slice) is a normal result carrying the same body under `access`. The full catalog is at https://arcmira.com/docs/errors.

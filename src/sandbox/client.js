@@ -105,7 +105,7 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       url.searchParams.set(k, String(v));
     }
     const started = Date.now();
-    const res = await doFetch(url.toString(), { headers: { accept: 'application/json' } });
+    const res = await doFetch(url.toString(), { redirect: 'manual', headers: { accept: 'application/json' } });
     const body = await res.json().catch(() => null);
     const limit = Number(res.headers.get('ratelimit-limit'));
     const remaining = Number(res.headers.get('ratelimit-remaining'));
@@ -125,8 +125,13 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       gate: err.gate,
       param: option ?? err.param,
       retry_after_seconds: err.retry_after_seconds,
+      retry_after: res.headers.get('retry-after'),
       doc_url: err.doc_url,
       request_id: err.request_id,
+      quote: body?.quote ?? err.quote,
+      status_url: body?.status_url ?? err.status_url,
+      prepare_url: body?.prepare_url ?? err.prepare_url,
+      quote_url: body?.quote_url ?? err.quote_url,
     });
   }
 

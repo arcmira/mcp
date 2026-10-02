@@ -5,7 +5,7 @@ description: "Finds exact spoken quotes and clip-ready moments on podcasts and Y
 
 # Find quotes and clip moments
 
-`search` finds the passage; `transcript` with `start` and `end` returns the exact lines around it with second offsets, which give the verbatim quote and the clip boundaries. Only that window is billed.
+`search` finds the passage; `transcript` with `start` and `end` returns the exact lines around it with second offsets, which give the verbatim quote and the clip boundaries. Caption reads bill returned lines. Premium preparation always prices the whole video; start/end only select the returned window.
 
 Use it through the arcmira MCP server (`describe`, then `execute` with a program) or the arcmira CLI, whose commands have the same names. The `arcmira` skill and `describe` carry the full method reference.
 
@@ -79,6 +79,8 @@ return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of
 - Keep transcript windows short (`start`, `end`): a whole episode bills every line.
 - Some videos have no readable caption track yet (`transcript_unavailable`, `transcript_fetching`); quote the search chunk `text` for those and say the words come from the search passage.
 
-When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not initiate a purchase. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.
+When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not initiate a purchase without explicit user authorization. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.
+
+PREMIUM PREPARATION. quote_transcript({video_id}) is a free whole-video quote. Read quote.rows and charge.unit/amount, plus max_on_demand_cents. A 15-minute quarter is 75 rows; credit mode uses four credits per row. A window never reduces the purchase price. With explicit user authorization, call prepare_transcript({video_id,max_rows,max_on_demand_cents,idempotency_key}) outside execute. Persist the key first; absent monetary ceiling means zero new on-demand cents. Same key and inputs recover an unknown response without a second purchase. POST returns {request,existing?}; inspect request.state and poll arcmira.status({jobId:request.id}) at request.nextPollSeconds. Premium GET ready has lines; pending has premium_job/status_url/next_poll_seconds; purchase_required is a refusal with quote/prepare URLs. refund_pending is unfinished recovery, not a completed refund. Never silently downgrade Premium to captions.
 
 Never fill an index gap from memory or the web. Docs: https://arcmira.com/docs/mcp-server

@@ -1,0 +1,263 @@
+{
+  "get_transcript": {
+    "status": 200,
+    "body": {
+      "state": "ready",
+      "video": {
+        "id": "dQw4w9WgXcQ",
+        "title": "TBPN | Tuesday, August 4",
+        "channel_id": "UC-DRzaGnL_vtBUpCFH5M0tg",
+        "channel_name": "TBPN",
+        "published_at": "2026-08-04T17:00:00.000Z",
+        "duration_seconds": 3600,
+        "watch_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+      },
+      "quality": "captions",
+      "source": "creator_captions",
+      "language": "en",
+      "languages": [
+        {
+          "code": "en",
+          "name": "English",
+          "generated": false
+        },
+        {
+          "code": "de",
+          "name": "Deutsch (auto)",
+          "generated": true
+        }
+      ],
+      "lines": [
+        {
+          "start": 0,
+          "end": 20,
+          "text": "Ramp has been on the show for a while now."
+        },
+        {
+          "start": 20,
+          "end": 45,
+          "text": "The pitch is still the same, spend less time on expenses."
+        },
+        {
+          "start": 45,
+          "end": 70,
+          "text": "We asked the founders how they think about that."
+        },
+        {
+          "start": 700,
+          "end": 730,
+          "text": "Back after the break with the rest of the interview."
+        }
+      ],
+      "rows_billed": 4,
+      "as_of": "2026-09-01T09:00:00.000Z",
+      "note": "This transcript is the video's own caption track. `creator_captions` were written or approved by the channel; `third_party_quick` are YouTube's automatic captions and can misspell names and drop punctuation. `language` says which track you got."
+    },
+    "responses": {
+      "200": {
+        "status": 200,
+        "body": {
+          "state": "ready",
+          "video": {
+            "id": "dQw4w9WgXcQ",
+            "title": "TBPN | Tuesday, August 4",
+            "channel_id": "UC-DRzaGnL_vtBUpCFH5M0tg",
+            "channel_name": "TBPN",
+            "published_at": "2026-08-04T17:00:00.000Z",
+            "duration_seconds": 3600,
+            "watch_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+          },
+          "quality": "captions",
+          "source": "creator_captions",
+          "language": "en",
+          "languages": [
+            {
+              "code": "en",
+              "name": "English",
+              "generated": false
+            },
+            {
+              "code": "de",
+              "name": "Deutsch (auto)",
+              "generated": true
+            }
+          ],
+          "lines": [
+            {
+              "start": 0,
+              "end": 20,
+              "text": "Ramp has been on the show for a while now."
+            },
+            {
+              "start": 20,
+              "end": 45,
+              "text": "The pitch is still the same, spend less time on expenses."
+            },
+            {
+              "start": 45,
+              "end": 70,
+              "text": "We asked the founders how they think about that."
+            },
+            {
+              "start": 700,
+              "end": 730,
+              "text": "Back after the break with the rest of the interview."
+            }
+          ],
+          "rows_billed": 4,
+          "as_of": "2026-09-01T09:00:00.000Z",
+          "note": "This transcript is the video's own caption track. `creator_captions` were written or approved by the channel; `third_party_quick` are YouTube's automatic captions and can misspell names and drop punctuation. `language` says which track you got."
+        }
+      },
+      "202": {
+        "status": 202,
+        "body": {
+          "state": "pending",
+          "quality": "premium",
+          "premium_job": {
+            "job_id": "00000000-0000-4000-8000-000000000001",
+            "status": "queued",
+            "next_poll_seconds": 30,
+            "eta_seconds": null
+          },
+          "status_url": "/v1/transcriptions/00000000-0000-4000-8000-000000000001",
+          "next_poll_seconds": 30
+        }
+      }
+    }
+  },
+  "quote_transcription": {
+    "status": 200,
+    "body": {
+      "video_id": "dQw4w9WgXcQ",
+      "duration_seconds": 600,
+      "billing_scope": "full_video",
+      "owned": false,
+      "eligible": false,
+      "quote": {
+        "quarters": 1,
+        "rows": 75
+      },
+      "charge": {
+        "unit": "rows",
+        "amount": 75
+      },
+      "credits_per_row": 4,
+      "max_on_demand_cents": 0,
+      "on_demand_cents_per_unit": 0.4,
+      "prepare_url": "/v1/transcriptions",
+      "refund_policy": "Failed generation is refunded. Delivered unlocks are permanent."
+    },
+    "responses": {
+      "200": {
+        "status": 200,
+        "body": {
+          "video_id": "dQw4w9WgXcQ",
+          "duration_seconds": 600,
+          "billing_scope": "full_video",
+          "owned": false,
+          "eligible": false,
+          "quote": {
+            "quarters": 1,
+            "rows": 75
+          },
+          "charge": {
+            "unit": "rows",
+            "amount": 75
+          },
+          "credits_per_row": 4,
+          "max_on_demand_cents": 0,
+          "on_demand_cents_per_unit": 0.4,
+          "prepare_url": "/v1/transcriptions",
+          "refund_policy": "Failed generation is refunded. Delivered unlocks are permanent."
+        }
+      }
+    }
+  },
+  "get_transcription": {
+    "status": 200,
+    "body": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "videoId": "dQw4w9WgXcQ",
+      "status": "queued",
+      "state": "pending",
+      "stage": "queued",
+      "quote": {
+        "quarters": 1,
+        "rows": 75
+      },
+      "etaSeconds": 172,
+      "nextPollSeconds": 29,
+      "createdAt": "2026-10-01 00:00:00"
+    },
+    "responses": {
+      "200": {
+        "status": 200,
+        "body": {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "videoId": "dQw4w9WgXcQ",
+          "status": "queued",
+          "state": "pending",
+          "stage": "queued",
+          "quote": {
+            "quarters": 1,
+            "rows": 75
+          },
+          "etaSeconds": 172,
+          "nextPollSeconds": 29,
+          "createdAt": "2026-10-01 00:00:00"
+        }
+      }
+    }
+  },
+  "list_transcriptions": {
+    "status": 200,
+    "body": {
+      "requests": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "videoId": "dQw4w9WgXcQ",
+          "status": "queued",
+          "state": "pending",
+          "stage": "queued",
+          "quote": {
+            "quarters": 1,
+            "rows": 75
+          },
+          "etaSeconds": 172,
+          "nextPollSeconds": 29,
+          "createdAt": "2026-10-01 00:00:00",
+          "title": "First video"
+        }
+      ],
+      "has_more": false,
+      "next_cursor": null
+    },
+    "responses": {
+      "200": {
+        "status": 200,
+        "body": {
+          "requests": [
+            {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "videoId": "dQw4w9WgXcQ",
+              "status": "queued",
+              "state": "pending",
+              "stage": "queued",
+              "quote": {
+                "quarters": 1,
+                "rows": 75
+              },
+              "etaSeconds": 172,
+              "nextPollSeconds": 29,
+              "createdAt": "2026-10-01 00:00:00",
+              "title": "First video"
+            }
+          ],
+          "has_more": false,
+          "next_cursor": null
+        }
+      }
+    }
+  }
+}

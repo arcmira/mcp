@@ -1,8 +1,8 @@
-import pkg from '../package.json' with { type: 'json' };
+import pkg from "../package.json" with { type: "json" };
 
 /** The one src this server mints. Every unlock link v1 returns to us carries it. */
-export const SRC = 'mcp-tool';
-export const DEFAULT_API_BASE = 'https://api.arcmira.com';
+export const SRC = "mcp-tool";
+export const DEFAULT_API_BASE = "https://api.arcmira.com";
 export const USER_AGENT = `arcmira-mcp/${pkg.version} (+https://github.com/arcmira/mcp)`;
 
 export interface Env {
@@ -18,13 +18,13 @@ export interface ClientInfo {
 }
 
 /** The header v1 reads the host from. Attribution only. */
-export const CLIENT_HEADER = 'x-arcmira-client';
+export const CLIENT_HEADER = "x-arcmira-client";
 /** The header v1 answers with: the deploy id of the API build that served the call. */
-export const BUILD_HEADER = 'x-arcmira-build';
+export const BUILD_HEADER = "x-arcmira-build";
 
 /** The v1 error envelope body. Forwarded untouched; the facade never edits a gate. */
 /** Why a 401 happened, the same three values v1 puts on `error.reason`. */
-export type CredentialFailure = 'no_credential' | 'invalid' | 'revoked';
+export type CredentialFailure = "no_credential" | "invalid" | "revoked";
 
 export interface ApiErrorBody {
   type: string;
@@ -33,17 +33,31 @@ export interface ApiErrorBody {
   message: string;
   param?: string;
   gate?: string;
-  unlock?: { tier: string; url: string; offer: null; action?: { kind: string; method: string; url: string } };
+  unlock?: {
+    tier: string;
+    url: string;
+    offer: null;
+    action?: { kind: string; method: string; url: string };
+  };
   retry_after_seconds?: number;
+  retry_after?: string;
   doc_url: string;
   request_id: string;
 }
 
 export type ApiResult<T = Record<string, unknown>> =
   | { ok: true; status: number; body: T }
-  | { ok: false; status: number; error: ApiErrorBody };
+  | {
+      ok: false;
+      status: number;
+      error: ApiErrorBody;
+      body?: Record<string, unknown>;
+    };
 
-export type Query = Record<string, string | number | string[] | undefined | null>;
+export type Query = Record<
+  string,
+  string | number | string[] | undefined | null
+>;
 
 /** The per-key throttle as v1 reports it on every response: RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset. */
 export interface RateLimit {
@@ -53,8 +67,19 @@ export interface RateLimit {
   reset: number;
 }
 
+export interface PrepareTranscript {
+  video_id: string;
+  max_rows: number;
+  max_on_demand_cents?: number;
+  idempotency_key: string;
+}
+
 export interface ApiClient {
-  get<T = Record<string, unknown>>(path: string, query?: Query): Promise<ApiResult<T>>;
+  prepareTranscript(input: PrepareTranscript): Promise<ApiResult>;
+  get<T = Record<string, unknown>>(
+    path: string,
+    query?: Query,
+  ): Promise<ApiResult<T>>;
   /** Name the host every later call is made for. Sent upstream as x-arcmira-client. */
   setClient(client: ClientInfo | undefined): void;
   /** The deploy id of the API build behind the latest answer, or null before any answer. */
@@ -67,23 +92,25 @@ export interface ApiClient {
 export function rateLimitOf(headers: Headers): RateLimit | null {
   const read = (name: string): number | null => {
     const value = headers.get(name);
-    if (value === null || value.trim() === '') return null;
+    if (value === null || value.trim() === "") return null;
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
   };
-  const limit = read('ratelimit-limit');
-  const remaining = read('ratelimit-remaining');
-  const reset = read('ratelimit-reset');
-  return limit === null || remaining === null || reset === null ? null : { limit, remaining, reset };
+  const limit = read("ratelimit-limit");
+  const remaining = read("ratelimit-remaining");
+  const reset = read("ratelimit-reset");
+  return limit === null || remaining === null || reset === null
+    ? null
+    : { limit, remaining, reset };
 }
 
 const CREDENTIAL_MESSAGES: Record<CredentialFailure, string> = {
   no_credential:
-    'No credential was sent. Sign in through the host, or send Authorization: Bearer with an account key; with no account, POST unlock.action.url with an email to create one.',
+    "No credential was sent. Sign in through the host, or send Authorization: Bearer with an account key; with no account, POST unlock.action.url with an email to create one.",
   invalid:
-    'The key sent is not a live account key. Send a valid key with Authorization: Bearer, or POST unlock.action.url with an email to create an account.',
+    "The key sent is not a live account key. Send a valid key with Authorization: Bearer, or POST unlock.action.url with an email to create an account.",
   revoked:
-    'The key sent has been revoked. Create a new key at https://arcmira.com/dashboard/api and send it with Authorization: Bearer.',
+    "The key sent has been revoked. Create a new key at https://arcmira.com/dashboard/api and send it with Authorization: Bearer.",
 };
 
 /**
@@ -92,43 +119,54 @@ const CREDENTIAL_MESSAGES: Record<CredentialFailure, string> = {
  * nothing was sent or a key was refused, the split v1 makes, so a host with a stale key mints a
  * new one instead of re-reading its config.
  */
-export function noKeyError(reason: CredentialFailure = 'no_credential'): ApiErrorBody {
+export function noKeyError(
+  reason: CredentialFailure = "no_credential",
+): ApiErrorBody {
   return {
-    type: 'authentication_error',
-    code: 'invalid_api_key',
+    type: "authentication_error",
+    code: "invalid_api_key",
     reason,
     message: CREDENTIAL_MESSAGES[reason],
-    gate: 'key',
+    gate: "key",
     unlock: {
-      tier: 'free',
+      tier: "free",
       url: `https://arcmira.com/docs/authentication?src=${SRC}#sign-up-from-the-api`,
       offer: null,
-      action: { kind: 'send_signup_code', method: 'POST', url: `${DEFAULT_API_BASE}/v1/signups?src=${SRC}` },
+      action: {
+        kind: "send_signup_code",
+        method: "POST",
+        url: `${DEFAULT_API_BASE}/v1/signups?src=${SRC}`,
+      },
     },
-    doc_url: 'https://arcmira.com/docs/errors#invalid_api_key',
+    doc_url: "https://arcmira.com/docs/errors#invalid_api_key",
     request_id: `mcp_${crypto.randomUUID()}`,
   };
 }
 
 /** The bearer a client sent, from either header form v1 accepts. Null when there is none. */
 export function apiKeyOf(request: Request): string | null {
-  const bearer = request.headers.get('authorization');
-  if (bearer && /^bearer\s+\S+$/i.test(bearer)) return bearer.replace(/^bearer\s+/i, '').trim();
-  const header = request.headers.get('x-api-key');
+  const bearer = request.headers.get("authorization");
+  if (bearer && /^bearer\s+\S+$/i.test(bearer))
+    return bearer.replace(/^bearer\s+/i, "").trim();
+  const header = request.headers.get("x-api-key");
   return header && header.trim() ? header.trim() : null;
 }
 
 function isErrorBody(value: unknown): value is { error: ApiErrorBody } {
-  if (typeof value !== 'object' || value === null) return false;
+  if (typeof value !== "object" || value === null) return false;
   const error = (value as { error?: unknown }).error;
-  return typeof error === 'object' && error !== null && typeof (error as ApiErrorBody).code === 'string';
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    typeof (error as ApiErrorBody).code === "string"
+  );
 }
 
 /** A few older v1 routes still answer { error: "message" }. The message is kept; the envelope is ours. */
 function legacyErrorMessage(value: unknown): string | null {
-  if (typeof value !== 'object' || value === null) return null;
+  if (typeof value !== "object" || value === null) return null;
   const error = (value as { error?: unknown }).error;
-  return typeof error === 'string' && error.length > 0 ? error : null;
+  return typeof error === "string" && error.length > 0 ? error : null;
 }
 
 /**
@@ -137,7 +175,7 @@ function legacyErrorMessage(value: unknown): string | null {
  * that admits both.
  */
 export function createApiClient(env: Env, apiKey: string): ApiClient {
-  const base = (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
+  const base = (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, "");
   let latest: RateLimit | null = null;
   let build: string | null = null;
   let client: string | null = null;
@@ -145,59 +183,121 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
     rateLimit: () => latest,
     upstreamBuild: () => build,
     setClient(info) {
-      client = info?.name ? `${info.name}${info.version ? `/${info.version}` : ''}`.slice(0, 120) : null;
+      client = info?.name
+        ? `${info.name}${info.version ? `/${info.version}` : ""}`.slice(0, 120)
+        : null;
     },
-    async get(path, query = {}) {
-      const url = new URL(base + path);
-      for (const [key, value] of Object.entries(query)) {
-        if (value === undefined || value === null) continue;
-        if (Array.isArray(value)) {
-          if (value.length > 0) url.searchParams.set(key, value.join(','));
-          continue;
-        }
-        url.searchParams.set(key, String(value));
+    get: (path, query = {}) => request(path, query),
+    prepareTranscript: (input) => request("/v1/transcriptions", {}, input),
+  };
+  async function request<T = Record<string, unknown>>(
+    path: string,
+    query: Query = {},
+    purchase?: PrepareTranscript,
+  ): Promise<ApiResult<T>> {
+    const url = new URL(base + path);
+    for (const [key, value] of Object.entries(query)) {
+      if (value === undefined || value === null) continue;
+      if (Array.isArray(value)) {
+        if (value.length > 0) url.searchParams.set(key, value.join(","));
+        continue;
       }
-      url.searchParams.set('src', SRC);
-      const response = await fetch(url, {
-        headers: {
-          authorization: `Bearer ${apiKey}`,
-          accept: 'application/json',
-          'user-agent': USER_AGENT,
-          ...(client ? { [CLIENT_HEADER]: client } : {}),
+      url.searchParams.set(key, String(value));
+    }
+    url.searchParams.set("src", SRC);
+    const response = await fetch(url, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(30_000),
+      method: purchase ? "POST" : "GET",
+      ...(purchase
+        ? {
+            body: JSON.stringify({
+              videoId: purchase.video_id,
+              max_rows: purchase.max_rows,
+              max_on_demand_cents: purchase.max_on_demand_cents ?? 0,
+            }),
+          }
+        : {}),
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        ...(purchase
+          ? {
+              "content-type": "application/json",
+              "idempotency-key": purchase.idempotency_key,
+            }
+          : {}),
+        accept: "application/json",
+        "user-agent": USER_AGENT,
+        ...(client ? { [CLIENT_HEADER]: client } : {}),
+      },
+    }).catch((error: unknown) => {
+      if (purchase) throw error;
+      return Response.json({ error: {
+        type: "server_error", code: "upstream_unavailable",
+        message: "The API read did not complete. Keep the current credential and retry.",
+        doc_url: "https://arcmira.com/docs/errors",
+        request_id: `mcp_${crypto.randomUUID()}`,
+      } }, { status: 503 });
+    });
+    if (response.status >= 300 && response.status < 400)
+      return {
+        ok: false,
+        status: 502,
+        error: {
+          type: "server_error",
+          code: "redirect_refused",
+          message:
+            "The authenticated API request redirected. No credentials were sent to the redirect target.",
+          doc_url: "https://arcmira.com/docs/errors",
+          request_id: `mcp_${crypto.randomUUID()}`,
         },
-      });
-      latest = rateLimitOf(response.headers) ?? latest;
-      build = response.headers.get(BUILD_HEADER) ?? build;
-      const body: unknown = await response.json().catch(() => null);
-      if (response.ok && body !== null && typeof body === 'object') {
-        return { ok: true, status: response.status, body: body as never };
-      }
-      if (isErrorBody(body)) return { ok: false, status: response.status, error: body.error };
-      const legacy = legacyErrorMessage(body);
-      if (legacy !== null) {
-        return {
-          ok: false,
-          status: response.status,
-          error: {
-            type: response.status === 404 ? 'not_found' : response.status < 500 ? 'invalid_request_error' : 'server_error',
-            code: response.status === 404 ? 'not_found' : 'upstream_error',
-            message: legacy,
-            doc_url: 'https://arcmira.com/docs/errors#not_found',
-            request_id: response.headers.get('x-request-id') ?? `mcp_${crypto.randomUUID()}`,
-          },
-        };
-      }
+      };
+    latest = rateLimitOf(response.headers) ?? latest;
+    build = response.headers.get(BUILD_HEADER) ?? build;
+    const body: unknown = await response.json().catch(() => null);
+    if (response.ok && body !== null && typeof body === "object") {
+      return { ok: true, status: response.status, body: body as never };
+    }
+    const retryAfter = response.headers.get("retry-after");
+    if (isErrorBody(body))
+      return {
+        ok: false,
+        status: response.status,
+        error: { ...body.error, ...(retryAfter !== null ? { retry_after: retryAfter } : {}) },
+        body: { ...body },
+      };
+    const legacy = legacyErrorMessage(body);
+    if (legacy !== null) {
       return {
         ok: false,
         status: response.status,
         error: {
-          type: 'server_error',
-          code: 'upstream_unreadable',
-          message: `The Arcmira API answered ${response.status} without an error body. Retry in a few seconds.`,
-          doc_url: 'https://arcmira.com/docs/errors#server_error',
-          request_id: response.headers.get('x-request-id') ?? `mcp_${crypto.randomUUID()}`,
+          type:
+            response.status === 404
+              ? "not_found"
+              : response.status < 500
+                ? "invalid_request_error"
+                : "server_error",
+          code: response.status === 404 ? "not_found" : "upstream_error",
+          message: legacy,
+          doc_url: "https://arcmira.com/docs/errors#not_found",
+          request_id:
+            response.headers.get("x-request-id") ??
+            `mcp_${crypto.randomUUID()}`,
         },
       };
-    },
-  };
+    }
+    return {
+      ok: false,
+      status: response.status,
+      error: {
+        type: "server_error",
+        code: "upstream_unreadable",
+        message: `The Arcmira API answered ${response.status} without an error body. Retry in a few seconds.`,
+        doc_url: "https://arcmira.com/docs/errors#server_error",
+        request_id:
+          response.headers.get("x-request-id") ?? `mcp_${crypto.randomUUID()}`,
+      },
+    };
+  }
 }

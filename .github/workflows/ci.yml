@@ -27,5 +27,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
-      - name: Manifest against the live OpenAPI document
-        run: pnpm manifest:check
+      - run: pnpm sandbox:check
+      - run: pnpm skill:check
+      - name: Manifest against the reviewed release contract
+        run: pnpm manifest:check "file://$PWD/tests/fixtures/openapi.json"

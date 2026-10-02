@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ACCESS_GUIDANCE, DOCS, ERRORS, EXAMPLES, ID_RULE, METHODS, QUIRKS } from '../src/reference.ts';
+import { ACCESS_GUIDANCE, PREMIUM_PREPARATION, DOCS, ERRORS, EXAMPLES, ID_RULE, METHODS, QUIRKS } from '../src/reference.ts';
 import { PICK_STEPS, TASK_SKILLS, type TaskSkill } from '../src/skills.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -32,7 +32,7 @@ description: ${JSON.stringify(DESCRIPTION)}
 
 # Arcmira
 
-Arcmira indexes YouTube and podcast transcripts and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes two tools. \`describe\` returns the client reference. \`execute\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns.
+Arcmira indexes YouTube and podcast transcripts and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes describe, execute, quote_transcript and prepare_transcript. \`describe\` returns the client reference. \`execute\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns.
 
 ## When to use
 
@@ -137,6 +137,8 @@ ${t.good.map((g) => `- ${g}`).join('\n')}
 ${t.traps.map((g) => `- ${g}`).join('\n')}
 
 ${ACCESS_GUIDANCE}
+
+${PREMIUM_PREPARATION}
 
 Never fill an index gap from memory or the web. Docs: ${DOCS.mcp}
 `;
