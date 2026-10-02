@@ -45,6 +45,7 @@ describe('the sandbox program', () => {
       logs_truncated: false,
       truncated: false,
       outcome_uncertain: false,
+      routes: ['GET /v1/entities/ent_14/momentum'],
     });
     assert.equal(outbound.urls[0]?.pathname, '/v1/entities/ent_14/momentum');
     assert.deepEqual(JSON.parse(renderExecution(run)).value, { v: 'flat' });

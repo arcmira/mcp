@@ -23,6 +23,8 @@ const fields = {
   truncated_arrays: z.array(z.object({ path: z.string(), returned: z.number().int(), total: z.number().int() })).optional(),
   calls_started: z.number().int().nonnegative().optional(),
   in_flight: z.number().int().nonnegative().optional(),
+  /** `METHOD /v1/path` for each API call the program started, in order. Read from the sandbox header, never the body. */
+  routes: z.array(z.string()).optional(),
 };
 const executionSchema = z.discriminatedUnion('ok', [
   z.object({ ...fields, ok: z.literal(true), value: z.unknown() }),
@@ -45,6 +47,8 @@ import { renderExecution } from './output.js';
 export default {
   async fetch(request, env) {
     const NativeResponse = Response;
+    const NativeRequest = Request;
+    const NativeURL = URL;
     const getHeaders = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(Response.prototype, 'headers').get);
     const getHeader = Function.prototype.call.bind(Headers.prototype.get);
     const setHeader = Function.prototype.call.bind(Headers.prototype.set);
@@ -65,10 +69,16 @@ export default {
     };
     const console = { log: log(''), info: log(''), warn: log('WARN'), error: log('ERR'), debug: log('') };
     const meter = { calls: 0, completed: 0, rate_limit: null, api_build: null };
+    const routes = [];
     const outbound = globalThis.fetch.bind(globalThis);
     const meteredFetch = async (...args) => {
       if (meter.calls >= ${MAX_CALLS}) throw new ArcmiraError('This program reached its 40 API call limit.', 'call_budget');
       meter.calls++;
+      try {
+        const [input, init] = args;
+        const request = input instanceof NativeRequest;
+        routes.push(toString((init && init.method) || (request ? input.method : 'GET')).toUpperCase() + ' ' + new NativeURL(request ? input.url : toString(input)).pathname);
+      } catch {}
       try {
       const response = await outbound(...args);
       const read = name => { const raw = getHeader(getHeaders(response), name); return raw !== null && raw !== '' && isFinite(toNumber(raw)) ? toNumber(raw) : null; };
@@ -96,6 +106,7 @@ export default {
       setHeader(headers, 'content-type', 'application/json');
       setHeader(headers, 'x-execution-calls', toString(meter.calls));
       setHeader(headers, 'x-execution-completed', toString(meter.completed));
+      setHeader(headers, 'x-execution-routes', stringifyResult(routes));
       if (meter.api_build !== null) setHeader(headers, 'x-arcmira-build', meter.api_build);
       if (meter.rate_limit !== null) {
         setHeader(headers, 'ratelimit-limit', toString(meter.rate_limit.limit));
@@ -152,6 +163,16 @@ async function readCapped(response: Response): Promise<string | null> {
     offset += chunk.byteLength;
   }
   return new TextDecoder().decode(bytes);
+}
+
+/** The sandbox's route log, or an empty list when the header is missing or malformed. Telemetry only. */
+function routesOf(header: string | null): string[] {
+  try {
+    const parsed: unknown = JSON.parse(header ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((route): route is string => typeof route === 'string').slice(0, MAX_CALLS) : [];
+  } catch {
+    return [];
+  }
 }
 
 function unknownOutcome(name: string, code: string, message: string): Execution {
@@ -211,6 +232,7 @@ export async function runProgram(host: SandboxHost, code: string): Promise<Execu
         in_flight: inFlight,
         rate_limit: rateLimitOf(response.headers),
         api_build: response.headers.get('x-arcmira-build'),
+        routes: routesOf(response.headers.get('x-execution-routes')),
       };
       const body = await readCapped(response);
       if (body === null)

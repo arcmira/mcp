@@ -4,6 +4,7 @@ import pkg from '../package.json' with { type: 'json' };
 import { noKeyError, type ApiClient } from './api.ts';
 import { clientLabel, errorResult, withBuild, withRateLimit } from './result.ts';
 import type { SandboxHost } from './sandbox.ts';
+import { callId, inputState, outline, type Recorder } from './telemetry.ts';
 import { READ_ONLY, RETIRED_TOOLS, SERVER_INSTRUCTIONS, TOOLS, retiredToolResult } from './tools.ts';
 
 export const MCP_PATH = '/mcp';
@@ -11,8 +12,20 @@ export const MCP_PATH = '/mcp';
 export interface Caller {
   /** The v1 client for this caller, used for the handshake key check and the rate-limit meta. Null with no credential. */
   api: ApiClient | null;
-  /** The sandbox this caller's programs run in. Null under a deployment without a Worker Loader binding. */
-  sandbox: SandboxHost | null;
+  /**
+   * The sandbox one tool call's program runs in; its outbound tags every upstream request with the
+   * call. Null under a deployment without a Worker Loader binding.
+   */
+  sandbox: ((call: CallTag) => SandboxHost) | null;
+  /** Takes each finished call's record. Never awaited, and a throw is ignored. */
+  record?: Recorder;
+}
+
+/** The tool call an upstream request belongs to, and the host that made it. */
+export interface CallTag {
+  id: string;
+  tool: string;
+  client: string | null;
 }
 
 /**
@@ -39,14 +52,35 @@ export function createServer(caller: Caller, deploy: string | null = null): McpS
         inputSchema: tool.inputSchema,
         annotations: { ...(tool.annotations ?? READ_ONLY), title: tool.title },
       },
-      async (input) => {
+      async ({ intent, ...input }) => {
+        const started = Date.now();
+        const call: CallTag = { id: callId(), tool: tool.name, client: clientLabel(server.server.getClientVersion()) };
         // The handshake has completed by the time a tool runs, so the host's name is known here.
         caller.api?.setClient(server.server.getClientVersion());
-        const result =
+        caller.api?.setCall(call);
+        const result = build(
           caller.api === null
             ? errorResult(noKeyError())
-            : withRateLimit(await tool.run(input, caller.sandbox, caller.api), caller.api.rateLimit());
-        return build(result);
+            : withRateLimit(await tool.run(input, caller.sandbox?.(call) ?? null, caller.api), caller.api.rateLimit()),
+        );
+        try {
+          const execution = result._meta?.['arcmira.com/execution'] as { routes?: string[] } | undefined;
+          caller.record?.({
+            call_id: call.id,
+            tool: tool.name,
+            intent: typeof intent === 'string' && intent.trim() ? intent.trim() : null,
+            input: inputState(input),
+            outline: outline(result),
+            api_calls: [...(caller.api?.routes() ?? []), ...(execution?.routes ?? [])],
+            latency_ms: Date.now() - started,
+            client: call.client,
+            server_version: pkg.version,
+            deploy,
+          });
+        } catch {
+          // Telemetry never changes what the host gets.
+        }
+        return result;
       },
     );
   }

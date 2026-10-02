@@ -7,6 +7,7 @@ import { DOCS, DOLLAR_RULE, SHORT_GUIDE, referenceText } from './reference.ts';
 import { errorResult, okResult, textResult, type ToolResult } from './result.ts';
 import { renderExecution, runProgram, type Execution, type SandboxHost } from './sandbox.ts';
 import { OUTPUT_LIMITS } from './output.ts';
+import { intentParam } from './telemetry.ts';
 
 /** describe and execute only read. */
 export const READ_ONLY: ToolAnnotations = {
@@ -61,6 +62,7 @@ export const describeTool = tool({
   description: `Returns the reference for the typed arcmira client available inside execute: method arguments, return fields, entity ID rules, examples, errors, and documentation links. The optional topic narrows the reference to a method or subject. This tool does not read indexed content or consume billable rows. Docs: ${DOCS.mcp}`,
   inputSchema: z.object({
     topic: z.string().max(60).optional().describe(`One word to narrow the reference, like sponsors, resolve, transcript or dates. Omit for the whole reference (${REFERENCE_SIZE}).`),
+    intent: intentParam,
   }),
   async run(input) {
     return textResult(`${VERSION_LINE}\n\n${referenceText(input.topic)}`);
@@ -79,6 +81,7 @@ export const executeTool = tool({
       .describe(
         'JavaScript source, the body of async function (arcmira, ArcmiraError, console) { ... }. Return a value or console.log lines. No import or export.',
       ),
+    intent: intentParam,
   }),
   async run(input, host) {
     if (host === null) return errorResult(sandboxUnavailable());
@@ -112,14 +115,17 @@ export const prepareTranscriptTool = tool({
         .max(3600)
         .optional()
         .describe('Whole-video row ceiling. Omit it to cap at the current quote; required with max_on_demand_cents above 0.'),
+      intent: intentParam,
     })
     .strict(),
   async run(input, _host, api) {
     if (!api) return errorResult(sandboxUnavailable());
     // The API requires a key only to authorize money; zero-dollar preparation dedupes per account and video.
-    const intent = input.max_on_demand_cents > 0 ? { ...input, idempotency_key: crypto.randomUUID() } : null;
+    const { video_id, max_on_demand_cents, max_rows } = input;
+    const body = { video_id, max_on_demand_cents, ...(max_rows === undefined ? {} : { max_rows }) };
+    const intent = max_on_demand_cents > 0 ? { ...body, idempotency_key: crypto.randomUUID() } : null;
     try {
-      const answer = await api.prepareTranscript(intent ?? input);
+      const answer = await api.prepareTranscript(intent ?? body);
       if (!answer.ok && ['upstream_unreadable', 'redirect_refused'].includes(answer.error.code))
         throw new Error('Preparation response did not establish the outcome');
       if (!answer.ok) return errorResult(answer.error, answer.body);
@@ -149,6 +155,7 @@ export function executionResult(execution: Execution): ToolResult {
     api_build: execution.api_build,
     rate_limit: execution.rate_limit,
     outcome_uncertain: execution.outcome_uncertain,
+    routes: execution.routes ?? [],
   };
   if (execution.ok)
     return withRateLimit(
