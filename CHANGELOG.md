@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.2
+
+Each tool call is logged to Arcmira's product analytics with the account that made it: the tool, the host, the input (the `execute` program up to 4,000 characters, the `describe` topic, the `prepare_transcript` arguments), the outcome without the result body, the API routes the call made, and the latency. The API redacts credentials and email addresses before storing it. The README's [What we log](README.md#what-we-log) section has the whole list.
+
+- Every tool takes an optional `intent` string (at most 300 characters), the user's request in a few words. It is logged with the call and never sent to v1. Hosts that omit it see no change.
+- Each upstream v1 request a call makes carries `x-arcmira-mcp-call` (the call's id) and `x-arcmira-mcp-tool`, so the API's request events join the call. Sandbox requests now also carry the host's handshake name as `x-arcmira-client`.
+- `_meta["arcmira.com/execution"]` gains `routes`: `METHOD /v1/path` for each API call the program started.
+- The record is posted after the result is built, inside `waitUntil`. A failed, slow or refused post is dropped and never changes or delays a result.
+
 ## 0.8.1
 
 The `arcmira` skill no longer copies the method reference. It keeps the procedure, the id rule, the Premium step and the access rules, says to call `describe` once before the first `execute` (or `arcmira <command> --help` from the CLI), and lists which task skill fits which ask. It drops from about 7,600 tokens to about 2,400, which Gemini CLI saves on every session because it loads this skill as context. In an A/B on the live server (seven questions, Sonnet and Haiku, two runs each) the new skills scored the same as 0.8.0, 26 of 28, with 8% fewer input tokens. The task skills point at `describe` for the reference. No server behavior changed; the version moves so plugin hosts pick up the new skills.

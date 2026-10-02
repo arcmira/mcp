@@ -19,6 +19,9 @@ export interface ClientInfo {
 
 /** The header v1 reads the host from. Attribution only. */
 export const CLIENT_HEADER = 'x-arcmira-client';
+/** Sent on every upstream v1 request a tool call makes, so the API's request events join the call's span. */
+export const CALL_HEADER = 'x-arcmira-mcp-call';
+export const TOOL_HEADER = 'x-arcmira-mcp-tool';
 /** The header v1 answers with: the deploy id of the API build that served the call. */
 export const BUILD_HEADER = 'x-arcmira-build';
 
@@ -77,6 +80,10 @@ export interface ApiClient {
   get<T = Record<string, unknown>>(path: string, query?: Query): Promise<ApiResult<T>>;
   /** Name the host every later call is made for. Sent upstream as x-arcmira-client. */
   setClient(client: ClientInfo | undefined): void;
+  /** Name the tool call every later request belongs to. Sent upstream as x-arcmira-mcp-call and x-arcmira-mcp-tool. */
+  setCall(call: { id: string; tool: string } | null): void;
+  /** `METHOD /v1/path` for each upstream request this client made, in order. */
+  routes(): string[];
   /** The deploy id of the API build behind the latest answer, or null before any answer. */
   upstreamBuild(): string | null;
   /** The throttle headers on the latest upstream answer, or null before any call or when the answer carried none. */
@@ -165,12 +172,18 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
   let latest: RateLimit | null = null;
   let build: string | null = null;
   let client: string | null = null;
+  let call: { id: string; tool: string } | null = null;
+  const routes: string[] = [];
   return {
     rateLimit: () => latest,
     upstreamBuild: () => build,
     setClient(info) {
       client = info?.name ? `${info.name}${info.version ? `/${info.version}` : ''}`.slice(0, 120) : null;
     },
+    setCall(next) {
+      call = next;
+    },
+    routes: () => [...routes],
     get: (path, query = {}) => request(path, query),
     prepareTranscript: ({ idempotency_key, ...body }) => request('/v1/transcriptions', {}, { body, idempotency_key }),
   };
@@ -189,6 +202,7 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
       url.searchParams.set(key, String(value));
     }
     url.searchParams.set('src', SRC);
+    routes.push(`${purchase ? 'POST' : 'GET'} ${url.pathname}`);
     const response = await fetch(url, {
       redirect: 'manual',
       signal: AbortSignal.timeout(30_000),
@@ -201,6 +215,7 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
         accept: 'application/json',
         'user-agent': USER_AGENT,
         ...(client ? { [CLIENT_HEADER]: client } : {}),
+        ...(call ? { [CALL_HEADER]: call.id, [TOOL_HEADER]: call.tool } : {}),
       },
     }).catch((error: unknown) => {
       if (purchase) throw error;
