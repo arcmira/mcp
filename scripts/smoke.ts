@@ -8,8 +8,10 @@
  * the transport must answer 401 with the OAuth challenge, and the script stops there. Prints
  * one line per call and never prints the key. Exit 1 when any call is not what the manifest
  * promises. Most probes make one or two API reads. The budget probe makes 40. The purchase probes
- * read a free quote, then send prepare_transcript with max_rows 0, which the API must refuse; the
- * key's usage is read before and after each to show neither spent anything.
+ * read a free quote with arcmira.quote, then send prepare_transcript with max_rows 0 and no key,
+ * which the API refuses before it claims anything (max_rows_exceeded below the quote, or
+ * paid_plan_required on a free plan). The key's usage is read before and after each to show
+ * neither spent anything.
  */
 import { Client } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
@@ -75,9 +77,9 @@ let failed = false;
 const tools = await client.listTools();
 const names = tools.tools.map((tool) => tool.name).sort();
 console.log(`tools/list: ${names.join(', ')}`);
-if (names.join(',') !== 'describe,execute,prepare_transcript,quote_transcript') {
+if (names.join(',') !== 'describe,execute,prepare_transcript') {
   failed = true;
-  console.log('  expected describe, execute, quote_transcript, and prepare_transcript');
+  console.log('  expected describe, execute, and prepare_transcript');
 }
 for (const tool of tools.tools) {
   const hints = tool.annotations ?? {};
@@ -127,23 +129,27 @@ async function spend(): Promise<string> {
 }
 
 const beforeQuote = await spend();
-const quote = await client.callTool({ name: 'quote_transcript', arguments: { video_id: UNOWNED_VIDEO } });
-const quoteText = textOf(quote);
-const afterQuote = await spend();
-const quoteOk = afterQuote === beforeQuote && (quote.isError === true ? /"code":"/.test(quoteText) : /"rows"/.test(quoteText));
-if (!quoteOk) failed = true;
-console.log(`${(quoteOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'quote free'.padEnd(22)} quote    spend ${beforeQuote} -> ${afterQuote}  ${quoteText.replace(/\s+/g, ' ').slice(0, 90)}`);
-
-const prepared = await client.callTool({
-  name: 'prepare_transcript',
-  arguments: { video_id: UNOWNED_VIDEO, max_rows: 0 },
+const quote = await client.callTool({
+  name: 'execute',
+  arguments: { code: `const q = await arcmira.quote("${UNOWNED_VIDEO}"); return { owned: q.owned, eligible: q.eligible, rows: q.quote.rows, charge: q.charge };` },
 });
-const preparedText = textOf(prepared);
-const afterPrepare = await spend();
-const refusedCode = prepared.isError === true ? /"code":"([a-z_]+)"/.exec(preparedText)?.[1] : undefined;
-const prepareOk = refusedCode !== undefined && refusedCode !== 'preparation_outcome_unknown' && afterPrepare === afterQuote;
-if (!prepareOk) failed = true;
-console.log(`${(prepareOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'prepare max_rows 0'.padEnd(22)} prepare  spend ${afterQuote} -> ${afterPrepare}  ${refusedCode ?? preparedText.replace(/\s+/g, ' ').slice(0, 90)}`);
+const quoteText = textOf(quote);
+const quoted = quote.isError === true ? null : (JSON.parse(quoteText) as { value: { owned: boolean; rows: number } }).value;
+const afterQuote = await spend();
+const quoteOk = afterQuote === beforeQuote && quoted !== null && !quoted.owned && quoted.rows > 0;
+if (!quoteOk) failed = true;
+console.log(`${(quoteOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'quote free, unowned'.padEnd(22)} execute  spend ${beforeQuote} -> ${afterQuote}  ${quoteText.replace(/\s+/g, ' ').slice(0, 90)}`);
+
+/** Only below a positive quote on an unowned video does max_rows 0 refuse before any claim. */
+if (quoteOk) {
+  const prepared = await client.callTool({ name: 'prepare_transcript', arguments: { video_id: UNOWNED_VIDEO, max_rows: 0 } });
+  const preparedText = textOf(prepared);
+  const afterPrepare = await spend();
+  const refusedCode = prepared.isError === true ? /"code":"([a-z_]+)"/.exec(preparedText)?.[1] : undefined;
+  const prepareOk = (refusedCode === 'max_rows_exceeded' || refusedCode === 'paid_plan_required') && afterPrepare === afterQuote;
+  if (!prepareOk) failed = true;
+  console.log(`${(prepareOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'prepare max_rows 0'.padEnd(22)} prepare  spend ${afterQuote} -> ${afterPrepare}  ${refusedCode ?? preparedText.replace(/\s+/g, ' ').slice(0, 90)}`);
+} else console.log(`skipped    ${'prepare max_rows 0'.padEnd(22)} prepare  ${UNOWNED_VIDEO} is owned or unquoted for this key; pick another UNOWNED_VIDEO`);
 
 const retired = await fetch(url, {
   method: 'POST',
