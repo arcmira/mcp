@@ -12,7 +12,10 @@ Four tools with the `arcmira_` prefix, monitors from the agent, and one rule for
 - A result that is empty, an error, truncated or a resolve `ask` ends with one `feedback` line naming its `call_id`.
 - `describe`, `execute` and `prepare_transcript` answer `tool_retired` naming the replacement, like the 0.6.0 names.
 - `company-watch` is now the monitor setup skill: it resolves the entities and every spelling of a topic, lists the user's monitors before suggesting one, asks how updates should arrive one question at a time with a default (email or Slack; as it happens, hourly or daily), delivers to a connected Slack workspace or links the connection page and uses email until then, and explains every id that did not attach, asking before it moves a tracker from another monitor. Every skill ends by offering to save what it found to a monitor and with the feedback line.
-- Tool definitions plus instructions grow from 2,193 to 2,725 tokens.
+- `company-watch` answers what was said about a company before it offers the monitor, so "what is being said about Linear" still loads it. With no window from the user, every skill and the server instructions use the last 30 days.
+- The protected-resource metadata lists `monitors:write` and `trackers:write`, so Claude, ChatGPT and Claude Code ask for them at sign-in. A connection made before 0.9.0 holds read scopes only: reconnect Arcmira to allow monitor changes.
+- Every options object is checked against the method's signature: an unknown key such as `publishedAfter` throws `invalid_request` naming the signature instead of silently dropping a date window. `arcmira.resolve` also takes `{ name, context }`, and a multi-word name with no context that finds nothing says to move the description into `context`.
+- Tool definitions plus instructions grow from 2,193 to 2,750 tokens. Skills A/B against 0.8.2 (36 runs each, Sonnet and Haiku): 35/36 correct against 32/36, monitor setup on a read-only key 4/4 against 2/4.
 
 ## 0.8.2
 
