@@ -3,13 +3,13 @@ import type { ApiClient } from './api.ts';
 import { withRateLimit } from './result.ts';
 import pkg from '../package.json' with { type: 'json' };
 import type { ToolAnnotations } from '@modelcontextprotocol/server';
-import { DOCS, DOLLAR_RULE, SHORT_GUIDE, referenceText } from './reference.ts';
+import { BUDGET_RULE, DOCS, SHORT_GUIDE, feedbackNudge, referenceText } from './reference.ts';
 import { errorResult, okResult, textResult, type ToolResult } from './result.ts';
-import { renderExecution, runProgram, type Execution, type SandboxHost } from './sandbox.ts';
+import { renderExecution, runProgram, type Access, type Execution, type SandboxHost } from './sandbox.ts';
 import { OUTPUT_LIMITS } from './output.ts';
 import { intentParam } from './telemetry.ts';
 
-/** describe and execute only read. */
+/** arcmira_describe, arcmira_execute_read and arcmira_feedback change nothing on the user's account. */
 export const READ_ONLY: ToolAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -17,22 +17,37 @@ export const READ_ONLY: ToolAnnotations = {
   openWorldHint: false,
 };
 
-export const TOOL_NAMES = ['describe', 'execute', 'prepare_transcript'] as const;
+export const TOOL_NAMES = ['arcmira_describe', 'arcmira_execute_read', 'arcmira_execute_write', 'arcmira_feedback'] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
-/** The tools 0.6.0 listed. A call to one answers with the two that replaced it. */
-export const RETIRED_TOOLS = [
-  'search_transcripts',
-  'resolve_entities',
-  'list_mentions',
-  'entity_momentum',
-  'list_sponsors',
-  'list_recommendations',
-  'index_status',
-  'count_occurrences',
-  'list_episodes',
-  'get_transcript',
-] as const;
+/** Every retired tool name and what replaced it. A call to one answers tool_retired naming the replacement. */
+export const RETIRED_TOOLS: Readonly<Record<string, string>> = {
+  describe: 'arcmira_describe',
+  execute: 'arcmira_execute_read (arcmira_execute_write for monitor changes)',
+  prepare_transcript: 'arcmira.prepare(video) inside arcmira_execute_read',
+  ...Object.fromEntries(
+    [
+      'search_transcripts',
+      'resolve_entities',
+      'list_mentions',
+      'entity_momentum',
+      'list_sponsors',
+      'list_recommendations',
+      'index_status',
+      'count_occurrences',
+      'list_episodes',
+      'get_transcript',
+    ].map((name) => [name, 'arcmira_describe, then arcmira_execute_read with a program']),
+  ),
+};
+
+/** What a tool's run gets besides its input: the call it serves, the v1 client, and a sandbox of the access it asks for. */
+export interface ToolContext {
+  call: { id: string; tool: string };
+  api: ApiClient;
+  /** Null under a deployment without a Worker Loader binding. */
+  sandbox: ((access: Access) => SandboxHost) | null;
+}
 
 export interface ToolSpec<Schema extends z.ZodObject<z.ZodRawShape>> {
   readonly name: ToolName;
@@ -41,7 +56,7 @@ export interface ToolSpec<Schema extends z.ZodObject<z.ZodRawShape>> {
   readonly description: string;
   readonly inputSchema: Schema;
   annotations?: ToolAnnotations;
-  run(input: z.output<Schema>, host: SandboxHost | null, api?: ApiClient): Promise<ToolResult>;
+  run(input: z.output<Schema>, context: ToolContext): Promise<ToolResult>;
 }
 
 export type AnyToolSpec = ToolSpec<z.ZodObject<z.ZodRawShape>>;
@@ -57,11 +72,11 @@ export const VERSION_LINE = `arcmira MCP ${pkg.version}. The server sends this r
 export const REFERENCE_SIZE = `about ${Math.round(referenceText().length / 1000)},000 characters`;
 
 export const describeTool = tool({
-  name: 'describe',
+  name: 'arcmira_describe',
   title: 'The arcmira client reference',
-  description: `Returns the reference for the typed arcmira client available inside execute: method arguments, return fields, entity ID rules, examples, errors, and documentation links. The optional topic narrows the reference to a method or subject. This tool does not read indexed content or consume billable rows. Docs: ${DOCS.mcp}`,
+  description: `Returns the reference for the typed arcmira client the execute tools run: method arguments, return fields, entity ID rules, examples, errors, the budget and monitor rules, and documentation links. The optional topic narrows it to a method or subject. Reads no indexed content and bills nothing. Docs: ${DOCS.mcp}`,
   inputSchema: z.object({
-    topic: z.string().max(60).optional().describe(`One word to narrow the reference, like sponsors, resolve, transcript or dates. Omit for the whole reference (${REFERENCE_SIZE}).`),
+    topic: z.string().max(60).optional().describe(`One word to narrow the reference, like sponsors, resolve, transcript, monitors or dates. Omit for the whole reference (${REFERENCE_SIZE}).`),
     intent: intentParam,
   }),
   async run(input) {
@@ -69,87 +84,93 @@ export const describeTool = tool({
   },
 });
 
-export const executeTool = tool({
-  name: 'execute',
-  title: 'Run a program against Arcmira',
-  description: `Runs JavaScript against the Arcmira API through its read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then actual call/rate/build facts and capped logs. Timeouts report unknown calls and may leave reads in flight. GET never purchases Premium; prepare_transcript does, from included credits. Methods and examples are documented by describe. API documentation: ${DOCS.api}. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`,
-  inputSchema: z.object({
-    code: z
-      .string()
-      .min(1)
-      .max(40_000)
-      .describe(
-        'JavaScript source, the body of async function (arcmira, ArcmiraError, console) { ... }. Return a value or console.log lines. No import or export.',
-      ),
-    intent: intentParam,
-  }),
-  async run(input, host) {
-    if (host === null) return errorResult(sandboxUnavailable());
-    const execution = await runProgram(host, input.code);
-    return executionResult(execution);
+const code = z
+  .string()
+  .min(1)
+  .max(40_000)
+  .describe('JavaScript source, the body of async function (arcmira, ArcmiraError, console) { ... }. Return a value or console.log lines. No import or export.');
+
+const LIMITS = `Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`;
+
+export const executeReadTool = tool({
+  name: 'arcmira_execute_read',
+  title: 'Read Arcmira with a program',
+  description: `Runs JavaScript against the Arcmira API through the arcmira client: indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, coverage, the user's monitors, and Premium preparation (arcmira.prepare buys the quoted transcript from included credits, then on-demand within the account's budget; never ask for cents). Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then call/rate/build facts and capped logs. Methods and examples: arcmira_describe. Filters require entity, channel, or video IDs. ${LIMITS}`,
+  inputSchema: z.object({ code, intent: intentParam }),
+  async run(input, context) {
+    return execute(input.code, 'read', context);
   },
 });
 
-const video = z
-  .string()
-  .regex(/^[A-Za-z0-9_-]{11}$/)
-  .describe('Exact 11-character YouTube video ID.');
-export const prepareTranscriptTool = tool({
-  name: 'prepare_transcript',
-  title: 'Prepare a Premium transcript',
-  description: `Prepares the whole Premium transcript of one video. Call it when arcmira.transcript(video, { quality: "premium" }) answers state preparation_required. A user's Premium request authorizes included credits; do not ask again. Returns the Job: then in execute, await arcmira.wait(job) and read the transcript. ${DOLLAR_RULE} A retry with the same inputs never buys twice. The only tool that can debit the account.`,
+export const executeWriteTool = tool({
+  name: 'arcmira_execute_write',
+  title: 'Change Arcmira monitors',
+  description: `Runs JavaScript like arcmira_execute_read, with the account writes added: arcmira.monitors.create, arcmira.monitors.update (including isPaused) and arcmira.monitors.addEntities. Use it only to save what the user asked to follow: list their monitors first, never assume one exists, and ask how they want updates (email or Slack; as it happens, hourly or daily) before creating one. Nothing is deleted; pause instead. ${LIMITS}`,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: true,
-    openWorldHint: true,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
   },
-  inputSchema: z
-    .object({
-      video_id: video,
-      max_on_demand_cents: z.number().int().min(0).default(0).describe(DOLLAR_RULE),
-      max_rows: z
-        .number()
-        .int()
-        .min(0)
-        .max(3600)
-        .optional()
-        .describe('Whole-video row ceiling. Omit it to cap at the current quote; required with max_on_demand_cents above 0.'),
-      intent: intentParam,
-    })
-    .strict(),
-  async run(input, _host, api) {
-    if (!api) return errorResult(sandboxUnavailable());
-    // The API requires a key only to authorize money; zero-dollar preparation dedupes per account and video.
-    const { video_id, max_on_demand_cents, max_rows } = input;
-    const body = { video_id, max_on_demand_cents, ...(max_rows === undefined ? {} : { max_rows }) };
-    const intent = max_on_demand_cents > 0 ? { ...body, idempotency_key: crypto.randomUUID() } : null;
-    try {
-      const answer = await api.prepareTranscript(intent ?? body);
-      if (!answer.ok && ['upstream_unreadable', 'redirect_refused'].includes(answer.error.code))
-        throw new Error('Preparation response did not establish the outcome');
-      if (!answer.ok) return errorResult(answer.error, answer.body);
-      return okResult({ ...(answer.body.job as Record<string, unknown>), ...(intent ? { intent } : {}) });
-    } catch {
-      return errorResult(
-        {
-          type: 'server_error',
-          code: 'preparation_outcome_unknown',
-          message:
-            'The preparation response was lost, so the purchase may have been accepted. Call prepare_transcript again with the same inputs; the API answers with this video\'s existing purchase instead of buying twice.',
-          doc_url: DOCS.errors,
-          request_id: `mcp_${crypto.randomUUID()}`,
-        },
-        intent ? { intent } : undefined,
-      );
-    }
+  inputSchema: z.object({ code, intent: intentParam }),
+  async run(input, context) {
+    return execute(input.code, 'write', context);
   },
 });
-export const TOOLS: readonly AnyToolSpec[] = [describeTool, executeTool, prepareTranscriptTool];
 
-/** A program's outcome as a tool result: text for every host, the envelope as structuredContent only when it is the whole story. */
-export function executionResult(execution: Execution): ToolResult {
-  const text = renderExecution(execution);
+export const FEEDBACK_CATEGORIES = ['wrong_entity', 'bad_data', 'missing', 'slow', 'confusing', 'other'] as const;
+
+const feedbackInput = z
+  .object({
+    category: z
+      .enum(FEEDBACK_CATEGORIES)
+      .describe('wrong_entity: the wrong person, company or show. bad_data: a wrong count, date, quote or label. missing: something that should be there is not. slow: it took too long. confusing: a result, error or rule was hard to act on. other.'),
+    note: z.string().min(1).max(4000).describe('What happened in a sentence or two: what the user asked, what came back, what they expected. No credentials or personal details.'),
+    request_id: z.string().max(200).optional().describe('The request_id of the error this is about, when there was one.'),
+    call_id: z
+      .string()
+      .regex(/^mcpc_[0-9a-f]{32}$/)
+      .optional()
+      .describe('The call_id a result named (mcpc_ followed by 32 hex characters), for the call this is about.'),
+    intent: intentParam,
+  })
+  .strict();
+
+/** The POST /v1/feedback body for one arcmira_feedback call. */
+export function feedbackBody(input: Omit<z.output<typeof feedbackInput>, 'intent'>): Record<string, unknown> {
+  return {
+    type: 'experience',
+    category: input.category,
+    notes: input.note,
+    ...(input.request_id ? { request_id: input.request_id } : {}),
+    ...(input.call_id ? { mcp_call_id: input.call_id } : {}),
+  };
+}
+
+export const feedbackTool = tool({
+  name: 'arcmira_feedback',
+  title: 'Tell Arcmira what went wrong',
+  description: 'Tells the Arcmira team what was wrong, slow, missing or confusing in a task, so they can fix it. Send one when a result was empty, an error, truncated or an ask that did not serve the user, or when the user says something was off. It changes nothing on the user\'s account and costs nothing.',
+  // Read-only: it changes nothing on the user's account. Each call files one more row, so not idempotent.
+  annotations: { ...READ_ONLY, idempotentHint: false },
+  inputSchema: feedbackInput,
+  async run(input, { api }) {
+    const answer = await api.post('/v1/feedback', feedbackBody(input), { idempotencyKey: crypto.randomUUID() });
+    if (!answer.ok) return errorResult(answer.error, answer.body);
+    return okResult({ ...answer.body, recorded: true });
+  },
+});
+
+export const TOOLS: readonly AnyToolSpec[] = [describeTool, executeReadTool, executeWriteTool, feedbackTool];
+
+async function execute(source: string, access: Access, { sandbox, call }: ToolContext): Promise<ToolResult> {
+  if (sandbox === null) return errorResult(sandboxUnavailable());
+  return executionResult(await runProgram(sandbox(access), source), call.id);
+}
+
+/** A program's outcome as a tool result: text for every host, with the feedback nudge when the outcome warrants one. */
+export function executionResult(execution: Execution, callId: string): ToolResult {
+  const text = renderExecution(execution, { feedback: feedbackNudge(callId) });
   const meta = {
     calls: execution.calls,
     api_build: execution.api_build,
@@ -157,18 +178,10 @@ export function executionResult(execution: Execution): ToolResult {
     outcome_uncertain: execution.outcome_uncertain,
     routes: execution.routes ?? [],
   };
-  if (execution.ok)
-    return withRateLimit(
-      {
-        content: [{ type: 'text', text }],
-        _meta: { 'arcmira.com/execution': meta },
-      },
-      execution.rate_limit,
-    );
   return withRateLimit(
     {
       content: [{ type: 'text', text }],
-      isError: true,
+      ...(execution.ok ? {} : { isError: true }),
       _meta: { 'arcmira.com/execution': meta },
     },
     execution.rate_limit,
@@ -185,12 +198,12 @@ function sandboxUnavailable() {
   };
 }
 
-/** What a host that cached the 0.6.0 tool list gets when it calls one of them. */
+/** What a host that cached an older tool list gets when it calls a retired name. */
 export function retiredToolResult(name: string): ToolResult {
   return errorResult({
     type: 'invalid_request_error',
     code: 'tool_retired',
-    message: `${name} was retired in 0.7.0. Call describe for the arcmira client reference, then execute with a program; the same data is one method away (for example arcmira.resolve, arcmira.search, arcmira.sponsors). Refresh the tool list to see the current tools.`,
+    message: `${name} was retired. Use ${RETIRED_TOOLS[name] ?? 'arcmira_describe, then arcmira_execute_read'}. The tools are arcmira_describe, arcmira_execute_read, arcmira_execute_write and arcmira_feedback; refresh the tool list to see them.`,
     doc_url: DOCS.mcp,
     request_id: `mcp_${crypto.randomUUID()}`,
   });

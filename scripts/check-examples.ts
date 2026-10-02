@@ -5,7 +5,8 @@
  *
  *   ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/check-examples.ts
  *
- * About a dozen calls, a few rows each. Pass --base to point at another API.
+ * About a dozen calls, a few rows each. Pass --base to point at another API. A program marked
+ * arcmira_execute_write changes the account, so it is listed and skipped, never run.
  */
 import { EXAMPLES } from '../src/reference.ts';
 import { TASK_SKILLS } from '../src/skills.ts';
@@ -30,8 +31,12 @@ function undefinedPaths(value: unknown, path = '$', out: string[] = []): string[
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (...args: string[]) => (...args: unknown[]) => Promise<unknown>;
 let failed = 0;
-const PROGRAMS = [...EXAMPLES, ...TASK_SKILLS.flatMap((s) => s.programs.map((p) => ({ title: `${s.name}: ${p.title}`, code: p.code })))];
+const PROGRAMS = [...EXAMPLES, ...TASK_SKILLS.flatMap((s) => s.programs.map((p) => ({ title: `${s.name}: ${p.title}`, code: p.code, write: p.tool === 'write' })))];
 for (const [i, example] of PROGRAMS.entries()) {
+  if ('write' in example && example.write) {
+    console.log(`${i + 1}. ${example.title}: skipped (writes to the account)`);
+    continue;
+  }
   const { arcmira, meter } = createArcmira({
     base,
     fetch: ((url: string, init?: RequestInit) => fetch(url, { ...init, headers: { ...(init?.headers as Record<string, string>), authorization: `Bearer ${key}` } })) as typeof fetch,

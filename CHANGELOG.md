@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.0
+
+Four tools with the `arcmira_` prefix, monitors from the agent, and one rule for money. Owner rulings of 2026-10-02.
+
+- `arcmira_describe` (was `describe`) and `arcmira_execute_read` (was `execute`) are read-only. `arcmira_execute_write` runs the same client with the account writes added: `arcmira.monitors.create`, `arcmira.monitors.update` (including `isPaused`) and `arcmira.monitors.addEntities`. It is not read-only and not destructive: nothing is deleted. `arcmira_feedback` takes `category` (`wrong_entity`, `bad_data`, `missing`, `slow`, `confusing`, `other`), `note`, `request_id?` and `call_id?`, and posts one `experience` row to `POST /v1/feedback`. Every tool takes `intent`.
+- `prepare_transcript` is gone. `arcmira.prepare(video)` runs inside `arcmira_execute_read`: it reads the quote and sends `POST /v1/transcriptions` with `max_rows` the quoted rows, `max_on_demand_cents` the quoted on-demand cents (0 when included credits cover it) and an Idempotency-Key, and returns the Job for `arcmira.wait`. A Premium read, preparation and the second read now fit in one program.
+- The account's on-demand budget is the approval. No surface asks the user for a cents amount any more. When a budget or plan blocks a purchase, the agent tells the user to raise the on-demand budget at https://arcmira.com/dashboard/spending or upgrade at https://arcmira.com/pricing, and links the refusal's `unlock.url`.
+- The sandbox outbound enforces an allowlist per tool in the Worker, for client methods and raw `fetch()` alike. Read: `GET /v1/*` and `POST /v1/transcriptions`. Write: the read set plus `POST` and `PATCH` under `/v1/monitors` and `/v1/trackers`, never `DELETE` or the webhook secret rotation. A write method called from the read tool throws `write_tool_required` before any request.
+- Reads gain `arcmira.monitors.list()` and `arcmira.monitors.trackers(id)`. `arcmira.status()` with no argument reports the key, plan, credits and on-demand budget.
+- A result that is empty, an error, truncated or a resolve `ask` ends with one `feedback` line naming its `call_id`.
+- `describe`, `execute` and `prepare_transcript` answer `tool_retired` naming the replacement, like the 0.6.0 names.
+- `company-watch` is now the monitor setup skill: it resolves the entities and every spelling of a topic, lists the user's monitors before suggesting one, asks how updates should arrive one question at a time with a default (email or Slack; as it happens, hourly or daily), and links the Slack connection page. Every skill ends by offering to save what it found to a monitor and with the feedback line.
+- Tool definitions plus instructions grow from 2,193 to 2,716 tokens.
+
 ## 0.8.2
 
 Each tool call is logged to Arcmira's product analytics with the account that made it: the tool, the host, the input (the `execute` program up to 4,000 characters, the `describe` topic, the `prepare_transcript` arguments), the outcome without the result body, the API routes the call made, and the latency. The API redacts credentials and email addresses before storing it. The README's [What we log](README.md#what-we-log) section has the whole list.

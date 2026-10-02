@@ -10,6 +10,8 @@
  * several entities fit, says when it assumed one, and takes the pick back through ID on the second run.
  */
 
+import { LINKS } from './reference.ts';
+
 export interface TaskSkill {
   name: string;
   /** Always-on text in every host's skill listing: keep it under 160 characters. */
@@ -19,10 +21,17 @@ export interface TaskSkill {
   asks: string[];
   /** Task-specific resolution notes; PICK_STEPS (the same for every skill) comes first. */
   ids: string[];
-  programs: ReadonlyArray<{ title: string; code: string }>;
+  /** The procedure, when the task is more than one program. */
+  steps?: string[];
+  /** write: the block runs in arcmira_execute_write; every other block runs in arcmira_execute_read. */
+  programs: ReadonlyArray<{ title: string; code: string; tool?: 'write' }>;
   good: string[];
   traps: string[];
 }
+
+/** The offer every skill closes with when its research found entities (rule 5). */
+export const SAVE_OFFER =
+  'When the answer named companies, people, shows or topics worth following, offer once to save them to a monitor so updates arrive on their own. On a yes, follow the `company-watch` skill: it lists the user\'s monitors first and asks how they want updates.';
 
 /** How every task skill turns a name into the one entity the user meant. */
 export const PICK_STEPS = [
@@ -115,49 +124,73 @@ return {
   },
   {
     name: 'company-watch',
-    description: 'Tracks what podcasts and YouTube shows said about a company or product this week: which shows, how often, momentum, and quotes with links. Uses arcmira.',
-    title: 'Company watch',
+    description: 'Sets up Arcmira monitors: finds the companies, people and topic spellings to follow, then saves them to the right monitor with the delivery the user wants.',
+    title: 'Company watch: set up a monitor',
     summary:
-      'One program answers "what was said about X this week": episode counts per show from `occurrences`, the trend from `momentum`, the catalog notes on each mention from `mentions`, and quotes from `search` filtered to passages about the entity.',
-    asks: ['what is being said about a company, product or brand this week or this month', 'did any show mention us, a competitor or an investor lately', 'is talk about a company rising or fading, and where'],
+      'Turns "keep me posted on X" into a monitor that delivers. Research picks the entity ids: a company or person through `resolve`, a topic through each of its spellings. The user\'s own monitors decide where they go: suggest one that fits, or create one after asking how they want updates. Only the save runs in `arcmira_execute_write`; everything before it reads.',
+    asks: [
+      'keep me posted on a company, a competitor, a person or a topic',
+      'save what this research found to a monitor, or tell me when X comes up on a show',
+      'watch a topic like "data center discourse" across shows',
+    ],
     ids: [
-      'Resolve with no type: the catalog types some companies as product.',
-      'A company name is often a common word ("Linear", "Ramp", "ICE"). State which one the answer covers, for example "Linear, the software company (product, ent_279443)", so the user can catch a wrong pick.',
+      'Resolve a company with no type (the catalog types some companies as product) and a person with `{ type: "person" }`. Name each pick so the user can catch a wrong one before it is saved.',
+      'A topic has spellings. Resolve each variant with `{ type: "topic" }` ("data centers", "datacenters", "data centre", "data center") and keep every distinct id: one tracker per spelling catches what one would miss.',
+      'Never assume a monitor exists ("Competitors" may not). Read `arcmira.monitors.list()` and the trackers of each candidate before suggesting one, and never add an entity a monitor already follows.',
+    ],
+    steps: [
+      'Find what to follow and the monitors that could hold it: the first program below, in `arcmira_execute_read`. Reuse ids the research already found instead of resolving again.',
+      'A monitor fits when its name or its trackers match the subject. Suggest it by name ("Add Linear and Height to your Competitors monitor?") and wait for a yes.',
+      'None fits: ask how the user wants updates, one question at a time, each with a default they can accept with "yes". First where: email to the account address (default) or Slack. Then when: as it happens, an hourly digest, or a daily digest (default daily). Then the name (default: the subject, like "Data center discourse").',
+      `Slack needs the workspace connected first at ${LINKS.integrations}: link it and wait until the user says it is done. Reuse the \`slackIntegration.id\` an existing monitor shows as \`slackIntegrationId\`. When no monitor shows one, create the monitor with email and tell the user to switch its delivery to Slack in the dashboard.`,
+      'Save with the second program, in `arcmira_execute_write`: create the monitor only when none fits, then `addEntities` with every id in one call. Report each id as attached, already followed, or refused with its reason.',
+      'Close with what arrives, where and when, and that `arcmira.monitors.update(id, { isPaused: true })` pauses it; nothing is deleted.',
     ],
     programs: [
       {
-        title: 'The last seven days about one company',
-        code: `${pick('Linear')}
-const after = arcmira.daysAgo(7);
-const [m, occ, notes] = await Promise.all([
-  arcmira.momentum(id),
-  arcmira.occurrences({ entityIds: [id], after, limit: 10 }),
-  arcmira.mentions({ entityId: id, after, limit: 8 }),
-]);
-let quotes = await arcmira.search({ query: m.entity.name, about: [id], after, limit: 5 });
-const quotesTagged = quotes.chunks.length > 0;   // false: the fallback matched the words, which can be a namesake; say so
-if (!quotesTagged) quotes = await arcmira.search({ query: m.entity.name, after, limit: 5 });
-return {
-  entity: { id, name: m.entity.name, type: m.entity.type, page: m.entity.page, assumed, why },
-  window: { after, through: arcmira.today() },
-  momentum: { verdict: m.verdict, last_7d: m.volume.mentions_7d, last_30d: m.volume.mentions_30d, prior_30d: m.volume.mentions_prior_30d, as_of: m.as_of },
-  shows: occ.rows.map(x => ({ show: x.channel_name, channel_id: x.channel_id, episodes: x.count, times_said: x.occurrences })),
-  context: notes.data.map(x => ({ show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at, note: x.description })),
-  quotes_tagged_to_entity: quotesTagged,
-  quotes: quotes.chunks.map(c => ({ said: c.text.slice(0, 300), show: c.channelName, episode: c.videoTitle, date: c.publishedAt, url: c.watchUrl })),
-};`,
+        title: 'Find what to follow, and the monitors that could hold it (arcmira_execute_read)',
+        code: `const NAMES = ["Linear", "Height"], TOPICS = ["data centers", "datacenters", "data centre"];   // the user's subjects; TOPICS: every spelling of one topic
+const follow = [], unresolved = [];
+for (const n of NAMES) {
+  const r = await arcmira.resolve(n);
+  const e = r.best ?? r.suggested;
+  if (e) follow.push({ name: e.name, id: e.id, type: e.type, assumed: Boolean(r.suggested), why: r.suggested?.evidence ?? null });
+  else unresolved.push({ name: n, ask: r.ask ?? null });
+}
+for (const t of TOPICS) {
+  const r = await arcmira.resolve(t, { type: "topic" });
+  const e = r.best ?? r.suggested;
+  if (e && !follow.some(f => f.id === e.id)) follow.push({ name: e.name, id: e.id, type: e.type, spelling: t });
+}
+const { monitors } = await arcmira.monitors.list();
+const existing = await Promise.all(monitors.slice(0, 10).map(async m => ({
+  id: m.id, name: m.name, paused: m.isPaused, frequency: m.notifyFrequency, slack: m.slackIntegration ?? null,
+  follows: (await arcmira.monitors.trackers(m.id)).trackers.map(t => t.displayName ?? t.entityName),
+})));
+return { follow, unresolved, monitors: existing, more_monitors: Math.max(0, monitors.length - 10) };`,
+      },
+      {
+        title: 'Save to a monitor (arcmira_execute_write)',
+        tool: 'write',
+        code: `const MONITOR_ID = null;   // a fitting monitor's id from the first program, or null to create one
+const IDS = ["ent_279443"];   // every id the user agreed to follow
+const DELIVERY = { name: "Competitors", notifyFrequency: "daily" };   // the user's answers; Slack: add notifySlack: true and slackIntegrationId
+const monitor = MONITOR_ID ? { id: MONITOR_ID } : (await arcmira.monitors.create(DELIVERY)).monitor;
+const saved = await arcmira.monitors.addEntities(monitor.id, IDS);
+return { monitor: { id: monitor.id, name: monitor.name ?? null, created: !MONITOR_ID }, results: saved.results };`,
       },
     ],
     good: [
-      'Opens with the entity it covers (name, type, id).',
-      'Gives the verdict (accelerating, flat or fading) and the 7-day and 30-day counts, with `as_of`.',
-      'Lists the shows with episode counts for the window, and states the window.',
-      'Gives two or three quotes in the speakers\' words, each with show, date and the `watchUrl` link, and says what the talk was about without adding facts the results do not carry.',
+      'Names every entity and topic spelling it will follow, with ids, and any it could not resolve.',
+      'Suggests an existing monitor only after reading the user\'s monitors, and says which entities it already follows.',
+      'Asks the delivery questions one at a time with a default each, and links the Slack connection page before choosing Slack.',
+      'After saving, says what arrives, where and how often, and how to pause it.',
     ],
     traps: [
-      'Counts measure the shows Arcmira indexes, not the internet. An empty week means no indexed show said it; cite `as_of` before saying nothing happened.',
-      'Read episode titles and notes before asserting a lone mention: a title far from the company is a homonym the catalog mislabelled.',
-      'Count episodes with `occurrences`, never by counting `mentions` rows (one episode has several rows).',
+      'Never create or change a monitor before the user agreed to where it goes and how it delivers.',
+      'A monitor id comes from `monitors.list()`, never from a name the user said.',
+      '`insufficient_scope` means the sign-in lacks monitors:write or trackers:write: tell the user to reconnect Arcmira and allow monitor changes.',
+      'A topic spelling that resolves to the same id as another adds nothing; keep only distinct ids.',
     ],
   },
   {

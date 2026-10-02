@@ -3,15 +3,16 @@
  *
  *   ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/smoke.ts [mcp-url]
  *
- * Lists the tools, reads describe, then runs one execute program per method plus the error
- * paths a host will hit (a name where an id belongs, a retired tool name, a gate). With no key
- * the transport must answer 401 with the OAuth challenge, and the script stops there. Prints
- * one line per call and never prints the key. Exit 1 when any call is not what the manifest
- * promises. Most probes make one or two API reads. The budget probe makes 40. The purchase probes
- * read a free quote with arcmira.quote, then send prepare_transcript with max_rows 0 and no key,
- * which the API refuses before it claims anything (max_rows_exceeded below the quote, or
- * paid_plan_required on a free plan). The key's usage is read before and after each to show
- * neither spent anything.
+ * Lists the tools, reads arcmira_describe, then runs one arcmira_execute_read program per method
+ * plus the error paths a host will hit (a name where an id belongs, a retired tool name, a gate,
+ * a write from the read tool). With no key the transport must answer 401 with the OAuth
+ * challenge, and the script stops there. Prints one line per call and never prints the key. Exit 1
+ * when any call is not what the manifest promises. Most probes make one or two API reads. The
+ * budget probe makes 40. The purchase probes read a free quote with arcmira.quote, then POST
+ * /v1/transcriptions from the read sandbox with max_rows 0, which the API refuses before it claims
+ * anything (max_rows_exceeded below the quote, or paid_plan_required on a free plan). The key's
+ * usage is read before and after each to show neither spent anything. The write tool only lists
+ * monitors; the smoke never changes the account.
  */
 import { Client } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
@@ -26,7 +27,7 @@ const UNOWNED_VIDEO = 'cdLeJU_1UH8';
 
 interface Probe {
   label: string;
-  tool: 'describe' | 'execute';
+  tool: 'arcmira_describe' | 'arcmira_execute_read' | 'arcmira_execute_write';
   args: Record<string, unknown>;
   /** ok: a result. error: isError with this code in the text. either: a result or a gate. */
   expect: 'ok' | 'either' | { code: string };
@@ -35,28 +36,33 @@ interface Probe {
 }
 
 const PROBES: Probe[] = [
-  { label: 'describe whole', tool: 'describe', args: {}, expect: 'ok', contains: 'ID RULE' },
-  { label: 'describe topic', tool: 'describe', args: { topic: 'sponsors' }, expect: 'ok', contains: 'arcmira.sponsors(' },
-  { label: 'resolve', tool: 'execute', args: { code: 'const r = await arcmira.resolve("Ramp", { type: "organization" }); return { confidence: r.confidence, best: r.best && { id: r.best.id, name: r.best.name } };' }, expect: 'ok', contains: 'ent_14' },
-  { label: 'dates', tool: 'execute', args: { code: 'return { today: arcmira.today(), ago: arcmira.daysAgo(90) };' }, expect: 'ok', contains: 'today' },
-  { label: 'console.log', tool: 'execute', args: { code: 'console.log("hello", { a: 1 }); return 2;' }, expect: 'ok', contains: '"value":2' },
-  { label: 'status channel', tool: 'execute', args: { code: `const s = await arcmira.status({ channelId: "${TBPN}" }); return { indexed: s.channel.searchable_videos, through: s.channel.indexed_through };` }, expect: 'ok', contains: 'indexed' },
-  { label: 'status me', tool: 'execute', args: { code: 'const me = await arcmira.status(); return Object.keys(me);' }, expect: 'ok' },
-  { label: 'episodes', tool: 'execute', args: { code: `const e = await arcmira.episodes("${TBPN}", { limit: 2 }); return e.episodes.map(x => x.video_id);` }, expect: 'ok', contains: '"value":["' },
-  { label: 'mentions', tool: 'execute', args: { code: `const m = await arcmira.mentions({ entityId: "ent_14", channelId: "${TBPN}", limit: 3 }); return { n: m.data.length, first: m.data[0]?.media?.title };` }, expect: 'ok' },
-  { label: 'momentum', tool: 'execute', args: { code: 'const m = await arcmira.momentum("ent_14"); return { verdict: m.verdict, d30: m.volume.mentions_30d };' }, expect: 'ok', contains: 'verdict' },
-  { label: 'occurrences', tool: 'execute', args: { code: `const o = await arcmira.occurrences({ channelIds: ["${TBPN}"], types: ["organization"], limit: 3 }); return o.rows.map(r => [r.name, r.count]);` }, expect: 'ok' },
-  { label: 'sponsors', tool: 'execute', args: { code: `const s = await arcmira.sponsors("${TBPN}", { limit: 3 }); return s.sponsors.map(x => [x.entity.name, x.ad_reads]);` }, expect: 'either' },
-  { label: 'recommendations', tool: 'execute', args: { code: 'const r = await arcmira.recommendations("ent_14", { kind: "organic", limit: 3 }); return r.data.length;' }, expect: 'either' },
-  { label: 'search', tool: 'execute', args: { code: `const s = await arcmira.search({ query: "corporate cards", channelIds: ["${TBPN}"], limit: 2 }); return s.chunks.map(c => c.watchUrl);` }, expect: 'either' },
-  { label: 'transcript window', tool: 'execute', args: { code: 'const t = await arcmira.transcript("cdLeJU_1UH8", { start: 0, end: 30 }); return { lines: (t.lines ?? t.paragraphs ?? []).length };' }, expect: 'either' },
-  { label: 'two calls in parallel', tool: 'execute', args: { code: 'const [a, b] = await Promise.all([arcmira.momentum("ent_14"), arcmira.momentum("ent_323")]); return [a.verdict, b.verdict];' }, expect: 'ok' },
-  { label: 'id_required', tool: 'execute', args: { code: 'return await arcmira.momentum("Ramp");' }, expect: { code: 'id_required' }, contains: 'arcmira.resolve' },
-  { label: 'invalid_video', tool: 'execute', args: { code: 'return await arcmira.transcript("not a video");' }, expect: { code: 'invalid_video' } },
-  { label: 'thrown error', tool: 'execute', args: { code: 'throw new Error("boom");' }, expect: { code: 'program_error' }, contains: 'boom' },
-  { label: 'syntax error', tool: 'execute', args: { code: 'const = ;' }, expect: { code: 'syntax_error' } },
-  { label: 'no network', tool: 'execute', args: { code: 'const r = await fetch("https://example.com/"); return { status: r.status, body: await r.text() };' }, expect: 'ok', contains: 'outbound_refused' },
-  { label: 'call budget', tool: 'execute', args: { code: 'for (let i = 0; i < 50; i++) await arcmira.momentum("ent_14");' }, expect: { code: 'call_budget' } },
+  { label: 'describe whole', tool: 'arcmira_describe', args: {}, expect: 'ok', contains: 'ID RULE' },
+  { label: 'describe topic', tool: 'arcmira_describe', args: { topic: 'sponsors' }, expect: 'ok', contains: 'arcmira.sponsors(' },
+  { label: 'resolve', tool: 'arcmira_execute_read', args: { code: 'const r = await arcmira.resolve("Ramp", { type: "organization" }); return { confidence: r.confidence, best: r.best && { id: r.best.id, name: r.best.name } };' }, expect: 'ok', contains: 'ent_14' },
+  { label: 'dates', tool: 'arcmira_execute_read', args: { code: 'return { today: arcmira.today(), ago: arcmira.daysAgo(90) };' }, expect: 'ok', contains: 'today' },
+  { label: 'console.log', tool: 'arcmira_execute_read', args: { code: 'console.log("hello", { a: 1 }); return 2;' }, expect: 'ok', contains: '"value":2' },
+  { label: 'status channel', tool: 'arcmira_execute_read', args: { code: `const s = await arcmira.status({ channelId: "${TBPN}" }); return { indexed: s.channel.searchable_videos, through: s.channel.indexed_through };` }, expect: 'ok', contains: 'indexed' },
+  { label: 'status me', tool: 'arcmira_execute_read', args: { code: 'const me = await arcmira.status(); return Object.keys(me);' }, expect: 'ok' },
+  { label: 'episodes', tool: 'arcmira_execute_read', args: { code: `const e = await arcmira.episodes("${TBPN}", { limit: 2 }); return e.episodes.map(x => x.video_id);` }, expect: 'ok', contains: '"value":["' },
+  { label: 'mentions', tool: 'arcmira_execute_read', args: { code: `const m = await arcmira.mentions({ entityId: "ent_14", channelId: "${TBPN}", limit: 3 }); return { n: m.data.length, first: m.data[0]?.media?.title };` }, expect: 'ok' },
+  { label: 'momentum', tool: 'arcmira_execute_read', args: { code: 'const m = await arcmira.momentum("ent_14"); return { verdict: m.verdict, d30: m.volume.mentions_30d };' }, expect: 'ok', contains: 'verdict' },
+  { label: 'occurrences', tool: 'arcmira_execute_read', args: { code: `const o = await arcmira.occurrences({ channelIds: ["${TBPN}"], types: ["organization"], limit: 3 }); return o.rows.map(r => [r.name, r.count]);` }, expect: 'ok' },
+  { label: 'sponsors', tool: 'arcmira_execute_read', args: { code: `const s = await arcmira.sponsors("${TBPN}", { limit: 3 }); return s.sponsors.map(x => [x.entity.name, x.ad_reads]);` }, expect: 'either' },
+  { label: 'recommendations', tool: 'arcmira_execute_read', args: { code: 'const r = await arcmira.recommendations("ent_14", { kind: "organic", limit: 3 }); return r.data.length;' }, expect: 'either' },
+  { label: 'search', tool: 'arcmira_execute_read', args: { code: `const s = await arcmira.search({ query: "corporate cards", channelIds: ["${TBPN}"], limit: 2 }); return s.chunks.map(c => c.watchUrl);` }, expect: 'either' },
+  { label: 'transcript window', tool: 'arcmira_execute_read', args: { code: 'const t = await arcmira.transcript("cdLeJU_1UH8", { start: 0, end: 30 }); return { lines: (t.lines ?? t.paragraphs ?? []).length };' }, expect: 'either' },
+  { label: 'two calls in parallel', tool: 'arcmira_execute_read', args: { code: 'const [a, b] = await Promise.all([arcmira.momentum("ent_14"), arcmira.momentum("ent_323")]); return [a.verdict, b.verdict];' }, expect: 'ok' },
+  { label: 'id_required', tool: 'arcmira_execute_read', args: { code: 'return await arcmira.momentum("Ramp");' }, expect: { code: 'id_required' }, contains: 'arcmira.resolve' },
+  { label: 'invalid_video', tool: 'arcmira_execute_read', args: { code: 'return await arcmira.transcript("not a video");' }, expect: { code: 'invalid_video' } },
+  { label: 'thrown error', tool: 'arcmira_execute_read', args: { code: 'throw new Error("boom");' }, expect: { code: 'program_error' }, contains: 'boom' },
+  { label: 'syntax error', tool: 'arcmira_execute_read', args: { code: 'const = ;' }, expect: { code: 'syntax_error' } },
+  { label: 'no network', tool: 'arcmira_execute_read', args: { code: 'const r = await fetch("https://example.com/"); return { status: r.status, body: await r.text() };' }, expect: 'ok', contains: 'outbound_refused' },
+  { label: 'call budget', tool: 'arcmira_execute_read', args: { code: 'for (let i = 0; i < 50; i++) await arcmira.momentum("ent_14");' }, expect: { code: 'call_budget' } },
+  { label: 'monitors list', tool: 'arcmira_execute_read', args: { code: 'const m = await arcmira.monitors.list(); return { monitors: m.monitors.length };' }, expect: 'ok', contains: 'monitors' },
+  { label: 'write method in read', tool: 'arcmira_execute_read', args: { code: 'return await arcmira.monitors.update("mon_x", { isPaused: true });' }, expect: { code: 'write_tool_required' } },
+  { label: 'raw write in read', tool: 'arcmira_execute_read', args: { code: 'const r = await fetch("https://api.arcmira.com/v1/monitors", { method: "POST", body: "{}" }); return { status: r.status, body: await r.text() };' }, expect: 'ok', contains: 'arcmira_execute_write' },
+  { label: 'delete in write', tool: 'arcmira_execute_write', args: { code: 'const r = await fetch("https://api.arcmira.com/v1/monitors/mon_x", { method: "DELETE" }); return { status: r.status, body: await r.text() };' }, expect: 'ok', contains: 'outbound_refused' },
+  { label: 'write tool reads', tool: 'arcmira_execute_write', args: { code: 'const m = await arcmira.monitors.list(); return { monitors: m.monitors.length };' }, expect: 'ok', contains: 'monitors' },
 ];
 
 if (!key) {
@@ -77,29 +83,29 @@ let failed = false;
 const tools = await client.listTools();
 const names = tools.tools.map((tool) => tool.name).sort();
 console.log(`tools/list: ${names.join(', ')}`);
-if (names.join(',') !== 'describe,execute,prepare_transcript') {
+if (names.join(',') !== 'arcmira_describe,arcmira_execute_read,arcmira_execute_write,arcmira_feedback') {
   failed = true;
-  console.log('  expected describe, execute, and prepare_transcript');
+  console.log('  expected arcmira_describe, arcmira_execute_read, arcmira_execute_write and arcmira_feedback');
 }
 for (const tool of tools.tools) {
   const hints = tool.annotations ?? {};
-  const prepares = tool.name === 'prepare_transcript';
-  if (!(hints.readOnlyHint === !prepares && hints.destructiveHint === prepares && hints.idempotentHint === true && hints.openWorldHint === prepares)) {
+  const writes = tool.name === 'arcmira_execute_write';
+  if (!(hints.readOnlyHint === !writes && hints.destructiveHint === false && hints.openWorldHint === false)) {
     failed = true;
     console.log(`  ${tool.name}: hints wrong ${JSON.stringify(hints)}`);
   }
 }
 const instructions = client.getInstructions() ?? '';
-if (!instructions.includes('describe')) {
+if (!instructions.includes('arcmira_describe')) {
   failed = true;
-  console.log('  instructions do not name describe');
+  console.log('  instructions do not name arcmira_describe');
 }
 
 function textOf(result: Awaited<ReturnType<Client['callTool']>>): string {
   return (result.content as Array<{ type: string; text?: string }>).flatMap((part) => (part.type === 'text' && part.text !== undefined ? [part.text] : [])).join('\n');
 }
 
-const describeText = textOf(await client.callTool({ name: 'describe', arguments: {} }));
+const describeText = textOf(await client.callTool({ name: 'arcmira_describe', arguments: {} }));
 for (const method of METHODS) {
   if (!describeText.includes(`arcmira.${method.name}(`)) {
     failed = true;
@@ -119,18 +125,18 @@ for (const probe of PROBES) {
   else if (probe.contains && !text.includes(probe.contains)) verdict = 'MISSING';
   if (verdict !== 'ok') failed = true;
   const summary = text.replace(/\s+/g, ' ').slice(0, 110);
-  console.log(`${verdict.padEnd(10)} ${probe.label.padEnd(22)} ${probe.tool.padEnd(8)} ${isError ? 'isError' : 'result '} ${String(Date.now() - started).padStart(5)}ms  ${summary}`);
+  console.log(`${verdict.padEnd(10)} ${probe.label.padEnd(22)} ${probe.tool.replace('arcmira_', '').padEnd(13)} ${isError ? 'isError' : 'result '} ${String(Date.now() - started).padStart(5)}ms  ${summary}`);
 }
 
-/** What a purchase can move: rows, monetary spend and credits. Read through execute, which never purchases. */
+/** What a purchase can move: rows, monetary spend and credits. */
 async function spend(): Promise<string> {
-  const text = textOf(await client.callTool({ name: 'execute', arguments: { code: 'const { usage } = await arcmira.status(); return [usage.rows_used, usage.current_spend_cents, usage.credits?.available ?? null];' } }));
+  const text = textOf(await client.callTool({ name: 'arcmira_execute_read', arguments: { code: 'const { usage } = await arcmira.status(); return [usage.rows_used, usage.current_spend_cents, usage.credits?.available ?? null];' } }));
   return JSON.stringify((JSON.parse(text) as { value: unknown }).value);
 }
 
 const beforeQuote = await spend();
 const quote = await client.callTool({
-  name: 'execute',
+  name: 'arcmira_execute_read',
   arguments: { code: `const q = await arcmira.quote("${UNOWNED_VIDEO}"); return { owned: q.owned, eligible: q.eligible, rows: q.quote.rows, charge: q.charge };` },
 });
 const quoteText = textOf(quote);
@@ -142,24 +148,33 @@ console.log(`${(quoteOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'quote free, unowne
 
 /** Only below a positive quote on an unowned video does max_rows 0 refuse before any claim. */
 if (quoteOk) {
-  const prepared = await client.callTool({ name: 'prepare_transcript', arguments: { video_id: UNOWNED_VIDEO, max_rows: 0 } });
+  const prepared = await client.callTool({
+    name: 'arcmira_execute_read',
+    arguments: { code: `const r = await fetch("https://api.arcmira.com/v1/transcriptions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ video_id: "${UNOWNED_VIDEO}", max_rows: 0, max_on_demand_cents: 0 }) }); return { status: r.status, body: await r.json() };` },
+  });
   const preparedText = textOf(prepared);
   const afterPrepare = await spend();
-  const refusedCode = prepared.isError === true ? /"code":"([a-z_]+)"/.exec(preparedText)?.[1] : undefined;
+  const refusedCode = /"code":"([a-z_]+)"/.exec(preparedText)?.[1];
   const prepareOk = (refusedCode === 'max_rows_exceeded' || refusedCode === 'paid_plan_required') && afterPrepare === afterQuote;
   if (!prepareOk) failed = true;
   console.log(`${(prepareOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'prepare max_rows 0'.padEnd(22)} prepare  spend ${afterQuote} -> ${afterPrepare}  ${refusedCode ?? preparedText.replace(/\s+/g, ' ').slice(0, 90)}`);
 } else console.log(`skipped    ${'prepare max_rows 0'.padEnd(22)} prepare  ${UNOWNED_VIDEO} is owned or unquoted for this key; pick another UNOWNED_VIDEO`);
 
-const retired = await fetch(url, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${key}` },
-  body: JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'resolve_entities', arguments: { q: 'Ramp' } } }),
-});
-const retiredBody = await retired.text();
-const retiredOk = retired.status === 200 && retiredBody.includes('tool_retired');
-if (!retiredOk) failed = true;
-console.log(`${(retiredOk ? 'ok' : 'UNEXPECTED').padEnd(10)} retired tool name      raw      ${retired.status} ${retiredBody.slice(0, 100)}`);
+for (const [name, args, replacement] of [
+  ['resolve_entities', { q: 'Ramp' }, 'arcmira_describe'],
+  ['execute', { code: 'return 1;' }, 'arcmira_execute_read'],
+  ['prepare_transcript', { video_id: UNOWNED_VIDEO }, 'arcmira.prepare'],
+] as const) {
+  const retired = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${key}` },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name, arguments: args } }),
+  });
+  const retiredBody = await retired.text();
+  const retiredOk = retired.status === 200 && retiredBody.includes('tool_retired') && retiredBody.includes(replacement);
+  if (!retiredOk) failed = true;
+  console.log(`${(retiredOk ? 'ok' : 'UNEXPECTED').padEnd(10)} retired ${name.padEnd(18)} raw      ${retired.status} ${retiredBody.slice(0, 100)}`);
+}
 
 await client.close();
 process.exit(failed ? 1 : 0);

@@ -67,16 +67,9 @@ export interface RateLimit {
   reset: number;
 }
 
-/** The POST /v1/transcriptions body, plus the Idempotency-Key header when one is sent. */
-export interface PrepareTranscript {
-  video_id: string;
-  max_rows?: number;
-  max_on_demand_cents: number;
-  idempotency_key?: string;
-}
-
 export interface ApiClient {
-  prepareTranscript(input: PrepareTranscript): Promise<ApiResult>;
+  /** One JSON POST the server itself makes (arcmira_feedback), with an Idempotency-Key when given. */
+  post<T = Record<string, unknown>>(path: string, body: Record<string, unknown>, options?: { idempotencyKey?: string }): Promise<ApiResult<T>>;
   get<T = Record<string, unknown>>(path: string, query?: Query): Promise<ApiResult<T>>;
   /** Name the host every later call is made for. Sent upstream as x-arcmira-client. */
   setClient(client: ClientInfo | undefined): void;
@@ -185,12 +178,12 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
     },
     routes: () => [...routes],
     get: (path, query = {}) => request(path, query),
-    prepareTranscript: ({ idempotency_key, ...body }) => request('/v1/transcriptions', {}, { body, idempotency_key }),
+    post: (path, body, options = {}) => request(path, {}, { body, idempotency_key: options.idempotencyKey }),
   };
   async function request<T = Record<string, unknown>>(
     path: string,
     query: Query = {},
-    purchase?: { body: Omit<PrepareTranscript, 'idempotency_key'>; idempotency_key?: string },
+    send?: { body: Record<string, unknown>; idempotency_key?: string },
   ): Promise<ApiResult<T>> {
     const url = new URL(base + path);
     for (const [key, value] of Object.entries(query)) {
@@ -202,36 +195,35 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
       url.searchParams.set(key, String(value));
     }
     url.searchParams.set('src', SRC);
-    routes.push(`${purchase ? 'POST' : 'GET'} ${url.pathname}`);
+    routes.push(`${send ? 'POST' : 'GET'} ${url.pathname}`);
     const response = await fetch(url, {
       redirect: 'manual',
       signal: AbortSignal.timeout(30_000),
-      method: purchase ? 'POST' : 'GET',
-      ...(purchase ? { body: JSON.stringify(purchase.body) } : {}),
+      method: send ? 'POST' : 'GET',
+      ...(send ? { body: JSON.stringify(send.body) } : {}),
       headers: {
         authorization: `Bearer ${apiKey}`,
-        ...(purchase ? { 'content-type': 'application/json' } : {}),
-        ...(purchase?.idempotency_key ? { 'idempotency-key': purchase.idempotency_key } : {}),
+        ...(send ? { 'content-type': 'application/json' } : {}),
+        ...(send?.idempotency_key ? { 'idempotency-key': send.idempotency_key } : {}),
         accept: 'application/json',
         'user-agent': USER_AGENT,
         ...(client ? { [CLIENT_HEADER]: client } : {}),
         ...(call ? { [CALL_HEADER]: call.id, [TOOL_HEADER]: call.tool } : {}),
       },
-    }).catch((error: unknown) => {
-      if (purchase) throw error;
-      return Response.json(
+    }).catch(() =>
+      Response.json(
         {
           error: {
             type: 'server_error',
             code: 'upstream_unavailable',
-            message: 'The API read did not complete. Keep the current credential and retry.',
+            message: 'The API request did not complete. Keep the current credential and retry.',
             doc_url: 'https://arcmira.com/docs/errors',
             request_id: `mcp_${crypto.randomUUID()}`,
           },
         },
         { status: 503 },
-      );
-    });
+      ),
+    );
     if (response.status >= 300 && response.status < 400)
       return {
         ok: false,

@@ -3,7 +3,10 @@
  * dynamic Worker loads it as source text; the parent bundles this file as a Text module.
  * Methods mirror the arcmira CLI commands. Every filter takes verbatim ids; a name where an id
  * belongs throws id_required before any network call. fetch() inside the sandbox reaches only the
- * Arcmira API, through the parent's outbound proxy, which adds the caller's credential.
+ * Arcmira API, through the parent's outbound proxy, which adds the caller's credential and refuses
+ * every route outside the tool's allowlist. `access` is "read" (arcmira_execute_read) or "write"
+ * (arcmira_execute_write); a write method in a read program throws write_tool_required before any
+ * network call, and the outbound would refuse it anyway.
  */
 
 export const ENTITY_ID = /^ent_\d+$/;
@@ -88,17 +91,44 @@ function needOptions(method, value, signature) {
 const MAX_WAIT_SECONDS = 25;
 
 const KINDS = { sponsored: 'ad_read', organic: 'endorsement', all: 'all' };
+const FREQUENCIES = new Set(['realtime', 'hourly', 'daily']);
+const PERSON_MATCH_MODES = new Set(['mentions', 'appearances', 'both']);
+/** The monitor fields POST /v1/monitors takes; PATCH also takes isPaused, isCollapsed and sortOrder. */
+const MONITOR_FIELDS = ['name', 'notifyFrequency', 'notifyEmails', 'notifySlack', 'slackIntegrationId', 'slackChannelId', 'notifyWebhook', 'webhookUrl', 'digestDay', 'digestTime'];
+const MONITOR_UPDATE_FIELDS = [...MONITOR_FIELDS, 'isPaused', 'isCollapsed', 'sortOrder'];
+/** POST /v1/monitors/{id}/entities takes at most this many ids per call. */
+const MAX_ENTITY_IDS = 90;
+
+function needMonitorId(value) {
+  if (typeof value !== 'string' || value.trim() === '' || value.length > 100) {
+    throw new ArcmiraError(`A monitor id is the .id of a row from arcmira.monitors.list(), got ${JSON.stringify(value)}. Never pass a monitor name.`, 'id_required');
+  }
+  return encodeURIComponent(value);
+}
+
+function monitorFields(method, value, allowed) {
+  const fields = needOptions(method, value, `arcmira.${method}({ ${allowed.slice(0, 4).join(', ')}, ... })`);
+  const unknown = Object.keys(fields).filter((key) => !allowed.includes(key));
+  if (unknown.length > 0) throw new ArcmiraError(`arcmira.${method} does not take ${unknown.join(', ')}. It takes ${allowed.join(', ')}.`, 'invalid_request');
+  if (fields.notifyFrequency !== undefined && !FREQUENCIES.has(fields.notifyFrequency)) {
+    throw new ArcmiraError('notifyFrequency is realtime (as it happens), hourly (an hourly digest) or daily (a daily digest).', 'invalid_request');
+  }
+  return Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+}
 const SEARCH_KINDS = new Set(['mention', 'recommendation_sponsored', 'recommendation_organic']);
 
 /**
- * @param {{ base: string, fetch?: typeof fetch, maxCalls?: number, now?: () => Date, sleep?: (ms: number) => Promise<void>, onCall?: (call: object) => void }} options
+ * @param {{ base: string, fetch?: typeof fetch, maxCalls?: number, now?: () => Date, sleep?: (ms: number) => Promise<void>, onCall?: (call: object) => void, access?: 'read' | 'write', idempotencyKey?: () => string }} options
  */
-export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCalls = 40, now = () => new Date(), sleep = (ms) => new Promise((done) => setTimeout(done, ms)), onCall }) {
+export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCalls = 40, now = () => new Date(), sleep = (ms) => new Promise((done) => setTimeout(done, ms)), onCall, access = 'read', idempotencyKey = () => crypto.randomUUID() }) {
   const root = base.replace(/\/$/, '');
   const meter = { calls: 0, rate_limit: null, api_build: null };
 
-  /** The parsed body and headers of one v1 GET; a non-2xx answer throws ArcmiraError. */
-  async function call(path, query = {}) {
+  /**
+   * The parsed body and headers of one v1 request; a non-2xx answer throws ArcmiraError. A body
+   * makes it a POST (or `method`), sent as JSON with a fresh Idempotency-Key.
+   */
+  async function call(path, query = {}, send) {
     if (meter.calls >= maxCalls) {
       throw new ArcmiraError(`This program made ${maxCalls} API calls, the cap for one execute. Narrow the query (fewer names, a tighter window) or split the work across programs.`, 'call_budget');
     }
@@ -109,7 +139,12 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       url.searchParams.set(k, String(v));
     }
     const started = Date.now();
-    const res = await doFetch(url.toString(), { redirect: 'manual', headers: { accept: 'application/json' } });
+    const res = await doFetch(
+      url.toString(),
+      send
+        ? { method: send.method ?? 'POST', redirect: 'manual', headers: { accept: 'application/json', 'content-type': 'application/json', 'idempotency-key': idempotencyKey() }, body: JSON.stringify(send.body) }
+        : { redirect: 'manual', headers: { accept: 'application/json' } },
+    );
     const body = await res.json().catch(() => null);
     const limit = Number(res.headers.get('ratelimit-limit'));
     const remaining = Number(res.headers.get('ratelimit-remaining'));
@@ -118,7 +153,7 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       meter.rate_limit = { limit, remaining, reset };
     }
     meter.api_build = res.headers.get('x-arcmira-build') ?? meter.api_build;
-    onCall?.({ path, query, status: res.status, ms: Date.now() - started });
+    onCall?.({ method: send ? (send.method ?? 'POST') : 'GET', path, query, body: send?.body, status: res.status, ms: Date.now() - started });
     if (res.ok && body) return { body, headers: res.headers };
     const err = body?.error ?? {};
     const option = OPTION_FOR_WIRE_PARAM.get(err.param);
@@ -138,6 +173,13 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
 
   async function get(path, query = {}) {
     return (await call(path, query)).body;
+  }
+
+  async function write(method, path, body, verb = 'POST') {
+    if (access !== 'write') {
+      throw new ArcmiraError(`arcmira.${method} changes the account. Run it in arcmira_execute_write; arcmira_execute_read only reads.`, 'write_tool_required');
+    }
+    return (await call(path, {}, { method: verb, body })).body;
   }
 
   const arcmira = {
@@ -229,6 +271,16 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
     async quote(video) {
       return get(`/v1/transcripts/${videoIdOf(video)}/quote`);
     },
+    async prepare(video) {
+      const id = videoIdOf(video);
+      const q = await get(`/v1/transcripts/${id}/quote`);
+      const rows = Number(q?.quote?.rows);
+      if (!Number.isInteger(rows) || rows < 0) throw new ArcmiraError(`The quote for ${id} carried no row count, so nothing was bought. Read arcmira.quote("${id}") and retry.`, 'quote_unreadable');
+      // The account's on-demand budget is the approval: authorize exactly what the quote says included credits do not cover.
+      const cents = q.charge?.from === 'included' ? 0 : Math.max(0, Math.ceil(Number(q.max_on_demand_cents) || 0));
+      const body = (await call('/v1/transcriptions', {}, { body: { video_id: id, max_rows: rows, max_on_demand_cents: cents } })).body;
+      return body.job ?? body;
+    },
     async wait(jobOrId, { timeoutSeconds = MAX_WAIT_SECONDS } = {}) {
       const given = jobOrId?.job ?? jobOrId;
       const id = typeof given === 'string' ? given : given?.id;
@@ -247,6 +299,35 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       if (channelId) return get(`/v1/channels/${needChannelId(channelId, 'channelId')}/coverage`);
       if (jobId) return get(`/v1/transcriptions/${encodeURIComponent(jobId)}`);
       return get('/v1/me');
+    },
+    monitors: {
+      async list() {
+        return get('/v1/monitors');
+      },
+      async trackers(monitorId) {
+        return get(`/v1/monitors/${needMonitorId(monitorId)}/trackers`);
+      },
+      async create(options) {
+        const fields = monitorFields('monitors.create', options, MONITOR_FIELDS);
+        if (typeof fields.name !== 'string' || fields.name.trim() === '') throw new ArcmiraError('arcmira.monitors.create needs name, 1 to 100 characters.', 'invalid_request');
+        if (fields.notifyFrequency === undefined) throw new ArcmiraError('arcmira.monitors.create needs notifyFrequency: ask the user realtime, hourly or daily (default daily).', 'invalid_request');
+        return write('monitors.create', '/v1/monitors', fields);
+      },
+      async update(monitorId, patch) {
+        const path = `/v1/monitors/${needMonitorId(monitorId)}`;
+        const fields = monitorFields('monitors.update', patch, MONITOR_UPDATE_FIELDS);
+        if (Object.keys(fields).length === 0) throw new ArcmiraError('arcmira.monitors.update needs at least one field to change, like { isPaused: true }.', 'invalid_request');
+        return write('monitors.update', path, fields, 'PATCH');
+      },
+      async addEntities(monitorId, entityIds, options) {
+        const path = `/v1/monitors/${needMonitorId(monitorId)}/entities`;
+        const ids = Array.isArray(entityIds) ? entityIds : [entityIds];
+        if (ids.length === 0 || ids.length > MAX_ENTITY_IDS) throw new ArcmiraError(`arcmira.monitors.addEntities takes 1 to ${MAX_ENTITY_IDS} entity ids; split the call.`, 'too_many');
+        const { personMatchMode } = needOptions('monitors.addEntities', options, 'arcmira.monitors.addEntities(monitorId, entityIds, { personMatchMode? })');
+        if (personMatchMode !== undefined && !PERSON_MATCH_MODES.has(personMatchMode)) throw new ArcmiraError('personMatchMode is mentions, appearances or both.', 'invalid_request');
+        const body = { entity_ids: [...new Set(ids.map((id) => needEntityId(id, 'entityIds')))], ...(personMatchMode ? { person_match_mode: personMatchMode } : {}) };
+        return write('monitors.addEntities', path, body);
+      },
     },
   };
   return { arcmira, meter };

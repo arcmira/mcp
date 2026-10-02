@@ -13,13 +13,32 @@ export const DOCS = {
   openapi: 'https://api.arcmira.com/v1/openapi.json',
 } as const;
 
-/** The one rule for new dollar charges. A model cannot see an account's spending settings, so authorization lives in the conversation. */
-export const DOLLAR_RULE =
-  'max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it: state the amount and ask.';
+export const LINKS = {
+  spending: 'https://arcmira.com/dashboard/spending',
+  pricing: 'https://arcmira.com/pricing',
+  integrations: 'https://arcmira.com/dashboard/integrations',
+} as const;
 
-export const ACCESS_GUIDANCE = 'When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not upgrade a plan. Requested Premium work may use included credits without another confirmation. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.';
+/**
+ * The one rule for money (owner ruling 2026-10-02). On-demand spend extends the plan and the
+ * account's on-demand budget is the approval, so no surface ever asks the user for a cents amount.
+ */
+export const BUDGET_RULE = `On-demand spend extends the plan: the account's on-demand budget is the approval, so never ask the user for a cents amount. When a budget or plan blocks a purchase (spend_limit_exceeded, quota_exceeded, a plan gate), tell the user to raise the on-demand budget at ${LINKS.spending} or upgrade the plan at ${LINKS.pricing} (not on Ultra or Enterprise), and link unlock.url when the refusal carries one.`;
 
-const PREMIUM_PREPARATION = `PREMIUM PREPARATION. Read Premium with the Premium worked example, swapping in the video id. ready: answer from lines. pending after wait's 25 seconds: run it again. preparation_required: call the prepare_transcript tool with { video_id } (a Premium request authorizes included credits; do not ask again), then run the same program again. ${DOLLAR_RULE} The quote prices the whole video (75 rows per 15-minute quarter, four credits per row); start and end never lower it, and arcmira.quote(video) reads it for free. A Job in state failed or refunded carries error; status refund_pending is not a completed refund. Plans without Premium answer captions with an access gate: report it, never present captions as Premium.`;
+/** Rule 5: monitors are the user's, so the agent reads them before it suggests or creates one. */
+export const MONITOR_RULE = `MONITORS. Never assume a monitor exists ("Competitors" may not). To follow entities the research found: list the user's monitors with arcmira.monitors.list() and suggest any whose name or trackers fit. If none fits, ask how they want updates, one question at a time, each with a default: email (default) or Slack, then as it happens, an hourly digest or a daily digest (default daily). Slack needs the workspace connected first at ${LINKS.integrations}: link it. For a topic, resolve its spelling variants ("data centers", "datacenters", "data centre") and follow every one that is its own topic id. Then in arcmira_execute_write: arcmira.monitors.create when there is no fit, and arcmira.monitors.addEntities with every id in one call. Pause with arcmira.monitors.update(id, { isPaused: true }); there is no delete.`;
+
+/** Rule 6b: the closing line of every skill. */
+export const FEEDBACK_LINE = 'If anything was wrong, slow, or missing for the user, send one arcmira_feedback.';
+
+/** The result nudge (rule 6a), with the call it is about. */
+export function feedbackNudge(callId: string): string {
+  return `If this was wrong, slow, or missing for the user, send one arcmira_feedback with call_id ${callId}.`;
+}
+
+export const ACCESS_GUIDANCE = 'When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not upgrade a plan. Requested Premium work uses included credits, then on-demand within the account\'s budget, without another confirmation. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.';
+
+const PREMIUM_PREPARATION = `PREMIUM PREPARATION. Read Premium with the Premium worked example, swapping in the video id. ready: answer from lines. pending after wait's 25 seconds: run it again. preparation_required: the same program calls arcmira.prepare(video), which reads the quote and buys exactly it (included credits first, then on-demand within the account's budget), then waits and reads again; a Premium request is the go-ahead, so do not ask. ${BUDGET_RULE} The quote prices the whole video (75 rows per 15-minute quarter, four credits per row); start and end never lower it, and arcmira.quote(video) reads it for free. A Job in state failed or refunded carries error; status refund_pending is not a completed refund. Plans without Premium answer captions with an access gate: report it, never present captions as Premium.`;
 
 export const COVERAGE_GUIDANCE = 'Search as_of is the newest publication date among the returned passages, not the date the whole index was updated. For channel freshness, call arcmira.status({ channelId }) and report channel.search_indexed_through for transcript search. A result date or an empty query does not establish missing recent episodes.';
 
@@ -34,6 +53,8 @@ export interface MethodDoc {
   signature: string;
   returns: string;
   notes: string[];
+  /** write: only arcmira_execute_write runs it; arcmira_execute_read throws write_tool_required. */
+  access?: 'write';
 }
 
 export const METHODS: readonly MethodDoc[] = [
@@ -99,20 +120,59 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'quote',
     signature: 'arcmira.quote(videoIdOrUrl)',
-    returns: '{ video_id, duration_seconds, owned, eligible, quote{quarters, rows}, charge{unit, amount, from}, max_on_demand_cents }',
+    returns: '{ video_id, duration_seconds, owned, eligible, quote{quarters, rows}, charge{unit, amount, from: included | on_demand | mixed}, max_on_demand_cents }',
     notes: ['The free whole-video Premium quote. It never buys.'],
+  },
+  {
+    name: 'prepare',
+    signature: 'arcmira.prepare(videoIdOrUrl)',
+    returns: 'the Job { id, video_id, state: pending | ready | failed | refunded, status, charge, next_poll_seconds, status_url }',
+    notes: ['Buys the whole-video Premium transcript at its current quote: POST /v1/transcriptions with max_rows the quoted rows, max_on_demand_cents the quoted on-demand cents (0 when included credits cover it) and an Idempotency-Key. A video already bought answers its existing Job and never buys twice. Pass the Job to arcmira.wait.'],
   },
   {
     name: 'wait',
     signature: 'arcmira.wait(jobOrId, { timeoutSeconds? })',
     returns: 'the latest Job { id, video_id, state: pending | ready | failed | refunded, status, stage, charge, next_poll_seconds, error?, status_url }',
-    notes: ['Polls a preparation Job at its next_poll_seconds until state is not pending, for at most timeoutSeconds (default and maximum 25). Takes the Job prepare_transcript returned, a body that carries one as .job, or its id. Still pending at the timeout: call wait again in the next execute.'],
+    notes: ['Polls a preparation Job at its next_poll_seconds until state is not pending, for at most timeoutSeconds (default and maximum 25). Takes the Job arcmira.prepare returned, a body that carries one as .job, or its id. Still pending at the timeout: call wait again in the next program.'],
   },
   {
     name: 'status',
     signature: 'arcmira.status({ channelId? | jobId? })',
-    returns: '{ channel{youtube_channel_id, searchable_videos, indexed_through, search_indexed_through} } for a show; a transcription job for jobId; the key and plan with no argument',
+    returns: '{ channel{youtube_channel_id, searchable_videos, indexed_through, search_indexed_through} } for a show; a transcription job for jobId; with no argument the key: { tier, scopes, usage{credits{available, on_demand}, current_spend_cents} }',
     notes: ['searchable_videos counts searchable videos for this show. search_indexed_through is the newest publication date in its transcript search index; indexed_through describes overall indexed coverage. Neither date guarantees every earlier episode is present.'],
+  },
+  {
+    name: 'monitors.list',
+    signature: 'arcmira.monitors.list()',
+    returns: '{ monitors[{id, name, isPaused, notifyFrequency, notifyEmails, notifySlack, trackerCount, slackIntegration{team_name, channel_name}}] }',
+    notes: [MONITOR_RULE],
+  },
+  {
+    name: 'monitors.trackers',
+    signature: 'arcmira.monitors.trackers(monitorId)',
+    returns: '{ trackers[{id, entityName, entityType, displayName, isPaused}] }',
+    notes: ['What one monitor already follows, so a suggestion never adds a duplicate.'],
+  },
+  {
+    name: 'monitors.create',
+    signature: 'arcmira.monitors.create({ name, notifyFrequency, notifyEmails?, notifySlack?, slackIntegrationId?, slackChannelId?, digestTime? })',
+    returns: '{ monitor{id, name, notifyFrequency, notifyEmails, notifySlack, isPaused} }',
+    notes: ['notifyFrequency: realtime (as it happens) | hourly | daily (digests), from the user\'s answer. Email goes to the account email; notifyEmails adds recipients, who confirm before delivery. notifySlack needs a Slack integration connected in the dashboard.'],
+    access: 'write',
+  },
+  {
+    name: 'monitors.update',
+    signature: 'arcmira.monitors.update(monitorId, { name?, notifyFrequency?, notifyEmails?, notifySlack?, isPaused?, ... })',
+    returns: '{ monitor }',
+    notes: ['Changes delivery or pauses: { isPaused: true } stops delivery and keeps the monitor.'],
+    access: 'write',
+  },
+  {
+    name: 'monitors.addEntities',
+    signature: 'arcmira.monitors.addEntities(monitorId, entityIds, { personMatchMode? })',
+    returns: '{ monitor_id, results[{entity_id, tracker_id, created, attached, reason?}] }',
+    notes: ['Up to 90 ent_ ids in one call. Reuses the account\'s tracker for an entity, else creates one by id, and attaches each to the monitor; an id that cannot attach comes back attached: false with reason while the rest attach. personMatchMode for people: mentions (default) | appearances | both.'],
+    access: 'write',
   },
 ];
 
@@ -161,11 +221,12 @@ const inB = new Map(b.sponsors.map(s => [s.entity.id, s.ad_reads]));
 return a.sponsors.filter(s => inB.has(s.entity.id)).map(s => ({ name: s.entity.name, id: s.entity.id, ad_reads: [s.ad_reads, inB.get(s.entity.id)] }));`,
   },
   {
-    title: 'A Premium transcript: who speaks in the first minute (run, prepare if asked, run again)',
+    title: 'A Premium transcript: who speaks in the first minute (read, prepare when asked, wait, read)',
     code: `const read = () => arcmira.transcript("cdLeJU_1UH8", { quality: "premium", start: 0, end: 60 });
 let t = await read();
-if (t.state === "pending" && (await arcmira.wait(t.job)).state === "ready") t = await read();
-if (t.state !== "ready") return t;   // preparation_required: call prepare_transcript, then run this again
+const job = t.state === "preparation_required" ? await arcmira.prepare("cdLeJU_1UH8") : t.job;
+if (t.state !== "ready" && (await arcmira.wait(job)).state === "ready") t = await read();
+if (t.state !== "ready") return t;   // still pending: run this again
 const name = new Map(t.speakers.map(s => [s.id, s.name]));
 return t.lines.map(l => \`[\${l.start}] \${name.get(l.speaker)}: \${l.text}\`);`,
   },
@@ -204,13 +265,15 @@ export const QUIRKS = [
 
 export const MAX_CALLS = 40;
 
-export const ERRORS = `Errors throw ArcmiraError with .code and, for gates, .unlock { tier, url }: id_required (a name where an id belongs; call arcmira.resolve first), invalid_video, too_many (over an id cap), entity_not_found, filter_requires_paid, recommendations_not_enabled, quota_exceeded, rate_limited (.retry_after_seconds), call_budget (over ${MAX_CALLS} API calls in one program). See ${DOCS.errors}.`;
+export const ERRORS = `Errors throw ArcmiraError with .code and, for gates, .unlock { tier, url }: id_required (a name where an id belongs; call arcmira.resolve first), invalid_video, too_many (over an id cap), entity_not_found, filter_requires_paid, recommendations_not_enabled, quota_exceeded and spend_limit_exceeded (the budget rule), insufficient_scope (the sign-in lacks monitors:write or trackers:write: reconnect and allow it), write_tool_required (a monitors write in arcmira_execute_read), rate_limited (.retry_after_seconds), call_budget (over ${MAX_CALLS} API calls in one program). See ${DOCS.errors}.`;
 
 const ROUTING =
-  'WHICH METHOD. A quote or what was said about a topic: search. Whether and when a name came up: mentions. How hot something is: momentum. What a show talks about, what two shows share, what one episode mentions, how many episodes mentioned X in a window: occurrences. Who sponsors a show: sponsors. Who recommends a brand: recommendations. The latest episode: episodes(channelId, { limit: 1 }). How many videos a show has indexed and its as-of date: status({ channelId }). One video\'s words: transcript.';
+  'WHICH METHOD. A quote or what was said about a topic: search. Whether and when a name came up: mentions. How hot something is: momentum. What a show talks about, what two shows share, what one episode mentions, how many episodes mentioned X in a window: occurrences. Who sponsors a show: sponsors. Who recommends a brand: recommendations. The latest episode: episodes(channelId, { limit: 1 }). How many videos a show has indexed and its as-of date: status({ channelId }). One video\'s words: transcript. The key, plan, credits and on-demand budget: status(). Following entities over time: monitors (the MONITORS note on monitors.list).';
+
+const WRITE_MARK = '   [arcmira_execute_write only]';
 
 function methodText(m: MethodDoc): string {
-  return [`${m.signature}   -> ${m.returns}`, ...m.notes.map((n) => `   ${n}`)].join('\n');
+  return [`${m.signature}   -> ${m.returns}${m.access === 'write' ? WRITE_MARK : ''}`, ...m.notes.map((n) => `   ${n}`)].join('\n');
 }
 
 /** The whole reference, or every signature plus the notes and examples that name one topic (the id rule and routing table stay). */
@@ -218,11 +281,11 @@ export function referenceText(topic?: string): string {
   const wanted = topic?.trim().toLowerCase();
   const hit = (text: string): boolean => !wanted || text.toLowerCase().includes(wanted);
   const methodHits = METHODS.filter((m) => hit(`${m.name} ${m.signature}`));
-  const methods = METHODS.map((m) => (methodHits.length === 0 || methodHits.includes(m) ? methodText(m) : `${m.signature}   -> ${m.returns}`));
+  const methods = METHODS.map((m) => (methodHits.length === 0 || methodHits.includes(m) ? methodText(m) : `${m.signature}   -> ${m.returns}${m.access === 'write' ? WRITE_MARK : ''}`));
   const exampleHits = EXAMPLES.filter((e) => hit(`${e.title} ${e.code}`));
   const examples = exampleHits.length > 0 ? exampleHits : EXAMPLES;
   return [
-    'arcmira client (JavaScript). Every method is async and returns parsed JSON. Your program is the body of an async function with arcmira and ArcmiraError in scope: use await, console.log for progress, and return one compact value with only the fields the answer needs.',
+    'arcmira client (JavaScript). Every method is async and returns parsed JSON. Your program is the body of an async function with arcmira and ArcmiraError in scope: use await, console.log for progress, and return one compact value with only the fields the answer needs. arcmira_execute_read runs every method except the three marked arcmira_execute_write only; arcmira_execute_write runs them all.',
     '',
     ID_RULE,
     '',
@@ -240,6 +303,10 @@ export function referenceText(topic?: string): string {
     '',
     ERRORS,
     '',
+    BUDGET_RULE,
+    '',
+    `FEEDBACK. ${FEEDBACK_LINE} Pick a category (wrong_entity, bad_data, missing, slow, confusing, other) and say what happened in a sentence or two; pass call_id when a result named one, and request_id from an error.`,
+    '',
     `DOCS. API reference ${DOCS.api}, MCP guide ${DOCS.mcp}, error codes ${DOCS.errors}, OpenAPI ${DOCS.openapi}, agent index ${DOCS.llms}.`,
   ].join('\n');
 }
@@ -249,11 +316,14 @@ export function referenceText(topic?: string): string {
 export const SHORT_GUIDE = [
   'Arcmira is the search engine for the spoken web: indexed YouTube and podcast transcripts with a catalog of who is mentioned where, who sponsors whom, and who recommends what on air.',
   'Searches indexed YouTube and podcast transcripts for the passages and metadata requested by the user.',
-  `describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first execute. execute runs read-only JavaScript and returns bounded outcome-first JSON. prepare_transcript prepares Premium from included credits when a Premium read answers preparation_required; do not ask again. ${DOLLAR_RULE}`,
+  'arcmira_describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first program. arcmira_execute_read runs JavaScript that reads, including Premium preparation (arcmira.prepare), and returns bounded outcome-first JSON. arcmira_execute_write runs the same client plus the monitor writes (create, update, addEntities). arcmira_feedback tells Arcmira what was wrong, slow, missing or confusing.',
+  BUDGET_RULE,
   'Write one program per question: resolve every name it carries (arcmira.resolve, with the user\'s own words about the name as context), use best, or suggested and tell the user you assumed it, or return ask.options for the user to pick (a name that resolves to nothing is not in the index), run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
   'Use arcmira.today() and arcmira.daysAgo(n) for date windows. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Keep outside evidence separate from Arcmira results.',
   ACCESS_GUIDANCE,
   COVERAGE_GUIDANCE,
+  'When research finds entities worth following, offer to save them to a monitor: list the user\'s monitors first and never assume one exists (describe topic monitors).',
+  'A result that is empty, an error, truncated or an ask names its call_id: when it was wrong, slow, or missing for the user, send one arcmira_feedback.',
   'Connect with no key and the host signs you in through OAuth, or send Authorization: Bearer <key>. With no account, POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"} and then /v1/signups/verify with the code.',
   `Good first ids: TBPN is channel UC-DRzaGnL_vtBUpCFH5M0tg, All-In Podcast is UCESLZhusAkFfsNsApnjF_Cg, Ramp is ent_14. Docs: ${DOCS.mcp} and ${DOCS.llms}.`,
 ].join(' ');

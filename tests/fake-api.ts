@@ -10,7 +10,7 @@ export function fakeApi(answers: Record<string, ApiResult>): ApiClient & { calls
   const calls: RecordedCall[] = [];
   return {
     calls,
-    async prepareTranscript() { throw new Error("prepare not configured in fixture"); },
+    async post() { throw new Error('post not configured in fixture'); },
     rateLimit: () => null,
     upstreamBuild: () => null,
     setClient() {},
