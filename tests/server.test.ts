@@ -173,7 +173,7 @@ describe('the four tools through the handler', () => {
       ['resolve_entities', 'arcmira_describe'],
       ['describe', 'arcmira_describe'],
       ['execute', 'arcmira_execute_read'],
-      ['prepare_transcript', 'arcmira.prepare'],
+      ['prepare_transcript', 'arcmira.transcript(video'],
     ]) {
       const reply = await callTool(name, {}, () => Response.json({}));
       assert.equal(reply.result.isError, true, name);
@@ -183,7 +183,7 @@ describe('the four tools through the handler', () => {
   });
 });
 
-describe('bounded outcomes and explicit preparation over MCP', () => {
+describe('bounded outcomes and Premium reads over MCP', () => {
   it('preserves pending and quota recovery after 20001 log characters', async () => {
     for (const status of [200, 402, 503]) {
       const pending = responses.get_transcript_pending.body;
@@ -197,7 +197,7 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
       const reply = await callTool(
         'arcmira_execute_read',
         {
-          code: 'console.log("x".repeat(20001)); return await arcmira.transcript("dQw4w9WgXcQ", {quality:"premium"});',
+          code: 'console.log("x".repeat(20001)); return await arcmira.transcript("dQw4w9WgXcQ");',
         },
         () =>
           Response.json(status === 200 ? pending : { error }, {
@@ -254,18 +254,21 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
     assert.equal(result.truncated, true);
     assert.equal(result.calls, 1);
   });
-  it('arcmira.prepare in a read program buys exactly the quote: rows, on-demand cents and an Idempotency-Key', async () => {
+  it('a Premium read of a video not transcribed yet buys exactly the quote: rows, on-demand cents and an Idempotency-Key', async () => {
     for (const [charge, cents, sentCents] of [
       [{ unit: 'credits', amount: 1200, from: 'included' }, 0, 0],
       [{ unit: 'credits', amount: 1200, from: 'mixed' }, 37, 37],
       [{ unit: 'credits', amount: 1200, from: 'on_demand' }, 240, 240],
     ] as const) {
       const posts: Array<{ body: unknown; key: string | null }> = [];
+      let reads = 0;
       const reply = await callTool(
         'arcmira_execute_read',
-        { code: 'const job = await arcmira.prepare("dQw4w9WgXcQ"); return { id: job.id, state: job.state };' },
+        { code: 'const t = await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" }); return { state: t.state, lines: t.lines.length };' },
         (url, init) => {
           if (url.pathname === '/v1/transcripts/dQw4w9WgXcQ/quote') return Response.json({ ...responses.quote_transcription.body, charge, max_on_demand_cents: cents });
+          if (url.pathname === '/v1/transcripts/dQw4w9WgXcQ') return Response.json(reads++ === 0 ? responses.get_transcript_preparation_required.body : responses.get_transcript_ready.body);
+          if (url.pathname.startsWith('/v1/transcriptions/')) return Response.json(responses.get_transcription_ready.body);
           assert.equal(url.pathname, '/v1/transcriptions');
           assert.equal(init?.method, 'POST');
           const body = JSON.parse(String(init?.body));
@@ -277,7 +280,7 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
         { LOADER: fakeLoader() },
       );
       assert.equal(reply.result.isError, undefined, textOf(reply));
-      assert.deepEqual(JSON.parse(textOf(reply)).value, { id: responses.submit_transcription_pending.body.job.id, state: 'pending' });
+      assert.deepEqual(JSON.parse(textOf(reply)).value, { state: 'ready', lines: responses.get_transcript_ready.body.lines.length });
       assert.equal(posts.length, 1);
       assert.deepEqual(posts[0].body, { video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: sentCents });
       assert.match(posts[0].key ?? '', /^[\x21-\x7e]{1,255}$/);
@@ -287,9 +290,11 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
   it('a budget refusal reaches the program as an ArcmiraError with its unlock, and the result carries the feedback line', async () => {
     const reply = await callTool(
       'arcmira_execute_read',
-      { code: 'return await arcmira.prepare("dQw4w9WgXcQ");' },
+      { code: 'return await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" });' },
       (url) =>
-        url.pathname.endsWith('/quote')
+        url.pathname === '/v1/transcripts/dQw4w9WgXcQ'
+          ? Response.json(responses.get_transcript_preparation_required.body)
+          : url.pathname.endsWith('/quote')
           ? Response.json({ ...responses.quote_transcription.body, charge: { unit: 'credits', amount: 1200, from: 'on_demand' }, max_on_demand_cents: 240 })
           : Response.json(
               { error: { type: 'quota_exceeded', code: 'spend_limit_exceeded', message: 'Over the on-demand limit.', unlock: { tier: 'pro', url: 'https://arcmira.com/dashboard/spending' }, doc_url: 'd', request_id: 'req_1' } },
@@ -367,18 +372,6 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
   });
 });
 
-it('a preparation_required read reaches the program as its value, not an error', async () => {
-  const answer = responses.get_transcript_preparation_required;
-  const reply = await callTool(
-    'arcmira_execute_read',
-    { code: 'const t = await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" }); return { state: t.state, rows: t.quote.rows, action: t.action };' },
-    () => Response.json(answer.body, { status: answer.status }),
-    { LOADER: fakeLoader() },
-  );
-  assert.equal(reply.result.isError, undefined);
-  assert.deepEqual(JSON.parse(textOf(reply)).value, { state: 'preparation_required', rows: 300, action: answer.body.action });
-});
-
 it('a pending Premium read stays data under a heavy payload', async () => {
   const pending = responses.get_transcript_pending.body;
   const reply = await callTool(
@@ -386,7 +379,7 @@ it('a pending Premium read stays data under a heavy payload', async () => {
     {
       code: 'return await arcmira.transcript("dQw4w9WgXcQ",{quality:"premium"});',
     },
-    () => Response.json({ data: 'x'.repeat(20001), ...pending }, { status: 202 }),
+    (url) => (url.pathname.startsWith('/v1/transcriptions/') ? Response.json(responses.get_transcription_ready.body) : Response.json({ data: 'x'.repeat(20001), ...pending }, { status: 202 })),
     { LOADER: fakeLoader() },
   );
   const rendered = JSON.parse(textOf(reply));
@@ -394,12 +387,17 @@ it('a pending Premium read stays data under a heavy payload', async () => {
   assert.deepEqual(rendered.value.job, pending.job);
 });
 
-it('a preparation refusal keeps its quote for the program', async () => {
+it('a Premium purchase refusal keeps its quote for the program', async () => {
   const refusal = responses.submit_transcription_max_rows_exceeded;
   const reply = await callTool(
     'arcmira_execute_read',
-    { code: 'try { return await arcmira.prepare("dQw4w9WgXcQ"); } catch (e) { return { code: e.code, quote: e.quote }; }' },
-    (url) => (url.pathname.endsWith('/quote') ? Response.json(responses.quote_transcription.body) : Response.json(refusal.body, { status: refusal.status })),
+    { code: 'try { return await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" }); } catch (e) { return { code: e.code, quote: e.quote }; }' },
+    (url) =>
+      url.pathname === '/v1/transcripts/dQw4w9WgXcQ'
+        ? Response.json(responses.get_transcript_preparation_required.body)
+        : url.pathname.endsWith('/quote')
+          ? Response.json(responses.quote_transcription.body)
+          : Response.json(refusal.body, { status: refusal.status }),
     { LOADER: fakeLoader() },
   );
   assert.deepEqual(JSON.parse(textOf(reply)).value, { code: 'max_rows_exceeded', quote: refusal.body.quote });

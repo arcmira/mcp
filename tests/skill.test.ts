@@ -106,7 +106,7 @@ test('the Premium block appears once, in the transcript notes, and stays out of 
   const { METHODS } = await import('../src/reference.ts');
   const { TASK_SKILLS } = await import('../src/skills.ts');
   const { describeTool, SERVER_INSTRUCTIONS } = await import('../src/tools.ts');
-  const count = (text: string) => text.split('PREMIUM PREPARATION').length - 1;
+  const count = (text: string) => text.split('PREMIUM. ').length - 1;
   const transcript = METHODS.find((m) => m.name === 'transcript')!;
   assert.equal(count(transcript.notes.join(' ')), 1);
   assert.equal(count((await describeTool.run({} as never, null as never)).content[0].text as string), 1);

@@ -36,7 +36,7 @@ description: ${JSON.stringify(DESCRIPTION)}
 
 # Arcmira
 
-Arcmira indexes YouTube and podcast transcripts and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes four tools. \`arcmira_describe\` returns the client reference: every method with its arguments and return fields, worked programs, quirks and error codes. \`arcmira_execute_read\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns; it reads, and prepares Premium transcripts. \`arcmira_execute_write\` runs the same client plus the monitor writes. \`arcmira_feedback\` tells Arcmira what went wrong. The arcmira CLI has commands with the same names; \`arcmira <command> --help\`, \`arcmira schema <command>\` and \`arcmira examples\` are its reference.
+Arcmira indexes YouTube and podcast transcripts and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes four tools. \`arcmira_describe\` returns the client reference: every method with its arguments and return fields, worked programs, quirks and error codes. \`arcmira_execute_read\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns; Premium transcripts included. \`arcmira_execute_write\` runs the same client plus the monitor writes. \`arcmira_feedback\` tells Arcmira what went wrong. The arcmira CLI has commands with the same names; \`arcmira <command> --help\`, \`arcmira schema <command>\` and \`arcmira examples\` are its reference.
 
 ## When to use
 
@@ -70,7 +70,7 @@ Anything else (one video's transcript, a topic across shows, who recommends a pr
 6. Return only the fields the answer needs, not whole responses.
 7. ${COVERAGE_GUIDANCE} Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`. When the user names no window, use the last 30 days; a week of the index is often thin.
 8. Link each name in the answer to the \`page\` field the result carries. Do not build arcmira.com URLs by hand.
-9. Premium: when a Premium read answers \`preparation_required\`, the same program calls \`arcmira.prepare(video)\`, then \`arcmira.wait(job)\`, then reads again. A Premium request is the go-ahead; do not ask.
+9. Premium: \`arcmira.transcript(video, { quality: "premium" })\` returns the lines, buying the transcript within the account's budget when it is not transcribed yet. A Premium request is the go-ahead; do not ask. Still pending: read again in the next program.
 10. ${BUDGET_RULE}
 
 ## Monitors

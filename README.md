@@ -69,28 +69,25 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 
 | Tool | Input | Returns |
 |---|---|---|
-| `arcmira_describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, every method with arguments and return fields, nine worked example programs, the quirks that cost answers, the budget and monitor rules, error codes, and doc links. About 23,000 characters; `topic` narrows it to one method and its examples. Never bills. |
-| `arcmira_execute_read` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Reads, the user's monitors, and Premium preparation (`arcmira.prepare`). Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
+| `arcmira_describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, every method with arguments and return fields, nine worked example programs, the quirks that cost answers, the budget and monitor rules, error codes, and doc links. About 22,000 characters; `topic` narrows it to one method and its examples. Never bills. |
+| `arcmira_execute_read` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Reads, Premium transcripts included, and the user's monitors. Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
 | `arcmira_execute_write` | `code` | The same as `arcmira_execute_read`, with the account writes added: `arcmira.monitors.create`, `arcmira.monitors.update` (including `isPaused`), `arcmira.monitors.addEntities` and `arcmira.monitors.attachTrackers`. Nothing is deleted. |
 | `arcmira_feedback` | `category`, `note`, `request_id?`, `call_id?` | One `POST /v1/feedback` of type `experience`. `category` is `wrong_entity`, `bad_data`, `missing`, `slow`, `confusing` or `other`; `note` says what happened. Returns the feedback id. |
 
 Every tool also takes an optional `intent`, at most 300 characters: the user's request in a few words. A host that omits it loses nothing. See [What we log](#what-we-log).
 
-`arcmira_describe`, `arcmira_execute_read` and `arcmira_feedback` are read-only: they change nothing on the account. Premium preparation is a read; it spends credits the way any metered read does. `arcmira_execute_write` is not read-only and not destructive: it creates and changes monitors and trackers, and pauses instead of deleting.
+`arcmira_describe`, `arcmira_execute_read` and `arcmira_feedback` are read-only: they change nothing on the account. Every read is metered, Premium included. `arcmira_execute_write` is not read-only and not destructive: it creates and changes monitors and trackers, and pauses instead of deleting.
 
 On-demand spend extends the plan. The account's on-demand budget is the approval, so an agent never asks the user for a cents amount. When a budget or plan blocks a purchase (`spend_limit_exceeded`, `quota_exceeded`, a plan gate), the agent tells the user to raise the on-demand budget at https://arcmira.com/dashboard/spending or upgrade the plan at https://arcmira.com/pricing, and links the refusal's `unlock.url`.
 
-A Premium transcript takes one program. Run this in `arcmira_execute_read`:
+A Premium transcript is one read in `arcmira_execute_read`:
 
 ```javascript
-const read = () => arcmira.transcript("cdLeJU_1UH8", { quality: "premium" });
-let t = await read();
-const job = t.state === "preparation_required" ? await arcmira.prepare("cdLeJU_1UH8") : t.job;
-if (t.state !== "ready" && (await arcmira.wait(job)).state === "ready") t = await read();
+const t = await arcmira.transcript("cdLeJU_1UH8", { quality: "premium" });
 return t.state === "ready" ? t.lines : t;
 ```
 
-`ready` returns the lines. `state: preparation_required` carries the whole-video `quote`; `arcmira.prepare(video)` reads the quote and sends `POST /v1/transcriptions` with `max_rows` the quoted rows, `max_on_demand_cents` the quoted on-demand cents (0 when included credits cover it) and an Idempotency-Key, and returns the Job. A video already bought answers its existing Job. `arcmira.wait` polls the Job at its `next_poll_seconds` for up to 25 seconds; a Job still `pending` after that needs one more run. The quote prices the whole video at 75 rows per 15-minute quarter and four credits per row, and `start` and `end` never lower it.
+When the video is not transcribed yet, the read buys it at its quote: it sends `POST /v1/transcriptions` with `max_rows` the quoted rows, `max_on_demand_cents` the quoted on-demand cents (0 when included credits cover it) and an Idempotency-Key, waits up to 25 seconds, and reads again. A video already bought is never bought twice. Still `pending` after that: run the same read in the next program. The price covers the whole video at 75 rows per 15-minute quarter and four credits per row, and `start` and `end` never lower it; `arcmira.quote(video)` reads it for free.
 
 Results that are empty, an error, truncated or a resolve `ask` end with one line, `feedback`, which names the call: `If this was wrong, slow, or missing for the user, send one arcmira_feedback with call_id mcpc_...`.
 
@@ -105,11 +102,9 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 | `arcmira.sponsors(channelId, { minAdReads?, status?, limit? })` | `GET /v1/channels/{id}/sponsors` | Recurring sponsors of one show |
 | `arcmira.recommendations(entityId, { kind?, channelId?, after?, before?, limit?, cursor? })` | `GET /v1/entities/{id}/recommendations` | Who recommends one entity, sponsored or organic, with the quote |
 | `arcmira.episodes(channelId, { limit?, after?, before? })` | `GET /v1/channels/{id}/videos` | Newest indexed episodes, with the `video_id` the others take |
-| `arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })` | `GET /v1/transcripts/{video_id}` | The transcript of one video, captions or Premium, whole or a window |
+| `arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })` | `GET /v1/transcripts/{video_id}`; for Premium not yet transcribed, also the quote, `POST /v1/transcriptions` and the Job | The transcript of one video, captions or Premium, whole or a window |
 | `arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })` | `GET /v1/mentions/counts` | What shows talk about, what they share, what one episode mentions |
 | `arcmira.quote(videoIdOrUrl)` | `GET /v1/transcripts/{video_id}/quote` | The free whole-video Premium quote: rows, credits, and any on-demand cents |
-| `arcmira.prepare(videoIdOrUrl)` | `GET /v1/transcripts/{video_id}/quote`, `POST /v1/transcriptions` | Buys the quoted Premium transcript within the account's on-demand budget; returns the Job |
-| `arcmira.wait(jobOrId, { timeoutSeconds? })` | `GET /v1/transcriptions/{id}` | Polls a preparation Job at its `next_poll_seconds` until it is no longer pending, for at most 25 seconds; returns the latest Job |
 | `arcmira.status({ channelId?, jobId? })` | `GET /v1/channels/{id}/coverage`, `GET /v1/transcriptions/{id}`, `GET /v1/me` | Coverage and the index date, a transcription job, or the key, plan, credits and on-demand budget |
 | `arcmira.monitors.list()` | `GET /v1/monitors` | The user's monitors, with delivery settings and tracker counts |
 | `arcmira.monitors.trackers(monitorId)` | `GET /v1/monitors/{id}/trackers` | What one monitor already follows |
@@ -177,7 +172,7 @@ Before the record is stored, the API replaces anything that looks like a credent
 
 ## Upgrading from 0.8
 
-`describe` is now `arcmira_describe`, `execute` is now `arcmira_execute_read`, and `prepare_transcript` is now `arcmira.prepare(video)` inside `arcmira_execute_read`. A host that cached the old list and calls an old name gets `tool_retired`, which names the replacement. `max_on_demand_cents` is no longer an input: `arcmira.prepare` sends what the quote says, and the account's on-demand budget decides.
+`describe` is now `arcmira_describe`, `execute` is now `arcmira_execute_read`, and `prepare_transcript` is now a Premium read, `arcmira.transcript(video, { quality: "premium" })`, inside `arcmira_execute_read`. A host that cached the old list and calls an old name gets `tool_retired`, which names the replacement. `max_on_demand_cents` is no longer an input: `arcmira.prepare` sends what the quote says, and the account's on-demand budget decides.
 
 ## Upgrading from 0.6.0
 
