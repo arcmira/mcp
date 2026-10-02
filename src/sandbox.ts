@@ -136,7 +136,7 @@ const under = (path: string, root: string): boolean => path === root || path.sta
 
 /**
  * The routes a sandbox program may call, by tool. Read: any GET under /v1, and POST
- * /v1/transcriptions (Premium preparation is a read, ruling 2026-10-02). Write adds POST and PATCH
+ * /v1/transcriptions (a Premium read buys within the budget, ruling 2026-10-02). Write adds POST and PATCH
  * under /v1/monitors and /v1/trackers, never DELETE, and never the webhook secret rotation, which
  * breaks the user's existing webhook verification.
  */
@@ -234,7 +234,7 @@ export async function runProgram(host: SandboxHost, code: string): Promise<Execu
             unknownOutcome(
               'TimeoutError',
               'timeout',
-              'The program exceeded 30 seconds. Its call count and final outcome are unknown. Requests may still finish and consume rows; a preparation or monitor change it started may have gone through. Retry with a smaller program, or check arcmira.status({ jobId }) or arcmira.monitors.list() before repeating a change.',
+              'The program exceeded 30 seconds. Its call count and final outcome are unknown. Requests may still finish and consume rows; a Premium purchase or monitor change it started may have gone through. Retry with a smaller program, or check arcmira.status({ jobId }) or arcmira.monitors.list() before repeating a change.',
             ),
           ),
         TIME_LIMIT_MS,

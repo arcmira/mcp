@@ -91,8 +91,9 @@ function needOptions(method, value, signature) {
   return value;
 }
 
-/** wait stops here so its last poll still fits inside the 30-second execute limit. */
+/** A Premium read stops waiting here so its last poll still fits inside the 30-second execute limit. */
 const MAX_WAIT_SECONDS = 25;
+const RETIRED_PREMIUM = 'arcmira.prepare and arcmira.wait are gone: arcmira.transcript(video, { quality: "premium" }) returns the lines, buying the transcript within the account\'s on-demand budget when it is not transcribed yet.';
 
 const KINDS = { sponsored: 'ad_read', organic: 'endorsement', all: 'all' };
 const FREQUENCIES = new Set(['realtime', 'hourly', 'daily']);
@@ -175,6 +176,31 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
 
   async function get(path, query = {}) {
     return (await call(path, query)).body;
+  }
+
+  /** Buys the whole-video Premium transcript at its quote and returns the Job; a video already bought answers its existing Job. */
+  async function buy(id) {
+    const q = await get(`/v1/transcripts/${id}/quote`);
+    const rows = Number(q?.quote?.rows);
+    if (!Number.isInteger(rows) || rows < 0) throw new ArcmiraError(`The quote for ${id} carried no row count, so nothing was bought. Read arcmira.quote("${id}") and retry.`, 'quote_unreadable');
+    const cents = q.charge?.from === 'included' ? 0 : Math.max(0, Math.ceil(Number(q.max_on_demand_cents) || 0));
+    const body = (await call('/v1/transcriptions', {}, { body: { video_id: id, max_rows: rows, max_on_demand_cents: cents } })).body;
+    return body.job ?? body;
+  }
+
+  /** Polls a Job at its next_poll_seconds until it leaves pending, for at most MAX_WAIT_SECONDS. */
+  async function waitFor(job) {
+    const deadline = now().getTime() + MAX_WAIT_SECONDS * 1000;
+    for (;;) {
+      if (job.state !== 'pending') return job;
+      const remaining = deadline - now().getTime();
+      if (remaining <= 0) return job;
+      const { body, headers } = await call(`/v1/transcriptions/${encodeURIComponent(job.id)}`);
+      job = body;
+      if (job.state !== 'pending') return job;
+      const poll = Number(job.next_poll_seconds ?? headers.get('retry-after')) || 10;
+      await sleep(Math.min(poll * 1000, Math.max(0, deadline - now().getTime())));
+    }
   }
 
   async function write(method, path, body, verb = 'POST') {
@@ -263,9 +289,25 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         published_before: dayAfterInclusive(before, 'before'),
       });
     },
+    /**
+     * One video's transcript. A Premium read of a video not yet transcribed buys it at its quote (included
+     * credits, then on-demand within the account's budget, which is the approval), waits, and reads again.
+     */
     async transcript(video, options) {
       const { quality, language, timestamps, start, end } = needOptions('transcript', options, 'arcmira.transcript(video, { quality?, language?, timestamps?, start?, end? })');
-      return get(`/v1/transcripts/${videoIdOf(video)}`, { quality, language, timestamps: timestamps === false ? 'false' : undefined, start, end });
+      const id = videoIdOf(video);
+      const read = () => get(`/v1/transcripts/${id}`, { quality, language, timestamps: timestamps === false ? 'false' : undefined, start, end });
+      const first = await read();
+      if (quality !== 'premium' || (first.state !== 'preparation_required' && first.state !== 'pending')) return first;
+      const job = await waitFor(first.state === 'pending' ? first.job : await buy(id));
+      if (job.state === 'ready') return read();
+      return {
+        state: job.state,
+        job,
+        note: job.state === 'pending'
+          ? 'Still transcribing. Run the same read in the next program; it reads this job and never buys twice.'
+          : 'The transcript was not produced; job.error says why. Report it; never substitute captions.',
+      };
     },
     async occurrences(options) {
       const { channelIds, entityIds, videoIds, types, mode, after, before, limit = 20 } = needOptions('occurrences', options, 'arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })');
@@ -287,29 +329,11 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
     async quote(video) {
       return get(`/v1/transcripts/${videoIdOf(video)}/quote`);
     },
-    async prepare(video) {
-      const id = videoIdOf(video);
-      const q = await get(`/v1/transcripts/${id}/quote`);
-      const rows = Number(q?.quote?.rows);
-      if (!Number.isInteger(rows) || rows < 0) throw new ArcmiraError(`The quote for ${id} carried no row count, so nothing was bought. Read arcmira.quote("${id}") and retry.`, 'quote_unreadable');
-      // The account's on-demand budget is the approval: authorize exactly what the quote says included credits do not cover.
-      const cents = q.charge?.from === 'included' ? 0 : Math.max(0, Math.ceil(Number(q.max_on_demand_cents) || 0));
-      const body = (await call('/v1/transcriptions', {}, { body: { video_id: id, max_rows: rows, max_on_demand_cents: cents } })).body;
-      return body.job ?? body;
+    async prepare() {
+      throw new ArcmiraError(RETIRED_PREMIUM, 'method_retired');
     },
-    async wait(jobOrId, options) {
-      const { timeoutSeconds = MAX_WAIT_SECONDS } = needOptions('wait', options, 'arcmira.wait(job, { timeoutSeconds? })');
-      const given = jobOrId?.job ?? jobOrId;
-      const id = typeof given === 'string' ? given : given?.id;
-      if (typeof id !== 'string' || id === '') throw new ArcmiraError('wait takes a Job from prepare_transcript, the body that carries one (.job), or its id.', 'invalid_request');
-      const deadline = now().getTime() + Math.min(Math.max(0, Number(timeoutSeconds) || 0), MAX_WAIT_SECONDS) * 1000;
-      for (;;) {
-        const { body: job, headers } = await call(`/v1/transcriptions/${encodeURIComponent(id)}`);
-        const remaining = deadline - now().getTime();
-        if (job.state !== 'pending' || remaining <= 0) return job;
-        const poll = Number(job.next_poll_seconds ?? headers.get('retry-after')) || 10;
-        await sleep(Math.min(poll * 1000, remaining));
-      }
+    async wait() {
+      throw new ArcmiraError(RETIRED_PREMIUM, 'method_retired');
     },
     async status(options) {
       const { channelId, jobId } = needOptions('status', options, 'arcmira.status({ channelId }) or arcmira.status({ jobId })');

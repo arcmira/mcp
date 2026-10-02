@@ -163,7 +163,7 @@ if (quoteOk) {
 for (const [name, args, replacement] of [
   ['resolve_entities', { q: 'Ramp' }, 'arcmira_describe'],
   ['execute', { code: 'return 1;' }, 'arcmira_execute_read'],
-  ['prepare_transcript', { video_id: UNOWNED_VIDEO }, 'arcmira.prepare'],
+  ['prepare_transcript', { video_id: UNOWNED_VIDEO }, 'arcmira.transcript(video'],
 ] as const) {
   const retired = await fetch(url, {
     method: 'POST',

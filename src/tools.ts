@@ -24,7 +24,7 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 export const RETIRED_TOOLS: Readonly<Record<string, string>> = {
   describe: 'arcmira_describe',
   execute: 'arcmira_execute_read (arcmira_execute_write for monitor changes)',
-  prepare_transcript: 'arcmira.prepare(video) inside arcmira_execute_read',
+  prepare_transcript: 'arcmira.transcript(video, { quality: "premium" }) inside arcmira_execute_read',
   ...Object.fromEntries(
     [
       'search_transcripts',
@@ -95,7 +95,7 @@ const LIMITS = `Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`;
 export const executeReadTool = tool({
   name: 'arcmira_execute_read',
   title: 'Read Arcmira with a program',
-  description: `Runs JavaScript against the Arcmira API through the arcmira client: indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, coverage, the user's monitors, and Premium preparation (arcmira.prepare buys the quoted transcript from included credits, then on-demand within the account's budget; never ask for cents). Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then call/rate/build facts and capped logs. Methods and examples: arcmira_describe. Filters require entity, channel, or video IDs. ${LIMITS}`,
+  description: `Runs JavaScript against the Arcmira API through the arcmira client: indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, coverage, Premium transcripts (a Premium read buys an untranscribed video at its quote, from included credits then on-demand within the account's budget; never ask for cents), and the user's monitors. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then call/rate/build facts and capped logs. Methods and examples: arcmira_describe. Filters require entity, channel, or video IDs. ${LIMITS}`,
   inputSchema: z.object({ code, intent: intentParam }),
   async run(input, context) {
     return execute(input.code, 'read', context);
