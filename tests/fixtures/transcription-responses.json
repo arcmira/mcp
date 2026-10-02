@@ -1,5 +1,5 @@
 {
-  "_source": "Bodies the v1 backend answers at arcmira c60701b1c (frozen OpenAPI sha256 88e6342e). preparation_required is the literal body in apps/backend/tests/v1-transcripts.test.ts; the Job follows formatRequest and the PendingJob schema in tests/v1-transcription-submit.test.ts.",
+  "_source": "Bodies the v1 backend answers at arcmira 7a708648d (frozen OpenAPI sha256 798865d9). preparation_required is the literal body in apps/backend/tests/v1-transcripts.test.ts; the Job follows formatRequest and the PendingJob schema in tests/v1-transcription-submit.test.ts.",
   "get_transcript_ready": {
     "status": 200,
     "body": {

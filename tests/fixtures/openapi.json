@@ -215,6 +215,57 @@
       "Error": {
         "type": "object",
         "properties": {
+          "quote": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptQuote"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "charge": {
+                    "type": "object",
+                    "properties": {
+                      "unit": {
+                        "type": "string",
+                        "enum": [
+                          "rows",
+                          "credits"
+                        ]
+                      },
+                      "amount": {
+                        "type": "number"
+                      },
+                      "from": {
+                        "type": "string",
+                        "enum": [
+                          "included",
+                          "on_demand",
+                          "mixed"
+                        ],
+                        "description": "Where the charge would come from at the current balance."
+                      }
+                    },
+                    "required": [
+                      "unit",
+                      "amount",
+                      "from"
+                    ],
+                    "description": "What the purchase would charge at the current balance. Absent when no current price could be read."
+                  },
+                  "max_on_demand_cents": {
+                    "type": "integer",
+                    "description": "The money ceiling the current quote needs, in whole cents. Send at least this as max_on_demand_cents with a new intent."
+                  }
+                }
+              }
+            ],
+            "description": "The refused price, on a priced refusal: quota_exceeded, max_rows_exceeded, max_charge_exceeded, spend_limit_exceeded, purchase_authority_changed and paid_plan_required."
+          },
+          "existing_request_id": {
+            "type": "string",
+            "description": "On max_charge_exceeded: the accepted purchase for this video that holds a higher money ceiling. Poll it at /v1/transcriptions/{id} instead of starting another."
+          },
           "existingId": {
             "type": "string",
             "description": "On tracker_already_exists, the existing tracker id. Reuse it instead of creating another tracker."
@@ -269,6 +320,9 @@
                   "pagination"
                 ],
                 "description": "Which boundary refused. Present on every gate error; switch on it without parsing the message."
+              },
+              "resource": {
+                "$ref": "#/components/schemas/ErrorResource"
               },
               "unlock": {
                 "type": "object",
@@ -672,6 +726,300 @@
             "description": "The monitor has no webhook to rotate a secret for. Set webhookUrl first."
           }
         ]
+      },
+      "TranscriptQuote": {
+        "type": "object",
+        "properties": {
+          "quarters": {
+            "type": "integer",
+            "description": "Number of 15-minute blocks in the video, ceiling'd, minimum 1."
+          },
+          "rows": {
+            "type": "integer",
+            "description": "Total unlock cost in rows: 75 rows per 15-minute block."
+          }
+        },
+        "required": [
+          "quarters",
+          "rows"
+        ]
+      },
+      "ErrorResource": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "media_rows"
+                ]
+              },
+              "beyond_row": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "beyond_row"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "fresh_media"
+                ]
+              },
+              "window_days": {
+                "type": "integer"
+              },
+              "cutoff": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "window_days",
+              "cutoff"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "sidebar_rows"
+                ]
+              },
+              "section": {
+                "type": "string",
+                "enum": [
+                  "topics",
+                  "entities"
+                ]
+              },
+              "beyond_row": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "section",
+              "beyond_row"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "counts"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "chart"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "pagination"
+                ]
+              },
+              "param": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "offset",
+                  "cursor",
+                  null
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "param"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "premium_transcript"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "filter"
+                ]
+              },
+              "param": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "param"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "commercial"
+                ]
+              },
+              "what": {
+                "type": "string",
+                "enum": [
+                  "sponsors",
+                  "recommendations",
+                  "mention_details",
+                  "community_review",
+                  "paid_split"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "what"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "feature"
+                ]
+              },
+              "feature": {
+                "type": "string",
+                "enum": [
+                  "api",
+                  "export"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "feature"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "rows"
+                ]
+              },
+              "requested": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "remaining": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "requested",
+              "remaining"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "key"
+                ]
+              },
+              "scope": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "read",
+                  "monitors:write",
+                  "trackers:write",
+                  "recommendations:read",
+                  null
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "scope"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "requests"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        ],
+        "description": "The value the boundary withheld, not the reason it refused. kind is a closed vocabulary and the fields beside it are fixed per kind; see https://arcmira.com/docs/errors#resource-kinds."
       },
       "HealthResponse": {
         "type": "object",
@@ -3020,6 +3368,9 @@
                 ],
                 "description": "Which boundary refused. Present on every gate error; switch on it without parsing the message."
               },
+              "resource": {
+                "$ref": "#/components/schemas/ErrorResource"
+              },
               "unlock": {
                 "type": "object",
                 "properties": {
@@ -3360,6 +3711,9 @@
                   "pagination"
                 ],
                 "description": "Which boundary refused. Present on every gate error; switch on it without parsing the message."
+              },
+              "resource": {
+                "$ref": "#/components/schemas/ErrorResource"
               },
               "unlock": {
                 "type": "object",
@@ -3841,6 +4195,9 @@
                   "pagination"
                 ],
                 "description": "Which boundary refused. Present on every gate error; switch on it without parsing the message."
+              },
+              "resource": {
+                "$ref": "#/components/schemas/ErrorResource"
               },
               "unlock": {
                 "type": "object",
@@ -10894,6 +11251,9 @@
                 ],
                 "description": "Which boundary refused. Present on every gate error; switch on it without parsing the message."
               },
+              "resource": {
+                "$ref": "#/components/schemas/ErrorResource"
+              },
               "unlock": {
                 "type": "object",
                 "properties": {
@@ -11199,7 +11559,7 @@
               "analyzing",
               null
             ],
-            "description": "User-facing stage: downloading folds into transcribing. Values: queued (waiting to start), transcribing (downloading or transcribing), analyzing (analysis running). Null for terminal statuses."
+            "description": "User-facing stage: downloading folds into transcribing. Values: queued (waiting to start), transcribing (downloading or transcribing), analyzing (analysis running). Null for terminal statuses and refund_pending."
           },
           "charge": {
             "type": "object",
@@ -11232,7 +11592,7 @@
           },
           "eta_seconds": {
             "type": "integer",
-            "description": "Estimated seconds until completion, re-derived from live pipeline telemetry on every poll. Only present while the request is in flight."
+            "description": "Estimated seconds until completion, re-derived from live pipeline telemetry on every poll. Only present while the request is in flight; absent on refund_pending, which has no completion ETA."
           },
           "next_poll_seconds": {
             "type": "integer",
@@ -11514,9 +11874,6 @@
           "on_demand_cents_per_unit": {
             "type": "number"
           },
-          "prepare_url": {
-            "type": "string"
-          },
           "refund_policy": {
             "type": "string"
           }
@@ -11532,25 +11889,7 @@
           "credits_per_row",
           "max_on_demand_cents",
           "on_demand_cents_per_unit",
-          "prepare_url",
           "refund_policy"
-        ]
-      },
-      "TranscriptQuote": {
-        "type": "object",
-        "properties": {
-          "quarters": {
-            "type": "integer",
-            "description": "Number of 15-minute blocks in the video, ceiling'd, minimum 1."
-          },
-          "rows": {
-            "type": "integer",
-            "description": "Total unlock cost in rows: 75 rows per 15-minute block."
-          }
-        },
-        "required": [
-          "quarters",
-          "rows"
         ]
       },
       "VideoCaptionsResponse": {
@@ -22172,7 +22511,7 @@
         ],
         "operationId": "submit_transcription",
         "summary": "Submit a YouTube video for transcription",
-        "description": "Explicit whole-video Premium purchase in one request: POST { video_id }. With no max_rows the purchase is capped at the current quote, and max_on_demand_cents defaults to zero, so it spends included rows or credits only and moves no money. Idempotency-Key is optional: without one, a purchase already open or owned for this video is returned with existing: true, and two simultaneous requests buy once. max_on_demand_cents above 0 is the only way to move money and requires both Idempotency-Key and max_rows (400 invalid_body names the missing one in param). A video with no known duration or longer than 12 hours answers 400 invalid_query with param video_id. A plan without Premium answers 403 forbidden with unlock. Accepted price, mode, and debit identity persist across retries. Included rows or credits are reserved up front; monetary on-demand usage is reserved until Premium is ready. Existing owned unlocks cost zero. A terminal generation failure refunds the exact original debit and period before reporting refunded. A repeated key returns the same request; different intent with that key returns idempotency_conflict. The body is { job, existing }. Poll job.status_url after Retry-After. A pending job returns 202; a ready, failed or refunded job returns 200. Idempotency-Replayed: true marks a replay of the same key; a different key joined onto the active purchase answers existing: true without it.",
+        "description": "Explicit whole-video Premium purchase in one request: POST { video_id }. With no max_rows the purchase is capped at the current quote, and max_on_demand_cents defaults to zero, so it spends included rows or credits only and moves no money. Idempotency-Key is optional: without one, a purchase already open or owned for this video is returned with existing: true, and two simultaneous requests buy once. max_on_demand_cents above 0 is the only way to move money and requires both Idempotency-Key and max_rows (400 invalid_body names the missing one in param). A video with no known duration or longer than 12 hours answers 400 invalid_body with param video_id. A plan without Premium answers 403 paid_plan_required with unlock. Accepted price, mode, and debit identity persist across retries. Included rows or credits are reserved up front; monetary on-demand usage is reserved until Premium is ready. Existing owned unlocks cost zero. A terminal generation failure refunds the exact original debit and period before reporting refunded. A repeated key returns the same request; different intent with that key returns idempotency_conflict. The body is { job, existing }. Poll job.status_url after Retry-After. A pending job returns 202; a ready, failed or refunded job returns 200. Idempotency-Replayed: true marks a replay of the same key; a different key joined onto the active purchase answers existing: true without it.",
         "security": [
           {
             "bearerAuth": []
@@ -22306,16 +22645,46 @@
             "$ref": "#/components/responses/AuthenticationError"
           },
           "402": {
-            "$ref": "#/components/responses/QuotaExceeded"
+            "description": "quota_exceeded or spend_limit_exceeded. Nothing was charged; quote carries the refused price.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-Arcmira-Version": {
+                "$ref": "#/components/headers/X-Arcmira-Version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "403": {
-            "$ref": "#/components/responses/PermissionError"
+            "description": "paid_plan_required. error.unlock names the plan that buys Premium; quote carries the price.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              },
+              "X-Arcmira-Version": {
+                "$ref": "#/components/headers/X-Arcmira-Version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
-            "description": "Conflict. idempotency_conflict means the Idempotency-Key was finalized with a different request intent.",
+            "description": "Conflict. idempotency_conflict means the Idempotency-Key was finalized with a different request intent. max_rows_exceeded, max_charge_exceeded and purchase_authority_changed carry quote; max_charge_exceeded on an already accepted purchase carries existing_request_id.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
