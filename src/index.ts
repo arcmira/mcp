@@ -35,7 +35,7 @@ interface OutboundProps {
   access?: Access;
 }
 
-/** The largest request body a sandbox program may send upstream. Monitor and preparation bodies are a few hundred bytes. */
+/** The largest request body a sandbox program may send upstream. Monitor and Premium purchase bodies are a few hundred bytes. */
 const OUTBOUND_BODY_CAP = 16_384;
 
 const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,255}$/;

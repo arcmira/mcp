@@ -208,8 +208,7 @@ const SAMPLE_CALLS: Record<string, (a: Arcmira) => Promise<unknown>> = {
   status_job: (a) => a.status({ jobId: '00000000-0000-4000-8000-000000000000' }),
   status_me: (a) => a.status({}),
   quote: (a) => a.quote('https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
-  prepare: (a) => a.prepare('dQw4w9WgXcQ'),
-  wait: (a) => a.wait('00000000-0000-4000-8000-000000000000', { timeoutSeconds: 0 }),
+  transcript_premium: (a) => a.transcript('dQw4w9WgXcQ', { quality: 'premium' }),
   monitors_list: (a) => (a.monitors as unknown as Arcmira).list(),
   monitors_trackers: (a) => (a.monitors as unknown as Arcmira).trackers('mon_1'),
   monitors_create: (a) =>
@@ -238,6 +237,7 @@ for (const [name, call] of Object.entries(SAMPLE_CALLS)) {
   const recording = async (input: string, init?: RequestInit) => {
     urls.push({ url: new URL(input), method: (init?.method ?? 'GET').toLowerCase(), body: typeof init?.body === 'string' ? JSON.parse(init.body) : null });
     return Response.json({
+      state: 'preparation_required',
       quote: { rows: 300 },
       charge: { from: 'mixed' },
       max_on_demand_cents: 12,
