@@ -170,3 +170,36 @@ it('large non-JSON primitive conversion is bounded inside the isolate', async ()
   assert.ok(JSON.stringify(run).length < RESULT_CAP);
   assert.equal(run.truncated, true);
 });
+
+it('a page cut by the output budget recovers every row by rerunning with fewer fields, then paginating', async () => {
+  const ids = Array.from({ length: 200 }, (_, i) => `row-${i + 1}`);
+  const pages: Record<string, { data: Array<{ id: string; description: string }>; has_more: boolean; next_cursor: string | null }> = {
+    first: { data: ids.slice(0, 100).map((id) => ({ id, description: 'A'.repeat(600) })), has_more: true, next_cursor: 'after-row-100' },
+    'after-row-100': { data: ids.slice(100).map((id) => ({ id, description: 'A'.repeat(600) })), has_more: false, next_cursor: null },
+  };
+  const { host: h, outbound } = host({ '/v1/mentions': (url) => Response.json(pages[url.searchParams.get('cursor') ?? 'first']) });
+
+  const whole = JSON.parse(renderExecution(await runProgram(h, 'return await arcmira.mentions({ entityId: "ent_14", limit: 100 });')));
+  assert.equal(whole.truncated, true);
+  assert.ok(whole.value.data.length < 100);
+  assert.deepEqual(whole.truncated_arrays, [{ path: 'value.data', returned: whole.value.data.length, total: 100 }]);
+  assert.doesNotMatch(whole.recovery, /continue with the returned next_cursor/i);
+  assert.match(whole.recovery, /same call/i);
+  assert.match(whole.recovery, /fewer fields/i);
+  assert.match(whole.recovery, /restart pagination/i);
+
+  const collected: string[] = [];
+  let cursor: string | null = null;
+  do {
+    const args = JSON.stringify({ entityId: 'ent_14', limit: 100, ...(cursor ? { cursor } : {}) });
+    const page = JSON.parse(
+      renderExecution(await runProgram(h, `const p = await arcmira.mentions(${args}); return { ids: p.data.map(r => r.id), has_more: p.has_more, next_cursor: p.next_cursor };`)),
+    );
+    assert.equal(page.truncated, false);
+    assert.equal(page.recovery, undefined);
+    collected.push(...page.value.ids);
+    cursor = page.value.has_more ? page.value.next_cursor : null;
+  } while (cursor !== null);
+  assert.deepEqual(collected, ids);
+  assert.deepEqual(outbound.urls.map((u) => u.searchParams.get('cursor')), [null, null, 'after-row-100']);
+});

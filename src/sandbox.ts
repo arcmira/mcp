@@ -20,6 +20,7 @@ const fields = {
   logs_truncated: z.boolean(),
   outcome_uncertain: z.boolean(),
   truncated: z.boolean().optional(),
+  truncated_arrays: z.array(z.object({ path: z.string(), returned: z.number().int(), total: z.number().int() })).optional(),
   calls_started: z.number().int().nonnegative().optional(),
   in_flight: z.number().int().nonnegative().optional(),
 };

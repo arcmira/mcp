@@ -2,6 +2,11 @@ import type { Execution } from "./sandbox.ts";
 
 export const RESULT_CAP = 20_000;
 export const LOG_CAP = 4_000;
+const CUT_LIMIT = 5;
+
+/** Output truncation drops rows the API returned, so the page's own next_cursor would skip them. */
+const RECOVERY =
+  "The output budget cut this result; the API did not. truncated_arrays lists each cut array with its returned and total rows. Rerun the same call with the same cursor, limit and filters, and return fewer fields (map rows to the fields the answer needs). Do not follow next_cursor from this result: it points past rows that were not shown. If a smaller page is needed, restart pagination from the first page with the smaller limit.";
 
 const CONTROL = [
   "state",
@@ -43,7 +48,8 @@ const priority = (key: string) => {
 export function renderExecution(execution: Execution): string {
   let budget = 12_000;
   let truncated = execution.truncated ?? false;
-  function bounded(value: unknown, depth = 0): unknown {
+  let cuts = [...(execution.truncated_arrays ?? [])];
+  function bounded(value: unknown, depth = 0, path = ""): unknown {
     if (
       value === null ||
       value === undefined ||
@@ -67,10 +73,12 @@ export function renderExecution(execution: Execution): string {
       for (const item of value) {
         if (budget <= 0 || items.length >= 100) {
           truncated = true;
+          if (cuts.length < CUT_LIMIT)
+            cuts.push({ path, returned: items.length, total: value.length });
           break;
         }
         budget -= 4;
-        items.push(bounded(item, depth + 1));
+        items.push(bounded(item, depth + 1, `${path}[${items.length}]`));
       }
       return items;
     }
@@ -89,15 +97,15 @@ export function renderExecution(execution: Execution): string {
           break;
         }
         budget -= key.length + 4;
-        result[key] = bounded(item, depth + 1);
+        result[key] = bounded(item, depth + 1, `${path}.${key}`);
       }
       return result;
     }
-    return bounded(String(value), depth);
+    return bounded(String(value), depth, path);
   }
   const outcome = execution.ok
-    ? { value: bounded(execution.value) }
-    : { error: bounded(execution.error) };
+    ? { value: bounded(execution.value, 0, "value") }
+    : { error: bounded(execution.error, 0, "error") };
   const envelope: Record<string, unknown> = {
     ok: execution.ok,
     ...outcome,
@@ -107,8 +115,7 @@ export function renderExecution(execution: Execution): string {
     rate_limit: execution.rate_limit,
     api_build: execution.api_build,
     truncated,
-    recovery:
-      "When truncated, return fewer fields or a smaller page. Continue with the returned next_cursor using the same filters.",
+    ...(truncated ? { truncated_arrays: cuts, recovery: RECOVERY } : {}),
     logs: execution.lines,
     logs_truncated: execution.logs_truncated,
   };
@@ -116,9 +123,11 @@ export function renderExecution(execution: Execution): string {
   let text = JSON.stringify(envelope);
   if (text.length > RESULT_CAP) {
     budget = 1_500;
-    truncated = false;
-    if (execution.ok) envelope.value = bounded(execution.value);
-    else envelope.error = bounded(execution.error);
+    cuts = [...(execution.truncated_arrays ?? [])];
+    if (execution.ok) envelope.value = bounded(execution.value, 0, "value");
+    else envelope.error = bounded(execution.error, 0, "error");
+    envelope.truncated_arrays = cuts;
+    envelope.recovery = RECOVERY;
     envelope.logs = [];
     envelope.logs_truncated =
       execution.lines.length > 0 || execution.logs_truncated;
