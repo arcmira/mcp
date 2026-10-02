@@ -66,7 +66,7 @@ export const describeTool = tool({
 export const executeTool = tool({
   name: 'execute',
   title: 'Run a program against Arcmira',
-  description: `Runs JavaScript against Arcmira's read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then actual call/rate/build facts and capped logs. Timeouts report unknown calls and may leave reads in flight. GET never purchases Premium. Use quote_transcript and, after explicit cost authorization, prepare_transcript. Methods and examples are documented by describe. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and 20,000 characters of output.`,
+  description: `Runs JavaScript against Arcmira's read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then actual call/rate/build facts and capped logs. Timeouts report unknown calls and may leave reads in flight. GET never purchases Premium. For requested Premium work, use quote_transcript and prepare_transcript with included credits and zero dollar overage; no extra confirmation is needed. Methods and examples are documented by describe. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and 20,000 characters of output.`,
   inputSchema: z.object({
     code: z
       .string()
@@ -103,7 +103,7 @@ export const prepareTranscriptTool = tool({
   name: 'prepare_transcript',
   title: 'Prepare a Premium transcript',
   description:
-    'Explicitly authorizes a whole-video Premium purchase and durable preparation. Only call after the user authorizes the supplied max_rows and monetary ceiling. max_on_demand_cents defaults to zero. Persist an idempotency_key before calling; retry an uncertain outcome with the same key and exact same inputs. Returns the public {request, existing?} envelope: 201 ready, 202 pending, 200 replay, or a typed refusal with its current quote. This tool can debit the account. It can only POST /v1/transcriptions; execute remains read-only.',
+    'Prepares a whole Premium video. A user request for Premium authorizes using available included credits; do not ask for another confirmation. Use the current quote to set max_rows and set max_on_demand_cents to zero. Obtain a quote first only if the current refusal did not include one. Extra dollar charges require explicit authorization or an existing account spending policy; never infer dollar authorization from a Premium request. Persist an idempotency_key before calling; retry an uncertain outcome with the same key and exact same inputs. Returns the public {request, existing?} envelope: 201 ready, 202 pending, 200 replay, or a typed refusal with its current quote. This tool can debit the account. It can only POST /v1/transcriptions; execute remains read-only.',
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -118,12 +118,12 @@ export const prepareTranscriptTool = tool({
         .int()
         .min(0)
         .max(3600)
-        .describe('Explicit maximum whole-video row price accepted by the user.'),
+        .describe('Whole-video row ceiling from the current quote. For requested included-credit work, set this without another confirmation.'),
       max_on_demand_cents: z
         .number()
         .nonnegative()
         .optional()
-        .describe('Maximum new monetary overage in cents. Omitted means zero.'),
+        .describe('Maximum new dollar overage in cents. Use zero for included-credit work. A positive ceiling requires explicit dollar authorization or an existing account spending policy.'),
       idempotency_key: z
         .string()
         .min(1)
