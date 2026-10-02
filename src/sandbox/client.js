@@ -190,8 +190,10 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       if (!Number.isFinite(n) || n < 0) throw new ArcmiraError('daysAgo takes a non-negative number of days', 'invalid_date');
       return new Date(now().getTime() - n * 86_400_000).toISOString().slice(0, 10);
     },
-    async resolve(q, { type, context, limit = 8 } = {}) {
-      if (typeof q !== 'string' || q.trim().length < 2) throw new ArcmiraError('resolve needs a name of 2 or more characters', 'invalid_name');
+    async resolve(name, options) {
+      // Agents often write resolve({ name, context }) by analogy with search; take that shape too.
+      const { name: q = name, type, context, limit = 8 } = typeof name === 'object' && name !== null ? name : (options ?? {});
+      if (typeof q !== 'string' || q.trim().length < 2) throw new ArcmiraError('resolve takes a name of 2 or more characters: arcmira.resolve("Ramp", { context })', 'invalid_name');
       if (context !== undefined && typeof context !== 'string') throw new ArcmiraError('context takes the user\'s own words about the name, as one string', 'invalid_request');
       const body = await get('/v1/entities/resolve', { q, type, context, limit });
       return { query: body.query, context: body.context, confidence: body.confidence, best: body.best, suggested: body.suggested, ask: body.ask, candidates: body.candidates, note: body.note };

@@ -149,6 +149,8 @@ describe('the sandbox client', () => {
     const asked = { ...body, context: null, suggested: null, ask };
     const second = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: recording(asked).fetch });
     assert.deepEqual((await second.arcmira.resolve('Sam')).ask, ask);
+    await arcmira.resolve({ name: 'Sam', context: 'the My First Million co-host' });
+    assert.equal(`${urls[1]?.pathname}?${urls[1]?.searchParams}`, '/v1/entities/resolve?q=Sam&context=the+My+First+Million+co-host&limit=8');
     await assert.rejects(arcmira.resolve('Sam', { context: ['co-host'] }), (e: Error & { code: string }) => e.code === 'invalid_request');
   });
 
