@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ACCESS_GUIDANCE, DOCS, ERRORS, EXAMPLES, ID_RULE, METHODS, QUIRKS } from '../src/reference.ts';
+import { ACCESS_GUIDANCE, COVERAGE_GUIDANCE, DOCS, ERRORS, EXAMPLES, ID_RULE, METHODS, QUIRKS } from '../src/reference.ts';
 import { PICK_STEPS, TASK_SKILLS, type TaskSkill } from '../src/skills.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,7 +45,7 @@ Use this skill when the user asks:
 - whether talk about something is accelerating or fading;
 - how to use the arcmira MCP server or the arcmira CLI.
 
-This server holds the transcript data. For anything said on a show, use it before any web search, and answer from Arcmira, not the open web. An empty result means the index has no match.
+Use Arcmira for the indexed transcript research the user requested. Cite returned passages and keep evidence from other sources distinct. An empty result means this query returned no matches.
 
 ## Procedure
 
@@ -54,7 +54,7 @@ This server holds the transcript data. For anything said on a show, use it befor
 3. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
 4. Write one \`execute\` program per question. Resolve, check, and run every query the question needs inside that one program.
 5. Return only the fields the answer needs, not whole responses.
-6. State the date the index runs through (\`indexed_through\` or \`as_of\`). Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`, not from a guessed current date.
+6. ${COVERAGE_GUIDANCE} Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`.
 7. Link each name in the answer to the \`page\` field the result carries. Do not build arcmira.com URLs by hand.
 
 ## The ID rule
@@ -138,7 +138,9 @@ ${t.traps.map((g) => `- ${g}`).join('\n')}
 
 ${ACCESS_GUIDANCE}
 
-Never fill an index gap from memory or the web. Docs: ${DOCS.mcp}
+${COVERAGE_GUIDANCE}
+
+Keep outside evidence separate from Arcmira results. Docs: ${DOCS.mcp}
 `;
 }
 
