@@ -58,9 +58,10 @@ test('every task skill has a short always-on description and a folder under its 
 
 test('every plugin manifest carries the package version, so hosts see each release as an update', () => {
   const version = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
-  for (const manifest of ['plugin.json', '.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.cursor-plugin/plugin.json', 'gemini-extension.json']) {
-    const parsed = JSON.parse(readFileSync(join(ROOT, 'plugins/arcmira', manifest), 'utf8'));
-    assert.equal(parsed.version, version, `plugins/arcmira/${manifest} version`);
+  const manifests = ['plugin.json', '.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.cursor-plugin/plugin.json', 'gemini-extension.json'].map((name) => `plugins/arcmira/${name}`);
+  for (const manifest of [...manifests, 'gemini-extension.json']) {
+    const parsed = JSON.parse(readFileSync(join(ROOT, manifest), 'utf8'));
+    assert.equal(parsed.version, version, `${manifest} version`);
   }
 });
 
