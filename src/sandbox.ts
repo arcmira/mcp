@@ -1,19 +1,17 @@
-import { z } from "zod";
-import clientSource from "./sandbox/client-source.ts";
-import { MAX_CALLS } from "./reference.ts";
-import { rateLimitOf } from "./api.ts";
+import { z } from 'zod';
+import clientSource from './sandbox/client-source.ts';
+import { MAX_CALLS } from './reference.ts';
+import { rateLimitOf } from './api.ts';
 
 export const TIME_LIMIT_MS = 30_000;
-import { LOG_CAP } from "./output.ts";
-import outputSource from "./sandbox/output-source.ts";
-export { RESULT_CAP, LOG_CAP, renderExecution } from "./output.ts";
+import { LOG_CAP } from './output.ts';
+import outputSource from './sandbox/output-source.ts';
+export { RESULT_CAP, LOG_CAP, renderExecution } from './output.ts';
 export const CPU_LIMIT_MS = 5_000;
-export const SANDBOX_COMPAT_DATE = "2026-08-01";
+export const SANDBOX_COMPAT_DATE = '2026-08-01';
 const meterSchema = z.object({
   calls: z.number().int().nonnegative().nullable(),
-  rate_limit: z
-    .object({ limit: z.number(), remaining: z.number(), reset: z.number() })
-    .nullable(),
+  rate_limit: z.object({ limit: z.number(), remaining: z.number(), reset: z.number() }).nullable(),
   api_build: z.string().nullable(),
 });
 const fields = {
@@ -25,14 +23,12 @@ const fields = {
   calls_started: z.number().int().nonnegative().optional(),
   in_flight: z.number().int().nonnegative().optional(),
 };
-const executionSchema = z.discriminatedUnion("ok", [
+const executionSchema = z.discriminatedUnion('ok', [
   z.object({ ...fields, ok: z.literal(true), value: z.unknown() }),
   z.object({
     ...fields,
     ok: z.literal(false),
-    error: z
-      .object({ name: z.string(), code: z.string(), message: z.string() })
-      .passthrough(),
+    error: z.object({ name: z.string(), code: z.string(), message: z.string() }).passthrough(),
   }),
 ]);
 export type Execution = z.infer<typeof executionSchema>;
@@ -126,11 +122,7 @@ export interface SandboxHost {
   apiBase: string;
 }
 
-function unknownOutcome(
-  name: string,
-  code: string,
-  message: string,
-): Execution {
+function unknownOutcome(name: string, code: string, message: string): Execution {
   return {
     ok: false,
     error: { name, code, message },
@@ -143,16 +135,18 @@ function unknownOutcome(
   };
 }
 
-export async function runProgram(
-  host: SandboxHost,
-  code: string,
-): Promise<Execution> {
+export async function runProgram(host: SandboxHost, code: string): Promise<Execution> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const worker = host.loader.load({
       compatibilityDate: SANDBOX_COMPAT_DATE,
-      mainModule: "program.js",
-      modules: { "program.js": programModule(), "user.js": userModule(code), "client.js": clientSource, "output.js": outputSource },
+      mainModule: 'program.js',
+      modules: {
+        'program.js': programModule(),
+        'user.js': userModule(code),
+        'client.js': clientSource,
+        'output.js': outputSource,
+      },
       env: { API_BASE: host.apiBase, MAX_CALLS },
       globalOutbound: host.outbound,
       limits: { cpuMs: CPU_LIMIT_MS, subRequests: MAX_CALLS },
@@ -162,38 +156,41 @@ export async function runProgram(
         () =>
           resolve(
             unknownOutcome(
-              "TimeoutError",
-              "timeout",
-              "The program exceeded 30 seconds. Its call count and final outcome are unknown. Read requests may still finish and consume rows. No purchase was authorized. Retry with a smaller query or inspect the existing preparation status.",
+              'TimeoutError',
+              'timeout',
+              'The program exceeded 30 seconds. Its call count and final outcome are unknown. Read requests may still finish and consume rows. No purchase was authorized. Retry with a smaller query or inspect the existing preparation status.',
             ),
           ),
         TIME_LIMIT_MS,
       );
     });
     const run = (async () => {
-      const response = await worker
-        .getEntrypoint()
-        .fetch("https://sandbox.invalid/run");
+      const response = await worker.getEntrypoint().fetch('https://sandbox.invalid/run');
       const execution = executionSchema.parse(await response.json());
-      const rawCalls = response.headers.get("x-execution-calls");
+      const rawCalls = response.headers.get('x-execution-calls');
       if (rawCalls === null || !/^\d+$/.test(rawCalls) || Number(rawCalls) > MAX_CALLS)
-        throw new Error("Sandbox response lacks authoritative call accounting");
-      const rawCompleted = response.headers.get("x-execution-completed");
+        throw new Error('Sandbox response lacks authoritative call accounting');
+      const rawCompleted = response.headers.get('x-execution-completed');
       if (rawCompleted === null || !/^\d+$/.test(rawCompleted) || Number(rawCompleted) > Number(rawCalls))
-        throw new Error("Sandbox response lacks completed call accounting");
+        throw new Error('Sandbox response lacks completed call accounting');
       const inFlight = Number(rawCalls) - Number(rawCompleted);
-      return { ...execution, calls: inFlight ? null : Number(rawCompleted), calls_started: Number(rawCalls), in_flight: inFlight,
-        outcome_uncertain: execution.outcome_uncertain || inFlight > 0, rate_limit: rateLimitOf(response.headers), api_build: response.headers.get("x-arcmira-build") };
+      return {
+        ...execution,
+        calls: inFlight ? null : Number(rawCompleted),
+        calls_started: Number(rawCalls),
+        in_flight: inFlight,
+        outcome_uncertain: execution.outcome_uncertain || inFlight > 0,
+        rate_limit: rateLimitOf(response.headers),
+        api_build: response.headers.get('x-arcmira-build'),
+      };
     })();
     return await Promise.race([run, timeout]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const syntax =
-      /SyntaxError/.test(message) ||
-      (error instanceof Error && error.name === "SyntaxError");
+    const syntax = /SyntaxError/.test(message) || (error instanceof Error && error.name === 'SyntaxError');
     return unknownOutcome(
-      syntax ? "SyntaxError" : "SandboxError",
-      syntax ? "syntax_error" : "sandbox_error",
+      syntax ? 'SyntaxError' : 'SandboxError',
+      syntax ? 'syntax_error' : 'sandbox_error',
       syntax
         ? `${message}. Code runs as the body of an async function; import and export are not supported.`
         : `${message}. The final call count is unknown. Read requests may still finish; inspect status before retrying.`,

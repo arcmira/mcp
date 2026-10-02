@@ -1,12 +1,5 @@
-import {
-  DEFAULT_API_BASE,
-  SRC,
-  USER_AGENT,
-  noKeyError,
-  type CredentialFailure,
-  type Env,
-} from "./api.ts";
-import { MCP_PATH } from "./server.ts";
+import { DEFAULT_API_BASE, SRC, USER_AGENT, noKeyError, type CredentialFailure, type Env } from './api.ts';
+import { MCP_PATH } from './server.ts';
 
 /**
  * The MCP authorization spec on top of the key rungs. A request with no bearer, or with a
@@ -16,19 +9,16 @@ import { MCP_PATH } from "./server.ts";
  * the person to arcmira.com to sign in and allow, and come back with a token. Hosts that do
  * not speak it send an arc_sk_ account key, which never reaches the token check.
  */
-export const PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
-export const AUTHORIZATION_SERVER_PATH =
-  "/.well-known/oauth-authorization-server";
-const ARCMIRA_KEY_PREFIX = "arc_";
-const SESSION_PATH = "/api/auth/mcp/get-session";
-const ME_PATH = "/v1/me";
+export const PROTECTED_RESOURCE_PATH = '/.well-known/oauth-protected-resource';
+export const AUTHORIZATION_SERVER_PATH = '/.well-known/oauth-authorization-server';
+const ARCMIRA_KEY_PREFIX = 'arc_';
+const SESSION_PATH = '/api/auth/mcp/get-session';
+const ME_PATH = '/v1/me';
 export class AuthUnavailable extends Error {
   readonly status: number;
   readonly retryAfter: string | null;
   constructor(status: number, retryAfter: string | null) {
-    super(
-      "Authentication upstream is temporarily unavailable. Keep the current credential and retry.",
-    );
+    super('Authentication upstream is temporarily unavailable. Keep the current credential and retry.');
     this.status = status;
     this.retryAfter = retryAfter;
   }
@@ -36,28 +26,17 @@ export class AuthUnavailable extends Error {
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export function apiBase(env: Env): string {
-  return (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, "");
+  return (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
 }
 
-export function protectedResourceMetadata(
-  origin: string,
-  env: Env,
-): Record<string, unknown> {
+export function protectedResourceMetadata(origin: string, env: Env): Record<string, unknown> {
   return {
     resource: `${origin}${MCP_PATH}`,
     authorization_servers: [apiBase(env)],
-    bearer_methods_supported: ["header"],
-    scopes_supported: [
-      "openid",
-      "profile",
-      "email",
-      "offline_access",
-      "read",
-      "recommendations:read",
-    ],
-    resource_name: "Arcmira MCP",
-    resource_documentation:
-      "https://arcmira.com/docs/authentication#oauth-for-mcp-clients",
+    bearer_methods_supported: ['header'],
+    scopes_supported: ['openid', 'profile', 'email', 'offline_access', 'read', 'recommendations:read'],
+    resource_name: 'Arcmira MCP',
+    resource_documentation: 'https://arcmira.com/docs/authentication#oauth-for-mcp-clients',
   };
 }
 
@@ -66,22 +45,19 @@ export function isOAuthBearer(key: string | null): key is string {
 }
 
 /** The 401 that starts the OAuth dance. The body names the sign-up, for a host that cannot run it. */
-export function challenge(
-  origin: string,
-  reason: CredentialFailure = "no_credential",
-): Response {
+export function challenge(origin: string, reason: CredentialFailure = 'no_credential'): Response {
   const error = noKeyError(reason);
   return Response.json(
     {
-      jsonrpc: "2.0",
+      jsonrpc: '2.0',
       error: { code: -32000, message: error.message, data: error },
       id: null,
     },
     {
       status: 401,
       headers: {
-        "WWW-Authenticate": `Bearer resource_metadata="${origin}${PROTECTED_RESOURCE_PATH}"`,
-        "Access-Control-Expose-Headers": "WWW-Authenticate",
+        'WWW-Authenticate': `Bearer resource_metadata="${origin}${PROTECTED_RESOURCE_PATH}"`,
+        'Access-Control-Expose-Headers': 'WWW-Authenticate',
       },
     },
   );
@@ -90,14 +66,14 @@ export function challenge(
 /** Some hosts probe the MCP origin for the authorization-server document; hand them the real one. */
 export async function authorizationServerMetadata(env: Env): Promise<Response> {
   const upstream = await fetch(`${apiBase(env)}${AUTHORIZATION_SERVER_PATH}`, {
-    headers: { accept: "application/json", "user-agent": USER_AGENT },
+    headers: { accept: 'application/json', 'user-agent': USER_AGENT },
     cf: { cacheTtl: 300, cacheEverything: true },
   } as RequestInit);
   return new Response(upstream.body, {
     status: upstream.status,
     headers: {
-      "content-type": "application/json",
-      "cache-control": "public, max-age=300",
+      'content-type': 'application/json',
+      'cache-control': 'public, max-age=300',
     },
   });
 }
@@ -112,45 +88,30 @@ interface SessionRow {
   accessTokenExpiresAt?: string | number;
 }
 
-export async function tokenIsLive(
-  token: string,
-  env: Env,
-  now = Date.now(),
-): Promise<boolean> {
+export async function tokenIsLive(token: string, env: Env, now = Date.now()): Promise<boolean> {
   const cached = live.get(token);
   if (cached !== undefined && cached > now) return true;
   live.delete(token);
   const response = await fetch(`${apiBase(env)}${SESSION_PATH}`, {
-    redirect: "manual",
+    redirect: 'manual',
     signal: AbortSignal.timeout(10_000),
     headers: {
       authorization: `Bearer ${token}`,
-      accept: "application/json",
-      "user-agent": USER_AGENT,
+      accept: 'application/json',
+      'user-agent': USER_AGENT,
     },
   }).catch(() => {
     throw new AuthUnavailable(503, null);
   });
   if (response.status === 401) return false;
-  if (!response.ok)
-    throw new AuthUnavailable(
-      response.status === 429 ? 429 : 503,
-      response.headers.get("retry-after"),
-    );
+  if (!response.ok) throw new AuthUnavailable(response.status === 429 ? 429 : 503, response.headers.get('retry-after'));
   const row = (await response.json().catch(() => {
-    throw new AuthUnavailable(503, response.headers.get("retry-after"));
+    throw new AuthUnavailable(503, response.headers.get('retry-after'));
   })) as SessionRow | null;
   if (row === null) return false;
-  if (typeof row !== "object")
-    throw new AuthUnavailable(503, response.headers.get("retry-after"));
-  const expiry =
-    row.accessTokenExpiresAt === undefined
-      ? Number.NaN
-      : new Date(row.accessTokenExpiresAt).getTime();
-  const until = Math.min(
-    now + CACHE_TTL_MS,
-    Number.isFinite(expiry) ? expiry : now + CACHE_TTL_MS,
-  );
+  if (typeof row !== 'object') throw new AuthUnavailable(503, response.headers.get('retry-after'));
+  const expiry = row.accessTokenExpiresAt === undefined ? Number.NaN : new Date(row.accessTokenExpiresAt).getTime();
+  const until = Math.min(now + CACHE_TTL_MS, Number.isFinite(expiry) ? expiry : now + CACHE_TTL_MS);
   if (until <= now) return false;
   live.set(token, until);
   return true;
@@ -169,21 +130,17 @@ const liveKeys = new Map<string, number>();
  * one, `invalid` when it does not. A network failure or a non-401 error is not a verdict on the
  * key and passes it through to the first tool call.
  */
-export async function keyFailure(
-  key: string,
-  env: Env,
-  now = Date.now(),
-): Promise<CredentialFailure | null> {
+export async function keyFailure(key: string, env: Env, now = Date.now()): Promise<CredentialFailure | null> {
   const cached = liveKeys.get(key);
   if (cached !== undefined && cached > now) return null;
   liveKeys.delete(key);
   const response = await fetch(`${apiBase(env)}${ME_PATH}`, {
-    redirect: "manual",
+    redirect: 'manual',
     signal: AbortSignal.timeout(10_000),
     headers: {
       authorization: `Bearer ${key}`,
-      accept: "application/json",
-      "user-agent": USER_AGENT,
+      accept: 'application/json',
+      'user-agent': USER_AGENT,
     },
   }).catch(() => {
     throw new AuthUnavailable(503, null);
@@ -192,17 +149,10 @@ export async function keyFailure(
     const body = (await response.json().catch(() => null)) as {
       error?: { reason?: string };
     } | null;
-    return body?.error?.reason === "revoked" ? "revoked" : "invalid";
+    return body?.error?.reason === 'revoked' ? 'revoked' : 'invalid';
   }
-  if (
-    response.status === 429 ||
-    response.status >= 500 ||
-    (response.status >= 300 && response.status < 400)
-  )
-    throw new AuthUnavailable(
-      response.status === 429 ? 429 : 503,
-      response.headers.get("retry-after"),
-    );
+  if (response.status === 429 || response.status >= 500 || (response.status >= 300 && response.status < 400))
+    throw new AuthUnavailable(response.status === 429 ? 429 : 503, response.headers.get('retry-after'));
   if (!response.ok) return null;
   liveKeys.set(key, now + CACHE_TTL_MS);
   return null;
