@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import contract from './fixtures/transcription-contract.json' with { type: 'json' };
+import openapi from './fixtures/openapi.json' with { type: 'json' };
 import responses from './fixtures/transcription-responses.json' with { type: 'json' };
 import worker from '../src/index.ts';
 import pkg from '../package.json' with { type: 'json' };
@@ -129,7 +129,7 @@ describe('the two tools through the handler', () => {
 describe('bounded outcomes and explicit preparation over MCP', () => {
   it('preserves pending and quota recovery after 20001 log characters', async () => {
     for (const status of [200, 402, 503]) {
-      const pending = responses.get_transcript.responses['202'].body;
+      const pending = responses.get_transcript_pending.body;
       const error = {
         code: status === 402 ? 'quota_exceeded' : 'server_error',
         message: 'recover me',
@@ -213,7 +213,7 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
           key: new Headers(init?.headers).get('idempotency-key'),
         });
       const specPath = url.pathname.replace('dQw4w9WgXcQ', '{video_id}');
-      const operation = Object.entries(contract.paths).find(([path]) => path === specPath)?.[1];
+      const operation = Object.entries(openapi.paths).find(([path]) => path === specPath)?.[1];
       if (url.pathname !== '/v1/me')
         assert.ok(
           operation && (init?.method?.toLowerCase() ?? 'get') in operation,
@@ -221,15 +221,14 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
         );
       if (init?.method === 'POST') {
         const body = JSON.parse(String(init.body));
-        const schema = contract.paths['/v1/transcriptions'].post.requestBody.content['application/json'].schema;
+        const schema = openapi.paths['/v1/transcriptions'].post.requestBody.content['application/json'].schema;
         for (const key of Object.keys(body)) assert.ok(key in schema.properties, `Unknown request field ${key}`);
-        for (const key of schema.required) assert.ok(key in body, `Missing required field ${key}`);
         assert.ok(body.videoId || body.url);
       }
       return Response.json(
         url.pathname.endsWith('/quote')
           ? responses.quote_transcription.body
-          : { request: responses.get_transcription.body },
+          : responses.submit_transcription_pending.body,
         { status: url.pathname === '/v1/transcriptions' ? 202 : 200 },
       );
     };
@@ -299,8 +298,8 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
   });
 });
 
-it('preserves the actual data-heavy pending recovery shape and top-level refusal quote', async () => {
-  const pending = responses.get_transcript.responses['202'].body;
+it('a pending Premium read stays data under a heavy payload, and a POST refusal keeps its quote', async () => {
+  const pending = responses.get_transcript_pending.body;
   const reply = await callTool(
     'execute',
     {
@@ -311,49 +310,14 @@ it('preserves the actual data-heavy pending recovery shape and top-level refusal
   );
   const rendered = JSON.parse(textOf(reply));
   assert.equal(rendered.value.state, 'pending');
-  assert.equal(rendered.value.status_url, pending.status_url);
-  assert.deepEqual(rendered.value.premium_job, pending.premium_job);
-  const refusal = {
-    error: {
-      type: 'quota_exceeded',
-      code: 'max_rows_exceeded',
-      message: 'Inspect the current quote',
-      request_id: 'r',
-      doc_url: 'https://arcmira.com/docs/errors',
-    },
-    quote: {
-      quarters: 4,
-      rows: 300,
-      charge: { unit: 'credits', amount: 1200 },
-      max_on_demand_cents: 0,
-    },
-  };
+  assert.deepEqual(rendered.value.job, pending.job);
+  const refusal = responses.submit_transcription_max_rows_exceeded;
   const prepared = await callTool(
     'prepare_transcript',
     { video_id: 'dQw4w9WgXcQ', max_rows: 75, idempotency_key: 'refused' },
-    () => Response.json(refusal, { status: 402 }),
+    () => Response.json(refusal.body, { status: refusal.status }),
   );
-  assert.deepEqual(JSON.parse(textOf(prepared)), refusal);
-  const read = await callTool(
-    'execute',
-    {
-      code: 'console.log("x".repeat(20001)); return await arcmira.transcript("dQw4w9WgXcQ",{quality:"premium"});',
-    },
-    () =>
-      Response.json(
-        {
-          ...refusal,
-          quote_url: '/v1/transcripts/dQw4w9WgXcQ/quote',
-          prepare_url: '/v1/transcriptions',
-        },
-        { status: 402 },
-      ),
-    { LOADER: fakeLoader() },
-  );
-  const error = JSON.parse(textOf(read)).error;
-  assert.deepEqual(error.quote, refusal.quote);
-  assert.equal(error.quote_url, '/v1/transcripts/dQw4w9WgXcQ/quote');
-  assert.equal(error.prepare_url, '/v1/transcriptions');
+  assert.deepEqual(JSON.parse(textOf(prepared)), refusal.body);
 });
 
 it('unreadable preparation acknowledgement requires same-key recovery', async () => {

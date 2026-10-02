@@ -320,6 +320,14 @@
                 "type": "integer",
                 "description": "Present on rate gates. Mirrors the Retry-After header."
               },
+              "current_revision": {
+                "type": "string",
+                "description": "On revision_mismatch and anchor_mismatch, the transcript revision to re-read before re-anchoring the correction."
+              },
+              "expected_seq": {
+                "type": "integer",
+                "description": "On sequence_mismatch (HTTP 412), the seq the server expects next for this video. Rebase local counters onto it and resend under the same key."
+              },
               "doc_url": {
                 "type": "string"
               },
@@ -344,6 +352,11 @@
             "code": "alert_not_found",
             "type": "not_found",
             "description": "A referenced alert row does not exist or belongs to another account."
+          },
+          {
+            "code": "anchor_mismatch",
+            "type": "conflict_error",
+            "description": "The anchored lines no longer hash to anchor.contentHash. current_revision is the revision to re-read; send a re-anchored correction under a new key."
           },
           {
             "code": "api_not_enabled",
@@ -454,7 +467,7 @@
           {
             "code": "invalid_idempotency_key",
             "type": "invalid_request_error",
-            "description": "Use a valid monitor creation request key."
+            "description": "Idempotency-Key must be 1 to 255 printable ASCII characters (0x21 to 0x7E). param is Idempotency-Key."
           },
           {
             "code": "invalid_query",
@@ -524,15 +537,20 @@
             "description": "Rows past the free window need a paid plan."
           },
           {
+            "code": "paid_plan_required",
+            "type": "permission_error",
+            "description": "The operation needs a paid plan. unlock.url names the plan that does."
+          },
+          {
             "code": "premium_transcript_requested",
             "type": "permission_error",
             "gate": "exposure_law",
             "description": "Premium transcript text needs a plan with Premium transcripts."
           },
           {
-            "code": "purchase_required",
-            "type": "permission_error",
-            "description": "An explicit whole-video purchase is required. Read quote_url and submit max_rows with Idempotency-Key."
+            "code": "purchase_authority_changed",
+            "type": "conflict_error",
+            "description": "The account billing authority (plan, team, or on-demand controls) changed after the intent was accepted. Nothing was charged. Review the quote and send a new intent."
           },
           {
             "code": "quota_exceeded",
@@ -563,6 +581,11 @@
             "description": "The operation conflicts with existing resource state."
           },
           {
+            "code": "revision_mismatch",
+            "type": "conflict_error",
+            "description": "The transcript changed after the revision the correction echoed. current_revision is the revision to re-read; send a re-anchored correction under a new key."
+          },
+          {
             "code": "scope_too_broad",
             "type": "invalid_request_error",
             "description": "The requested exact video scope exceeds the search filename cap; narrow by channel or date."
@@ -571,6 +594,11 @@
             "code": "search_unavailable",
             "type": "server_error",
             "description": "Transcript search is unavailable (HTTP 503). Retry-After carries the wait."
+          },
+          {
+            "code": "sequence_mismatch",
+            "type": "conflict_error",
+            "description": "HTTP 412. The correction seq is not the next one for this video. expected_seq is the next seq; rebase and resend under the same key."
           },
           {
             "code": "server_error",
@@ -586,6 +614,16 @@
             "code": "signup_send_limited",
             "type": "rate_limit_error",
             "description": "Verification code sends hit a per-address, per-IP, or per-client cap. Retry-After carries the wait."
+          },
+          {
+            "code": "speaker_not_correctable",
+            "type": "conflict_error",
+            "description": "The speaker shares a voice track or was named in review, so a correction cannot land on their lines alone."
+          },
+          {
+            "code": "spend_limit_exceeded",
+            "type": "quota_exceeded",
+            "description": "The purchase would take on-demand spending past the account or seat spend limit this period. Nothing was charged. Raise the limit or wait for the next period, then send a new intent."
           },
           {
             "code": "team_key_required",
@@ -3032,6 +3070,14 @@
                 "type": "integer",
                 "description": "Present on rate gates. Mirrors the Retry-After header."
               },
+              "current_revision": {
+                "type": "string",
+                "description": "On revision_mismatch and anchor_mismatch, the transcript revision to re-read before re-anchoring the correction."
+              },
+              "expected_seq": {
+                "type": "integer",
+                "description": "On sequence_mismatch (HTTP 412), the seq the server expects next for this video. Rebase local counters onto it and resend under the same key."
+              },
               "doc_url": {
                 "type": "string"
               },
@@ -3364,6 +3410,14 @@
               "retry_after_seconds": {
                 "type": "integer",
                 "description": "Present on rate gates. Mirrors the Retry-After header."
+              },
+              "current_revision": {
+                "type": "string",
+                "description": "On revision_mismatch and anchor_mismatch, the transcript revision to re-read before re-anchoring the correction."
+              },
+              "expected_seq": {
+                "type": "integer",
+                "description": "On sequence_mismatch (HTTP 412), the seq the server expects next for this video. Rebase local counters onto it and resend under the same key."
               },
               "doc_url": {
                 "type": "string"
@@ -3837,6 +3891,14 @@
               "retry_after_seconds": {
                 "type": "integer",
                 "description": "Present on rate gates. Mirrors the Retry-After header."
+              },
+              "current_revision": {
+                "type": "string",
+                "description": "On revision_mismatch and anchor_mismatch, the transcript revision to re-read before re-anchoring the correction."
+              },
+              "expected_seq": {
+                "type": "integer",
+                "description": "On sequence_mismatch (HTTP 412), the seq the server expects next for this video. Rebase local counters onto it and resend under the same key."
               },
               "doc_url": {
                 "type": "string"
@@ -6395,17 +6457,9 @@
             "type": "integer",
             "description": "Rows matching the filter across all pages."
           },
-          "offset": {
-            "type": "integer",
-            "description": "Row offset of this page, as the cursor encoded it. 0 on the first page."
-          },
           "limit": {
             "type": "integer",
             "description": "Page size applied, after the plan clamp."
-          },
-          "hasMore": {
-            "type": "boolean",
-            "description": "Same value as has_more, kept for readers of the web shape."
           },
           "has_more": {
             "type": "boolean",
@@ -6425,9 +6479,7 @@
         "required": [
           "items",
           "total",
-          "offset",
           "limit",
-          "hasMore",
           "has_more",
           "next_cursor",
           "_meta"
@@ -6479,17 +6531,9 @@
             "type": "integer",
             "description": "Rows matching the filter across all pages."
           },
-          "offset": {
-            "type": "integer",
-            "description": "Row offset of this page, as the cursor encoded it. 0 on the first page."
-          },
           "limit": {
             "type": "integer",
             "description": "Page size applied, after the plan clamp."
-          },
-          "hasMore": {
-            "type": "boolean",
-            "description": "Same value as has_more, kept for readers of the web shape."
           },
           "has_more": {
             "type": "boolean",
@@ -6544,9 +6588,7 @@
         "required": [
           "items",
           "total",
-          "offset",
           "limit",
-          "hasMore",
           "has_more",
           "next_cursor",
           "exportCapabilities",
@@ -6615,17 +6657,9 @@
             "type": "integer",
             "description": "Rows matching the filter across all pages."
           },
-          "offset": {
-            "type": "integer",
-            "description": "Row offset of this page, as the cursor encoded it. 0 on the first page."
-          },
           "limit": {
             "type": "integer",
             "description": "Page size applied, after the plan clamp."
-          },
-          "hasMore": {
-            "type": "boolean",
-            "description": "Same value as has_more, kept for readers of the web shape."
           },
           "has_more": {
             "type": "boolean",
@@ -6688,9 +6722,7 @@
         "required": [
           "items",
           "total",
-          "offset",
           "limit",
-          "hasMore",
           "has_more",
           "next_cursor",
           "peopleMode",
@@ -6765,17 +6797,9 @@
             "type": "integer",
             "description": "Rows matching the filter across all pages."
           },
-          "offset": {
-            "type": "integer",
-            "description": "Row offset of this page, as the cursor encoded it. 0 on the first page."
-          },
           "limit": {
             "type": "integer",
             "description": "Page size applied, after the plan clamp."
-          },
-          "hasMore": {
-            "type": "boolean",
-            "description": "Same value as has_more, kept for readers of the web shape."
           },
           "has_more": {
             "type": "boolean",
@@ -6830,9 +6854,7 @@
         "required": [
           "items",
           "total",
-          "offset",
           "limit",
-          "hasMore",
           "has_more",
           "next_cursor",
           "exportCapabilities",
@@ -6914,17 +6936,9 @@
             "type": "integer",
             "description": "Rows matching the filter across all pages."
           },
-          "offset": {
-            "type": "integer",
-            "description": "Row offset of this page, as the cursor encoded it. 0 on the first page."
-          },
           "limit": {
             "type": "integer",
             "description": "Page size applied, after the plan clamp."
-          },
-          "hasMore": {
-            "type": "boolean",
-            "description": "Same value as has_more, kept for readers of the web shape."
           },
           "has_more": {
             "type": "boolean",
@@ -6979,9 +6993,7 @@
         "required": [
           "items",
           "total",
-          "offset",
           "limit",
-          "hasMore",
           "has_more",
           "next_cursor",
           "exportCapabilities",
@@ -7040,17 +7052,9 @@
             "type": "integer",
             "description": "Rows matching the filter across all pages."
           },
-          "offset": {
-            "type": "integer",
-            "description": "Row offset of this page, as the cursor encoded it. 0 on the first page."
-          },
           "limit": {
             "type": "integer",
             "description": "Page size applied, after the plan clamp."
-          },
-          "hasMore": {
-            "type": "boolean",
-            "description": "Same value as has_more, kept for readers of the web shape."
           },
           "has_more": {
             "type": "boolean",
@@ -7105,9 +7109,7 @@
         "required": [
           "items",
           "total",
-          "offset",
           "limit",
-          "hasMore",
           "has_more",
           "next_cursor",
           "exportCapabilities",
@@ -9533,17 +9535,9 @@
             "type": "integer",
             "description": "Rows matching the filter across all pages."
           },
-          "offset": {
-            "type": "integer",
-            "description": "Row offset of this page, as the cursor encoded it. 0 on the first page."
-          },
           "limit": {
             "type": "integer",
             "description": "Page size applied, after the plan clamp."
-          },
-          "hasMore": {
-            "type": "boolean",
-            "description": "Same value as has_more, kept for readers of the web shape."
           },
           "has_more": {
             "type": "boolean",
@@ -9598,9 +9592,7 @@
         "required": [
           "items",
           "total",
-          "offset",
           "limit",
-          "hasMore",
           "has_more",
           "next_cursor",
           "exportCapabilities",
@@ -10018,7 +10010,7 @@
           },
           "has_more": {
             "type": "boolean",
-            "description": "CURRENTLY always false: this endpoint returns the newest n alerts as a single page and does not paginate."
+            "description": "True when older alerts exist past limit. The endpoint does not paginate: raise limit, up to 100, to read them."
           },
           "next_cursor": {
             "type": "null",
@@ -10849,41 +10841,7 @@
             "description": "When the transcript was produced."
           },
           "premium_job": {
-            "type": "object",
-            "properties": {
-              "job_id": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "Transcription request id. Poll it with GET /v1/transcriptions/{id}."
-              },
-              "status": {
-                "type": "string",
-                "description": "Pipeline status at submit time."
-              },
-              "next_poll_seconds": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "description": "Seconds to wait before polling again."
-              },
-              "eta_seconds": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "description": "Estimated seconds until the Premium transcript is ready."
-              }
-            },
-            "required": [
-              "job_id",
-              "status",
-              "next_poll_seconds",
-              "eta_seconds"
-            ],
-            "description": "Reserved for job metadata. Pending Premium retrieval uses its separate 202 response."
+            "$ref": "#/components/schemas/TranscriptionJob"
           },
           "access": {
             "type": "object",
@@ -10985,6 +10943,14 @@
               "retry_after_seconds": {
                 "type": "integer",
                 "description": "Present on rate gates. Mirrors the Retry-After header."
+              },
+              "current_revision": {
+                "type": "string",
+                "description": "On revision_mismatch and anchor_mismatch, the transcript revision to re-read before re-anchoring the correction."
+              },
+              "expected_seq": {
+                "type": "integer",
+                "description": "On sequence_mismatch (HTTP 412), the seq the server expects next for this video. Rebase local counters onto it and resend under the same key."
               },
               "doc_url": {
                 "type": "string"
@@ -11187,6 +11153,253 @@
           "generated"
         ]
       },
+      "TranscriptionJob": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Transcription request id (UUID)."
+          },
+          "video_id": {
+            "type": "string",
+            "description": "YouTube video id (11 characters)."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "failed",
+              "refunded"
+            ],
+            "description": "Coarse outcome: pending until the Premium transcript is servable (ready), the purchase failed, or it was refunded."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "downloading",
+              "transcribing",
+              "analyzing",
+              "complete",
+              "failed",
+              "refund_pending",
+              "refunded"
+            ],
+            "description": "Request status. Values: queued (accepted; audio download not started), downloading (fetching the video audio), transcribing (premium speech-to-text is running), analyzing (entity/commercial analysis is running), complete (premium transcript is servable via GET /v1/transcripts/{video_id}), failed (rejected intent or legacy purchase requiring accounting review), refund_pending (refund transaction must still complete), refunded (terminal failure; the charged rows were returned and the unlock this submission bought was revoked)."
+          },
+          "stage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "queued",
+              "transcribing",
+              "analyzing",
+              null
+            ],
+            "description": "User-facing stage: downloading folds into transcribing. Values: queued (waiting to start), transcribing (downloading or transcribing), analyzing (analysis running). Null for terminal statuses."
+          },
+          "charge": {
+            "type": "object",
+            "properties": {
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "credits"
+                ]
+              },
+              "amount": {
+                "type": "number",
+                "description": "Credits this purchase charged. 0 when a prior unlock made it free."
+              },
+              "from": {
+                "type": "string",
+                "enum": [
+                  "included",
+                  "on_demand",
+                  "mixed"
+                ],
+                "description": "Where the credits came from: the included allowance, on-demand usage, or both. Present once the purchase is funded."
+              }
+            },
+            "required": [
+              "unit",
+              "amount"
+            ],
+            "description": "What the purchase charged. Present on durable purchases; absent only on legacy requests."
+          },
+          "eta_seconds": {
+            "type": "integer",
+            "description": "Estimated seconds until completion, re-derived from live pipeline telemetry on every poll. Only present while the request is in flight."
+          },
+          "next_poll_seconds": {
+            "type": "integer",
+            "description": "Seconds to sleep before the next poll (also sent as the Retry-After header). Only present while the request is in flight."
+          },
+          "error": {
+            "type": "string",
+            "description": "Failure reason. Only present when state is failed or refunded."
+          },
+          "refunded": {
+            "type": "boolean",
+            "description": "True when the charge was returned. Only present when state is failed or refunded."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "When the request was submitted."
+          },
+          "completed_at": {
+            "type": "string",
+            "description": "When the request reached a terminal status. Absent while in flight."
+          },
+          "status_url": {
+            "type": "string",
+            "description": "Absolute URL of GET /v1/transcriptions/{id} for this job."
+          }
+        },
+        "required": [
+          "id",
+          "video_id",
+          "state",
+          "status",
+          "stage",
+          "created_at",
+          "status_url"
+        ],
+        "description": "Your open Premium purchase for this video, when captions were served while it prepares."
+      },
+      "TranscriptPreparationRequired": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "preparation_required"
+            ]
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "premium"
+            ]
+          },
+          "video_id": {
+            "type": "string"
+          },
+          "quote": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "rows": {
+                "type": "integer",
+                "description": "Whole-video row-equivalent price. 0 when a prior unlock makes it free."
+              },
+              "charge": {
+                "type": "object",
+                "properties": {
+                  "unit": {
+                    "type": "string",
+                    "enum": [
+                      "credits"
+                    ]
+                  },
+                  "amount": {
+                    "type": "number",
+                    "description": "Credits the purchase would charge."
+                  },
+                  "from": {
+                    "type": "string",
+                    "enum": [
+                      "included",
+                      "on_demand",
+                      "mixed"
+                    ],
+                    "description": "Where those credits would come from at the current balance."
+                  }
+                },
+                "required": [
+                  "unit",
+                  "amount",
+                  "from"
+                ]
+              },
+              "eligible": {
+                "type": "boolean",
+                "description": "False when the account cannot buy right now; the POST then answers with the reason."
+              },
+              "max_on_demand_cents": {
+                "type": "integer",
+                "description": "On-demand money in whole cents the purchase would need. 0 means included credits cover it."
+              }
+            },
+            "required": [
+              "rows",
+              "charge",
+              "eligible",
+              "max_on_demand_cents"
+            ],
+            "description": "Null when the video has no known duration or is longer than 12 hours; the POST refuses it for the same reason."
+          },
+          "action": {
+            "type": "object",
+            "properties": {
+              "method": {
+                "type": "string",
+                "enum": [
+                  "POST"
+                ]
+              },
+              "url": {
+                "type": "string"
+              },
+              "body": {
+                "type": "object",
+                "properties": {
+                  "video_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "video_id"
+                ]
+              }
+            },
+            "required": [
+              "method",
+              "url",
+              "body"
+            ],
+            "description": "The one request that prepares Premium from included credits and moves no money."
+          },
+          "last_attempt": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "error"
+            ],
+            "description": "The most recent failed or refunded purchase of this video, when there is one."
+          }
+        },
+        "required": [
+          "state",
+          "quality",
+          "video_id",
+          "quote",
+          "action"
+        ]
+      },
       "TranscriptPending": {
         "type": "object",
         "properties": {
@@ -11202,45 +11415,25 @@
               "premium"
             ]
           },
-          "premium_job": {
-            "type": "object",
-            "properties": {
-              "job_id": {
-                "type": "string"
-              },
-              "status": {
-                "type": "string"
-              },
-              "next_poll_seconds": {
-                "type": "number"
-              },
-              "eta_seconds": {
-                "type": [
-                  "number",
-                  "null"
-                ]
-              }
-            },
-            "required": [
-              "job_id",
-              "status",
-              "next_poll_seconds",
-              "eta_seconds"
-            ]
-          },
-          "status_url": {
+          "video_id": {
             "type": "string"
           },
-          "next_poll_seconds": {
-            "type": "number"
+          "job": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionJob"
+              },
+              {
+                "description": "The open purchase. Poll job.status_url, or read this transcript again, after Retry-After."
+              }
+            ]
           }
         },
         "required": [
           "state",
           "quality",
-          "premium_job",
-          "status_url",
-          "next_poll_seconds"
+          "video_id",
+          "job"
         ]
       },
       "TranscriptPurchaseQuote": {
@@ -11264,6 +11457,22 @@
           "eligible": {
             "type": "boolean"
           },
+          "upgrade": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "href": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "label",
+              "href"
+            ],
+            "description": "Present when eligible is false: the plan checkout that can buy this transcript, as a button label and an absolute link."
+          },
           "quote": {
             "$ref": "#/components/schemas/TranscriptQuote"
           },
@@ -11279,11 +11488,21 @@
               },
               "amount": {
                 "type": "number"
+              },
+              "from": {
+                "type": "string",
+                "enum": [
+                  "included",
+                  "on_demand",
+                  "mixed"
+                ],
+                "description": "Where the charge would come from at the current balance."
               }
             },
             "required": [
               "unit",
-              "amount"
+              "amount",
+              "from"
             ]
           },
           "credits_per_row": {
@@ -11379,139 +11598,17 @@
       "TranscriptionSubmitResponse": {
         "type": "object",
         "properties": {
-          "request": {
-            "$ref": "#/components/schemas/TranscriptionRequest"
+          "job": {
+            "$ref": "#/components/schemas/TranscriptionJob"
           },
           "existing": {
             "type": "boolean",
-            "description": "True when an in-flight (or already-satisfied) request for the same video was returned instead of creating a new one."
-          },
-          "overLimit": {
-            "type": "boolean",
-            "description": "Only present (true) when this purchase consumed the rest of the included row allocation."
+            "description": "True when a request for this video already existed (in flight or ready) and was returned instead of creating a new one."
           }
         },
         "required": [
-          "request"
-        ]
-      },
-      "TranscriptionRequest": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Transcription request id (UUID). Null only in the degenerate submit response for a video you already own that has no request history."
-          },
-          "videoId": {
-            "type": "string",
-            "description": "YouTube video id (11 characters)."
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "queued",
-              "downloading",
-              "transcribing",
-              "analyzing",
-              "complete",
-              "failed",
-              "refund_pending",
-              "refunded"
-            ],
-            "description": "Request status. Values: queued (accepted; audio download not started), downloading (fetching the video audio), transcribing (premium speech-to-text is running), analyzing (entity/commercial analysis is running), complete (premium transcript is servable via GET /v1/transcripts/{video_id}), failed (rejected intent or legacy purchase requiring accounting review), refund_pending (refund transaction must still complete), refunded (terminal failure; the charged rows were returned and the unlock this submission bought was revoked)."
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "ready",
-              "failed",
-              "refunded"
-            ]
-          },
-          "charge": {
-            "type": "object",
-            "properties": {
-              "unit": {
-                "type": "string",
-                "enum": [
-                  "rows",
-                  "credits"
-                ]
-              },
-              "amount": {
-                "type": "number"
-              },
-              "credits_per_row": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "unit",
-              "amount",
-              "credits_per_row"
-            ],
-            "description": "Accepted charge units. Present on durable purchases; absent only on legacy requests."
-          },
-          "stage": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "queued",
-              "transcribing",
-              "analyzing",
-              null
-            ],
-            "description": "User-facing stage: downloading folds into transcribing. Values: queued (waiting to start), transcribing (downloading or transcribing), analyzing (analysis running). Null for terminal statuses."
-          },
-          "quote": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/TranscriptQuote"
-              },
-              {
-                "description": "What this request charged: rows and 15-minute blocks. rows is 0 when a prior unlock made the submission free."
-              }
-            ]
-          },
-          "etaSeconds": {
-            "type": "integer",
-            "description": "Estimated SECONDS until completion, re-derived from live pipeline telemetry on every poll. Only present while the request is in flight."
-          },
-          "nextPollSeconds": {
-            "type": "integer",
-            "description": "Recommended SECONDS to sleep before the next poll (also sent as the Retry-After header). Only present while the request is in flight."
-          },
-          "error": {
-            "type": "string",
-            "description": "Failure reason. Only present when status is failed or refunded."
-          },
-          "refunded": {
-            "type": "boolean",
-            "description": "True when the charged rows were returned. Only present when status is failed or refunded."
-          },
-          "createdAt": {
-            "type": "string",
-            "description": "When the request was submitted."
-          },
-          "completedAt": {
-            "type": "string",
-            "description": "When the request reached a terminal status. Absent while in flight."
-          }
-        },
-        "required": [
-          "id",
-          "videoId",
-          "status",
-          "state",
-          "stage",
-          "quote",
-          "createdAt"
+          "job",
+          "existing"
         ]
       },
       "TranscriptionListResponse": {
@@ -11522,7 +11619,7 @@
             "items": {
               "allOf": [
                 {
-                  "$ref": "#/components/schemas/TranscriptionRequest"
+                  "$ref": "#/components/schemas/TranscriptionJob"
                 },
                 {
                   "type": "object",
@@ -11593,23 +11690,6 @@
           "ok",
           "kind",
           "result"
-        ]
-      },
-      "CorrectionSeqMismatchResponse": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "string",
-            "description": "Always \"Out-of-order correction.\"."
-          },
-          "expectedSeq": {
-            "type": "integer",
-            "description": "The seq the server expects next for this video. Rebase local counters onto it and resend."
-          }
-        },
-        "required": [
-          "error",
-          "expectedSeq"
         ]
       },
       "WithdrawnResponse": {
@@ -13125,7 +13205,7 @@
         ],
         "operationId": "list_entity_recommendations",
         "summary": "List recommendations for an entity",
-        "description": "Cursor-paginated commercial mentions (ad reads, endorsements, neutral mentions) for one entity, newest media first. The signed continuation binds the route, filters, limit, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing rows remain live. Requires a Pro+ plan. Read timestamps from start_seconds / end_seconds (integer seconds); the MM:SS string fields are deprecated. Rows below min_confidence (default 0.7) and disputed rows (unless include_disputed=true) are excluded.",
+        "description": "Cursor-paginated commercial mentions (ad reads, endorsements, neutral mentions) for one entity, newest media first. The signed continuation binds the route, filters, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing rows remain live. Requires a Pro+ plan. Read timestamps from start_seconds / end_seconds (integer seconds); the MM:SS string fields are deprecated. Rows below min_confidence (default 0.7) and disputed rows (unless include_disputed=true) are excluded.",
         "security": [
           {
             "bearerAuth": []
@@ -13305,7 +13385,7 @@
         ],
         "operationId": "list_mentions",
         "summary": "Search mentions across media",
-        "description": "Cursor-paginated mentions filtered by entity (entity_id or entity_name is required), channel, text query, sentiment, appearance flag, and date range. The signed continuation binds the route, filters, limit, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing rows remain live. Read timestamps from start_seconds / end_seconds (integer seconds; 0 means full episode); the MM:SS (or HH:MM:SS) string fields are deprecated. is_appearance filtering applies to person entities only; passing is_appearance=true for any other type returns a 400 (appearances_person_only). details=full attaches per-mention commercial recommendations and requires a Pro+ plan.",
+        "description": "Cursor-paginated mentions filtered by entity (entity_id or entity_name is required), channel, text query, sentiment, appearance flag, and date range. The signed continuation binds the route, filters, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing rows remain live. Read timestamps from start_seconds / end_seconds (integer seconds; 0 means full episode); the MM:SS (or HH:MM:SS) string fields are deprecated. is_appearance filtering applies to person entities only; passing is_appearance=true for any other type returns a 400 (appearances_person_only). details=full attaches per-mention commercial recommendations and requires a Pro+ plan.",
         "security": [
           {
             "bearerAuth": []
@@ -13509,7 +13589,7 @@
         ],
         "operationId": "list_recommendations",
         "summary": "Search recommendations across media",
-        "description": "Cursor-paginated commercial mentions (ad reads, endorsements, neutral mentions) filtered by entity (entity_id or entity_name is required), channel, mention_class, confidence, and date range. The signed continuation binds the route, filters, limit, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing rows remain live. Requires a Pro+ plan. Read timestamps from start_seconds / end_seconds (integer seconds); the MM:SS string fields are deprecated.",
+        "description": "Cursor-paginated commercial mentions (ad reads, endorsements, neutral mentions) filtered by entity (entity_id or entity_name is required), channel, mention_class, confidence, and date range. The signed continuation binds the route, filters, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing rows remain live. Requires a Pro+ plan. Read timestamps from start_seconds / end_seconds (integer seconds); the MM:SS string fields are deprecated.",
         "security": [
           {
             "bearerAuth": []
@@ -13756,7 +13836,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Persist a unique key and the exact request before sending a logical mutation. A retry returns its stored response with Idempotency-Replayed: true. A changed intent under a finalized key returns 409 idempotency_conflict. Keys belong to the authenticated owner, credential and mutation domain. Current authorization still applies. Receipts have no general 24-hour expiry; signing-secret recovery alone expires after 24 hours or when the secret is displaced."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Persist a unique key and the exact request before sending a logical mutation. A retry returns its stored response with Idempotency-Replayed: true. A changed intent under a finalized key returns 409 idempotency_conflict. Keys belong to the authenticated owner, credential and mutation domain. Current authorization still applies. Receipts have no general 24-hour expiry; signing-secret recovery alone expires after 24 hours or when the secret is displaced."
           }
         ],
         "requestBody": {
@@ -14595,7 +14676,7 @@
         ],
         "operationId": "list_channel_videos",
         "summary": "Newest indexed videos of a channel",
-        "description": "The indexed videos of a YouTube channel, newest first, each with its video_id, title, publish date, duration, view count, and watch_url on arcmira.com. Pass next_cursor as cursor to continue. The signed token binds the route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. A first-page media ID fence excludes later insertions, including old-date backfills; edits and deletions to existing rows remain live. Call it for the latest or most recent episode of a show, or to list what a show published in a window, then pass a video_id to GET /v1/mentions/counts video_ids for what that episode mentions or to GET /v1/transcripts/{video_id} to read it. indexed_through is the newest date we hold for the channel. An empty list means nothing is indexed; channel backfill is not available yet. Bills one row per video returned. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "The indexed videos of a YouTube channel, newest first, each with its video_id, title, publish date, duration, view count, and watch_url on arcmira.com. Pass next_cursor as cursor to continue. The signed token binds the route, filters, caller and visibility; invalid or old tokens return invalid_cursor. A first-page media ID fence excludes later insertions, including old-date backfills; edits and deletions to existing rows remain live. Call it for the latest or most recent episode of a show, or to list what a show published in a window, then pass a video_id to GET /v1/mentions/counts video_ids for what that episode mentions or to GET /v1/transcripts/{video_id} to read it. indexed_through is the newest date we hold for the channel. An empty list means nothing is indexed; channel backfill is not available yet. Bills one row per video returned. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -14628,10 +14709,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Opaque continuation from next_cursor. Bound to the channel, filters, limit, caller, and visibility. Invalid or old tokens return invalid_cursor."
+              "description": "Opaque continuation from next_cursor. Bound to the channel, filters, caller, and visibility; limit may change between pages. Invalid or old tokens return invalid_cursor."
             },
             "required": false,
-            "description": "Opaque continuation from next_cursor. Bound to the channel, filters, limit, caller, and visibility. Invalid or old tokens return invalid_cursor.",
+            "description": "Opaque continuation from next_cursor. Bound to the channel, filters, caller, and visibility; limit may change between pages. Invalid or old tokens return invalid_cursor.",
             "name": "cursor",
             "in": "query"
           },
@@ -14973,7 +15054,7 @@
         ],
         "operationId": "list_person_appearances",
         "summary": "List person appearances",
-        "description": "Appearances (the person was actually present in the media) for one person, newest first. Person-only: the equivalent route for any other entity type returns a 400 (appearances_person_only). Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape. The rows are display-oriented. For programmatic pagination, date filtering, and the standard mention-row shape, use GET /v1/mentions?entity_id=...&is_appearance=true instead.",
+        "description": "Appearances (the person was actually present in the media) for one person, newest first. Person-only: the equivalent route for any other entity type returns a 400 (appearances_person_only). Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied. The rows are display-oriented. For programmatic pagination, date filtering, and the standard mention-row shape, use GET /v1/mentions?entity_id=...&is_appearance=true instead.",
         "security": [
           {
             "bearerAuth": []
@@ -15004,10 +15085,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -15145,7 +15226,7 @@
         ],
         "operationId": "list_person_topics",
         "summary": "List topics related to a person",
-        "description": "The topics that co-occur with this person in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The topics that co-occur with this person in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -15176,10 +15257,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -15317,7 +15398,7 @@
         ],
         "operationId": "list_person_people",
         "summary": "List people related to a person",
-        "description": "The people that co-occur with this person in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The people that co-occur with this person in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -15348,10 +15429,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -15489,7 +15570,7 @@
         ],
         "operationId": "list_person_organizations",
         "summary": "List organizations related to a person",
-        "description": "The organizations that co-occur with this person in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The organizations that co-occur with this person in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -15520,10 +15601,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -15661,7 +15742,7 @@
         ],
         "operationId": "list_person_products",
         "summary": "List products related to a person",
-        "description": "The products that co-occur with this person in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The products that co-occur with this person in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -15692,10 +15773,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -15833,7 +15914,7 @@
         ],
         "operationId": "list_person_channels",
         "summary": "List channels related to a person",
-        "description": "The channels that co-occur with this person in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The channels that co-occur with this person in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -15864,10 +15945,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -16081,7 +16162,7 @@
         ],
         "operationId": "list_topic_topics",
         "summary": "List topics related to a topic",
-        "description": "The topics that co-occur with this topic in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The topics that co-occur with this topic in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -16112,10 +16193,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -16253,7 +16334,7 @@
         ],
         "operationId": "list_topic_people",
         "summary": "List people related to a topic",
-        "description": "The people that co-occur with this topic in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The people that co-occur with this topic in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -16284,10 +16365,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -16425,7 +16506,7 @@
         ],
         "operationId": "list_topic_organizations",
         "summary": "List organizations related to a topic",
-        "description": "The organizations that co-occur with this topic in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The organizations that co-occur with this topic in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -16456,10 +16537,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -16597,7 +16678,7 @@
         ],
         "operationId": "list_topic_products",
         "summary": "List products related to a topic",
-        "description": "The products that co-occur with this topic in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The products that co-occur with this topic in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -16628,10 +16709,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -16769,7 +16850,7 @@
         ],
         "operationId": "list_topic_channels",
         "summary": "List channels related to a topic",
-        "description": "The channels that co-occur with this topic in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The channels that co-occur with this topic in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -16800,10 +16881,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -17017,7 +17098,7 @@
         ],
         "operationId": "list_organization_topics",
         "summary": "List topics related to a organization",
-        "description": "The topics that co-occur with this organization in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The topics that co-occur with this organization in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -17048,10 +17129,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -17189,7 +17270,7 @@
         ],
         "operationId": "list_organization_people",
         "summary": "List people related to a organization",
-        "description": "The people that co-occur with this organization in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The people that co-occur with this organization in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -17220,10 +17301,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -17361,7 +17442,7 @@
         ],
         "operationId": "list_organization_organizations",
         "summary": "List organizations related to a organization",
-        "description": "The organizations that co-occur with this organization in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The organizations that co-occur with this organization in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -17392,10 +17473,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -17533,7 +17614,7 @@
         ],
         "operationId": "list_organization_products",
         "summary": "List products related to a organization",
-        "description": "The products that co-occur with this organization in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The products that co-occur with this organization in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -17564,10 +17645,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -17705,7 +17786,7 @@
         ],
         "operationId": "list_organization_channels",
         "summary": "List channels related to a organization",
-        "description": "The channels that co-occur with this organization in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The channels that co-occur with this organization in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -17736,10 +17817,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -17953,7 +18034,7 @@
         ],
         "operationId": "list_product_topics",
         "summary": "List topics related to a product",
-        "description": "The topics that co-occur with this product in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The topics that co-occur with this product in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -17984,10 +18065,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -18125,7 +18206,7 @@
         ],
         "operationId": "list_product_people",
         "summary": "List people related to a product",
-        "description": "The people that co-occur with this product in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The people that co-occur with this product in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -18156,10 +18237,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -18297,7 +18378,7 @@
         ],
         "operationId": "list_product_organizations",
         "summary": "List organizations related to a product",
-        "description": "The organizations that co-occur with this product in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The organizations that co-occur with this product in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -18328,10 +18409,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -18469,7 +18550,7 @@
         ],
         "operationId": "list_product_products",
         "summary": "List products related to a product",
-        "description": "The products that co-occur with this product in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The products that co-occur with this product in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -18500,10 +18581,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -18641,7 +18722,7 @@
         ],
         "operationId": "list_product_channels",
         "summary": "List channels related to a product",
-        "description": "The channels that co-occur with this product in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The channels that co-occur with this product in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -18672,10 +18753,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -18890,7 +18971,7 @@
         ],
         "operationId": "list_channel_topics",
         "summary": "List topics related to a channel",
-        "description": "The topics that co-occur with this channel in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The topics that co-occur with this channel in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -18921,10 +19002,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -19062,7 +19143,7 @@
         ],
         "operationId": "list_channel_people",
         "summary": "List people related to a channel",
-        "description": "The people that co-occur with this channel in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The people that co-occur with this channel in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -19093,10 +19174,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -19234,7 +19315,7 @@
         ],
         "operationId": "list_channel_organizations",
         "summary": "List organizations related to a channel",
-        "description": "The organizations that co-occur with this channel in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The organizations that co-occur with this channel in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -19265,10 +19346,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -19406,7 +19487,7 @@
         ],
         "operationId": "list_channel_products",
         "summary": "List products related to a channel",
-        "description": "The products that co-occur with this channel in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The products that co-occur with this channel in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -19437,10 +19518,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -19578,7 +19659,7 @@
         ],
         "operationId": "list_channel_channels",
         "summary": "List channels related to a channel",
-        "description": "The channels that co-occur with this channel in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "The channels that co-occur with this channel in indexed media, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -19609,10 +19690,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -19750,7 +19831,7 @@
         ],
         "operationId": "list_channel_guests",
         "summary": "List channel guests",
-        "description": "People who appeared as guests on the channel, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, limit, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total, offset, limit and hasMore mirror the web shape.",
+        "description": "People who appeared as guests on the channel, with q/field/sort/order filtering. Signed cursor pagination: rows are in items, and next_cursor (null on the last page) feeds cursor. A token binds route, filters, caller and visibility; malformed or old tokens return invalid_cursor. Aggregate and display lists are live: changed ranks or deleted rows may shift later pages. total counts every matching row and limit is the page size applied.",
         "security": [
           {
             "bearerAuth": []
@@ -19781,10 +19862,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
+              "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live."
             },
             "required": false,
-            "description": "Signed continuation from next_cursor. Bound to route, filters, limit, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
+            "description": "Signed continuation from next_cursor. Bound to route, filters, caller and visibility; invalid or old tokens return invalid_cursor. Person appearance publication pages use a media-id insertion fence; aggregate sorts remain live.",
             "name": "cursor",
             "in": "query"
           },
@@ -19996,7 +20077,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Use 8 to 128 letters, numbers, underscores or hyphens per intent. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "One key per intent, 1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
           }
         ],
         "requestBody": {
@@ -20197,7 +20279,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Use 8 to 128 letters, numbers, underscores or hyphens per intent. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "One key per intent, 1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
           }
         ],
         "requestBody": {
@@ -20375,7 +20458,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Use 8 to 128 letters, numbers, underscores or hyphens per intent. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "One key per intent, 1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
           }
         ],
         "responses": {
@@ -20479,7 +20563,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Use 8 to 128 letters, numbers, underscores or hyphens per intent. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "One key per intent, 1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
           }
         ],
         "responses": {
@@ -20654,7 +20739,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Use 8 to 128 letters, numbers, underscores or hyphens per intent. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "One key per intent, 1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
           }
         ],
         "requestBody": {
@@ -20759,7 +20845,7 @@
         ],
         "operationId": "list_monitor_alerts",
         "summary": "List recent monitor alerts",
-        "description": "The newest n alert deliveries for the monitor, as a single page. This endpoint does not paginate: has_more is always false and next_cursor is always null. entity_id (\"ent_{n}\") and mention_id (\"men_{n}\") are public-ID forms that join directly against entity and mention rows; media_id and appearance_id are raw integer ids, matching the numeric ids used elsewhere in the API. Dispute a fired alert via POST /v1/feedback with type monitor_alert.",
+        "description": "The newest limit alert deliveries for the monitor (default 25, at most 100), as a single page. has_more is true when older alerts exist past limit; this endpoint does not paginate, so next_cursor is always null and a larger limit reads further. entity_id (\"ent_{n}\") and mention_id (\"men_{n}\") are public-ID forms that join directly against entity and mention rows; media_id and appearance_id are raw integer ids, matching the numeric ids used elsewhere in the API. Dispute a fired alert via POST /v1/feedback with type monitor_alert.",
         "security": [
           {
             "bearerAuth": []
@@ -20781,10 +20867,11 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 100,
-              "default": 25
+              "description": "Alerts to return, newest first, 1 to 100. Default 25."
             },
             "required": false,
-            "name": "n",
+            "description": "Alerts to return, newest first, 1 to 100. Default 25.",
+            "name": "limit",
             "in": "query"
           }
         ],
@@ -20918,7 +21005,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Use 8 to 128 letters, numbers, underscores or hyphens per intent. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "One key per intent, 1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
           }
         ],
         "requestBody": {
@@ -21126,7 +21214,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Use 8 to 128 letters, numbers, underscores or hyphens per intent. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "One key per intent, 1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
           }
         ],
         "requestBody": {
@@ -21286,7 +21375,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Use 8 to 128 letters, numbers, underscores or hyphens per intent. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "One key per intent, 1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
           }
         ],
         "responses": {
@@ -21366,7 +21456,7 @@
         ],
         "operationId": "list_tracker_alerts",
         "summary": "List recent tracker alerts",
-        "description": "The newest n alert deliveries for the tracker, as a single page. This endpoint does not paginate: has_more is always false and next_cursor is always null. entity_id (\"ent_{n}\") and mention_id (\"men_{n}\") are public-ID forms that join directly against entity and mention rows; media_id and appearance_id are raw integer ids, matching the numeric ids used elsewhere in the API. Dispute a fired alert via POST /v1/feedback with type monitor_alert.",
+        "description": "The newest limit alert deliveries for the tracker (default 25, at most 100), as a single page. has_more is true when older alerts exist past limit; this endpoint does not paginate, so next_cursor is always null and a larger limit reads further. entity_id (\"ent_{n}\") and mention_id (\"men_{n}\") are public-ID forms that join directly against entity and mention rows; media_id and appearance_id are raw integer ids, matching the numeric ids used elsewhere in the API. Dispute a fired alert via POST /v1/feedback with type monitor_alert.",
         "security": [
           {
             "bearerAuth": []
@@ -21388,10 +21478,11 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 100,
-              "default": 25
+              "description": "Alerts to return, newest first, 1 to 100. Default 25."
             },
             "required": false,
-            "name": "n",
+            "description": "Alerts to return, newest first, 1 to 100. Default 25.",
+            "name": "limit",
             "in": "query"
           }
         ],
@@ -21675,7 +21766,7 @@
         ],
         "operationId": "get_transcript",
         "summary": "Get a video transcript",
-        "description": "Caption retrieval costs one row per started 15 minutes. Premium retrieval is free and never buys, generates, or returns fallback captions. It returns owned ready content, 202 pending with a status URL, or 403 purchase_required with quote and prepare URLs. Purchase the full video explicitly through POST /v1/transcriptions. start/end only trim the returned content; language selects caption tracks, timestamps=false returns paragraphs. Premium responses retain revision and line indexes for corrections.",
+        "description": "Caption retrieval costs one row per started 15 minutes. Premium retrieval is free and never buys, generates, or returns fallback captions. Branch on state: 200 ready is owned content; 202 pending carries the job, with Retry-After; 200 preparation_required carries the whole-video quote and the action to take, POST /v1/transcriptions with { video_id }, plus last_attempt when the previous purchase failed. Plans without Premium read captions with an access gate instead. start/end only trim the returned content; language selects caption tracks, timestamps=false returns paragraphs. Premium responses retain revision and line indexes for corrections.",
         "security": [
           {
             "bearerAuth": []
@@ -21699,10 +21790,10 @@
                 "captions",
                 "premium"
               ],
-              "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is read-only: an owned transcript returns 200 at zero rows, an active purchase returns 202 with status_url and next_poll_seconds, and an unowned transcript returns 403 purchase_required with quote_url and prepare_url. It never purchases or substitutes captions. Quote and explicitly purchase the whole video before reading Premium. Default captions unless changed in account settings."
+              "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is read-only: an owned transcript returns 200 state ready at zero rows, an active purchase returns 202 state pending with its job, and an unowned transcript on a plan with Premium returns 200 state preparation_required with the quote and the POST /v1/transcriptions action. It never purchases or substitutes captions. Default captions unless changed in account settings."
             },
             "required": false,
-            "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is read-only: an owned transcript returns 200 at zero rows, an active purchase returns 202 with status_url and next_poll_seconds, and an unowned transcript returns 403 purchase_required with quote_url and prepare_url. It never purchases or substitutes captions. Quote and explicitly purchase the whole video before reading Premium. Default captions unless changed in account settings.",
+            "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is read-only: an owned transcript returns 200 state ready at zero rows, an active purchase returns 202 state pending with its job, and an unowned transcript on a plan with Premium returns 200 state preparation_required with the quote and the POST /v1/transcriptions action. It never purchases or substitutes captions. Default captions unless changed in account settings.",
             "name": "quality",
             "in": "query"
           },
@@ -21780,7 +21871,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The transcript: video, quality, source, language, languages, lines or paragraphs, speakers and revision on Premium, rows_billed, as_of, note.",
+            "description": "state ready: the transcript (video, quality, source, language, languages, lines or paragraphs, speakers and revision on Premium, rows_billed, as_of, note). state preparation_required: Premium is not owned yet; the quote and the POST that prepares it.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -21801,13 +21892,27 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TranscriptResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/TranscriptResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TranscriptPreparationRequired"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "state",
+                    "mapping": {
+                      "ready": "#/components/schemas/TranscriptResponse",
+                      "preparation_required": "#/components/schemas/TranscriptPreparationRequired"
+                    }
+                  }
                 }
               }
             }
           },
           "202": {
-            "description": "Owned purchase is pending; no transcript content or charge.",
+            "description": "state pending: the Premium purchase is in flight; job carries its status and poll interval. No transcript content or charge.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -21885,7 +21990,7 @@
         ],
         "operationId": "quote_transcription",
         "summary": "Quote a whole-video Premium purchase",
-        "description": "Optional free quote. It does not reserve funds or start generation. max_rows authorizes rows, while max_on_demand_cents separately authorizes new money and defaults to zero on purchase. The accepted purchase stores its pricing mode.",
+        "description": "Optional free quote. It does not reserve funds or start generation. max_rows authorizes rows, while max_on_demand_cents separately authorizes new money and defaults to zero on purchase. The accepted purchase stores its pricing mode. A video with no known duration, or one past the 12 hour cap, answers 400 invalid_query with param video_id.",
         "security": [
           {
             "bearerAuth": []
@@ -22067,7 +22172,7 @@
         ],
         "operationId": "submit_transcription",
         "summary": "Submit a YouTube video for transcription",
-        "description": "Explicit whole-video purchase. Requires Idempotency-Key and max_rows; max_on_demand_cents defaults to zero. Accepted price, mode, and debit identity persist across retries. Included rows or credits are reserved up front; monetary on-demand usage is reserved until Premium is ready. Existing owned unlocks cost zero. A terminal generation failure refunds the exact original debit and period before reporting refunded. A repeated key returns the same request; different intent with that key returns idempotency_conflict. Poll the returned request with Retry-After. Pending work returns 202 and an existing artifact returns 201.",
+        "description": "Explicit whole-video Premium purchase in one request: POST { video_id }. With no max_rows the purchase is capped at the current quote, and max_on_demand_cents defaults to zero, so it spends included rows or credits only and moves no money. Idempotency-Key is optional: without one, a purchase already open or owned for this video is returned with existing: true, and two simultaneous requests buy once. max_on_demand_cents above 0 is the only way to move money and requires both Idempotency-Key and max_rows (400 invalid_body names the missing one in param). A video with no known duration or longer than 12 hours answers 400 invalid_query with param video_id. A plan without Premium answers 403 forbidden with unlock. Accepted price, mode, and debit identity persist across retries. Included rows or credits are reserved up front; monetary on-demand usage is reserved until Premium is ready. Existing owned unlocks cost zero. A terminal generation failure refunds the exact original debit and period before reporting refunded. A repeated key returns the same request; different intent with that key returns idempotency_conflict. The body is { job, existing }. Poll job.status_url after Retry-After. A pending job returns 202; a ready, failed or refunded job returns 200. Idempotency-Replayed: true marks a replay of the same key; a different key joined onto the active purchase answers existing: true without it.",
         "security": [
           {
             "bearerAuth": []
@@ -22078,10 +22183,11 @@
             "schema": {
               "type": "string"
             },
-            "required": true,
+            "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Persist a unique key and the exact request before sending a logical mutation. A retry returns its stored response with Idempotency-Replayed: true. A changed intent under a finalized key returns 409 idempotency_conflict. Keys belong to the authenticated owner, credential and mutation domain. Current authorization still applies. Receipts have no general 24-hour expiry; signing-secret recovery alone expires after 24 hours or when the secret is displaced."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Persist a unique key and the exact request before sending a logical mutation. A retry returns its stored response with Idempotency-Replayed: true. A changed intent under a finalized key returns 409 idempotency_conflict. Keys belong to the authenticated owner, credential and mutation domain. Current authorization still applies. Receipts have no general 24-hour expiry; signing-secret recovery alone expires after 24 hours or when the secret is displaced."
           }
         ],
         "requestBody": {
@@ -22090,32 +22196,37 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "max_on_demand_cents": {
-                    "type": "number",
-                    "minimum": 0,
-                    "default": 0,
-                    "description": "Maximum new monetary on-demand charge in cents. Omit to authorize none."
+                  "video_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{11}$",
+                    "description": "YouTube video id (11 characters). Either video_id or url is required.",
+                    "example": "dQw4w9WgXcQ"
+                  },
+                  "videoId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{11}$",
+                    "description": "Alias of video_id for one release.",
+                    "deprecated": true
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "A YouTube watch/short/live URL. Either video_id or url is required."
                   },
                   "max_rows": {
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 3600,
-                    "description": "Maximum whole-video rows authorized. Credit mode charges four credits per row. Required even when submitting without a quote."
+                    "description": "Maximum whole-video rows authorized. Credit mode charges four credits per row. Omit it to cap the purchase at the current quote. Required with max_on_demand_cents above 0.",
+                    "example": 300
                   },
-                  "videoId": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]{11}$",
-                    "description": "YouTube video id (11 characters). Either videoId or url is required."
-                  },
-                  "url": {
-                    "type": "string",
-                    "format": "uri",
-                    "description": "A YouTube watch/short/live URL. Either videoId or url is required."
+                  "max_on_demand_cents": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 0,
+                    "description": "Maximum new monetary on-demand charge in whole cents. Defaults to 0, which moves no money. Above 0 it requires Idempotency-Key and max_rows."
                   }
                 },
-                "required": [
-                  "max_rows"
-                ],
                 "additionalProperties": false
               }
             }
@@ -22123,40 +22234,7 @@
         },
         "responses": {
           "200": {
-            "description": "An existing in-flight or already-satisfied request was returned (existing: true)",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-Arcmira-Version": {
-                "$ref": "#/components/headers/X-Arcmira-Version"
-              },
-              "RateLimit-Limit": {
-                "$ref": "#/components/headers/RateLimit-Limit"
-              },
-              "RateLimit-Remaining": {
-                "$ref": "#/components/headers/RateLimit-Remaining"
-              },
-              "RateLimit-Reset": {
-                "$ref": "#/components/headers/RateLimit-Reset"
-              },
-              "Retry-After": {
-                "$ref": "#/components/headers/Retry-After"
-              },
-              "Idempotency-Replayed": {
-                "$ref": "#/components/headers/Idempotency-Replayed"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TranscriptionSubmitResponse"
-                }
-              }
-            }
-          },
-          "201": {
-            "description": "Purchase ready",
+            "description": "job.state is ready, failed or refunded: the transcript is servable, or the purchase ended without one.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -22189,7 +22267,7 @@
             }
           },
           "202": {
-            "description": "Purchase funded; generation pending",
+            "description": "job.state is pending: generation is under way. Poll job.status_url after Retry-After.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -22254,24 +22332,6 @@
               }
             }
           },
-          "422": {
-            "description": "Duration unavailable or video too long (12h cap)",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-Arcmira-Version": {
-                "$ref": "#/components/headers/X-Arcmira-Version"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
           "429": {
             "$ref": "#/components/responses/RateLimited"
           },
@@ -22286,7 +22346,7 @@
         ],
         "operationId": "list_transcriptions",
         "summary": "List your transcription requests",
-        "description": "Your transcription requests in descending creation time and id order. limit defaults to 20 and accepts 1–100. Follow next_cursor with the same video_id, limit and credential; has_more is false and next_cursor is null on the last page. A traversal excludes requests inserted after its first page. Each entry has the same shape as the status poll plus a `title` field (the video title, null when unknown). The scheduled reconciler advances requests; reading this list never dispatches work or changes billing. In-flight entries carry `etaSeconds` + `nextPollSeconds`.",
+        "description": "Your transcription requests in descending creation time and id order. limit defaults to 20 and accepts 1–100. Follow next_cursor with the same video_id, limit and credential; has_more is false and next_cursor is null on the last page. A traversal excludes requests inserted after its first page. Each entry has the same shape as the status poll plus a `title` field (the video title, null when unknown). The scheduled reconciler advances requests; reading this list never dispatches work or changes billing. In-flight entries carry `eta_seconds` and `next_poll_seconds`.",
         "security": [
           {
             "bearerAuth": []
@@ -22397,7 +22457,7 @@
         ],
         "operationId": "get_transcription",
         "summary": "Poll transcription status",
-        "description": "Agent-friendly polling contract: while the request is in flight the response carries a Retry-After header (seconds) and body fields `etaSeconds` + `nextPollSeconds`. Sleep on Retry-After and re-poll. `status` walks queued → downloading → transcribing → analyzing → complete (user-facing `stage` folds downloading into transcribing). refund_pending retains Retry-After and nextPollSeconds until reversal completes; it has no completion ETA. Terminal statuses (`complete`, `failed`, `refunded`) drop Retry-After. On `complete`, fetch the transcript via GET /v1/transcripts/{video_id}; the successful purchase owns the permanent unlock. `refunded` means the pipeline failed and the rows were returned. A caller with no account holds no jobs: it is refused with 401 job_requires_account, whose unlock points at sign-up.",
+        "description": "Agent-friendly polling contract: while the request is in flight the response carries a Retry-After header (seconds) and body fields `eta_seconds` and `next_poll_seconds`. Sleep on Retry-After and re-poll. `status` walks queued → downloading → transcribing → analyzing → complete (user-facing `stage` folds downloading into transcribing). refund_pending retains Retry-After and next_poll_seconds until reversal completes; it has no completion ETA. Terminal statuses (`complete`, `failed`, `refunded`) drop Retry-After. On `complete`, fetch the transcript via GET /v1/transcripts/{video_id}; the successful purchase owns the permanent unlock. `refunded` means the pipeline failed and the rows were returned. A caller with no account holds no jobs: it is refused with 401 job_requires_account, whose unlock points at sign-up.",
         "security": [
           {
             "bearerAuth": []
@@ -22454,7 +22514,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TranscriptionRequest"
+                  "$ref": "#/components/schemas/TranscriptionJob"
                 }
               }
             }
@@ -22487,7 +22547,7 @@
         ],
         "operationId": "submit_correction",
         "summary": "Submit a transcript correction",
-        "description": "Unified corrections ingestion for all kinds: line_edit, speaker_reassign, speaker_identify, add_person, entity_tag, segment_rewrite. Corrections are free (0 rows) and land as pending-review rows attributed to your API key; speaker_identify/add_person also create a community-flagged appearance immediately. segment_rewrite is the structural primitive: it replaces an inclusive segment range with new segments (an empty replacements array deletes the range); timestamps can be pinned per replacement with optional start/end seconds, and unpinned times are repaired by char-proportional interpolation between pins. Anchored kinds (line_edit, speaker_reassign, entity_tag, segment_rewrite) must echo the `revision` from a Premium transcript read and an `anchor` ({ segmentIndex, contentHash: djb2 of the covered segment text }); `anchor.segmentIndex` is the line's `index` in that read. Error semantics for outbox-style clients: A 409 with a revision/anchor reason means the transcript changed (body { reason, currentRevision }); create a new event and key after re-anchoring, because the original refusal consumed its sequence and is replayable. A 409 with reason idempotency_conflict means a finalized key was reused for changed intent; recover the original request instead of rebasing that key. A 412 sequence mismatch (body { expectedSeq }) stores no receipt or effect; synchronize local counters and resend under the same key.",
+        "description": "Unified corrections ingestion for all kinds: line_edit, speaker_reassign, speaker_identify, add_person, entity_tag, segment_rewrite. Corrections are free (0 rows) and land as pending-review rows attributed to your API key; speaker_identify/add_person also create a community-flagged appearance immediately. segment_rewrite is the structural primitive: it replaces an inclusive segment range with new segments (an empty replacements array deletes the range); timestamps can be pinned per replacement with optional start/end seconds, and unpinned times are repaired by char-proportional interpolation between pins. Anchored kinds (line_edit, speaker_reassign, entity_tag, segment_rewrite) must echo the `revision` from a Premium transcript read and an `anchor` ({ segmentIndex, contentHash: djb2 of the covered segment text }); `anchor.segmentIndex` is the line's `index` in that read. Every refusal uses the shared error envelope. Error semantics for outbox-style clients: a 409 revision_mismatch or anchor_mismatch means the transcript changed, and error.current_revision is the revision to re-read; create a new event and key after re-anchoring, because the original refusal consumed its sequence and is replayable. A 409 idempotency_conflict means a finalized key was reused for changed intent; recover the original request instead of rebasing that key. A 412 sequence_mismatch stores no receipt or effect; error.expected_seq is the next seq, so synchronize local counters and resend under the same key.",
         "security": [
           {
             "bearerAuth": []
@@ -22511,7 +22571,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Persist a unique client event key with the HTTP method, public path and parsed body. The same finalized intent replays its original response with Idempotency-Replayed: true; changed finalized input returns 409 idempotency_conflict. Receipts have no expiry. A 412 stores no receipt or effect, so synchronize the sequence and resend under the same key. Other finalized refusals consume the eligible sequence once."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Persist a unique client event key with the HTTP method, public path and parsed body. The same finalized intent replays its original response with Idempotency-Replayed: true; changed finalized input returns 409 idempotency_conflict. Receipts have no expiry. A 412 stores no receipt or effect, so synchronize the sequence and resend under the same key. Other finalized refusals consume the eligible sequence once."
           }
         ],
         "requestBody": {
@@ -22665,7 +22726,7 @@
             }
           },
           "412": {
-            "description": "Sequence mismatch ({ error, expectedSeq }). Refetch, rebase, resend.",
+            "description": "sequence_mismatch. error.expected_seq is the next seq for this video. Refetch, rebase, resend under the same key.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -22677,7 +22738,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CorrectionSeqMismatchResponse"
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -22941,7 +23002,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Persist a unique key and the exact request before sending a logical mutation. A retry returns its stored response with Idempotency-Replayed: true. A changed intent under a finalized key returns 409 idempotency_conflict. Keys belong to the authenticated owner, credential and mutation domain. Current authorization still applies. Receipts have no general 24-hour expiry; signing-secret recovery alone expires after 24 hours or when the secret is displaced."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Persist a unique key and the exact request before sending a logical mutation. A retry returns its stored response with Idempotency-Replayed: true. A changed intent under a finalized key returns 409 idempotency_conflict. Keys belong to the authenticated owner, credential and mutation domain. Current authorization still applies. Receipts have no general 24-hour expiry; signing-secret recovery alone expires after 24 hours or when the secret is displaced."
           }
         ],
         "requestBody": {
@@ -23161,7 +23223,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Persist a unique key and the exact request before sending a logical mutation. A retry returns its stored response with Idempotency-Replayed: true. A changed intent under a finalized key returns 409 idempotency_conflict. Keys belong to the authenticated owner, credential and mutation domain. Current authorization still applies. Receipts have no general 24-hour expiry; signing-secret recovery alone expires after 24 hours or when the secret is displaced."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Persist a unique key and the exact request before sending a logical mutation. A retry returns its stored response with Idempotency-Replayed: true. A changed intent under a finalized key returns 409 idempotency_conflict. Keys belong to the authenticated owner, credential and mutation domain. Current authorization still applies. Receipts have no general 24-hour expiry; signing-secret recovery alone expires after 24 hours or when the secret is displaced."
           }
         ],
         "requestBody": {
@@ -23383,7 +23446,8 @@
             "required": false,
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Persist a unique key and the exact request before sending a logical mutation. A retry returns its stored response with Idempotency-Replayed: true. A changed intent under a finalized key returns 409 idempotency_conflict. Keys belong to the authenticated owner, credential and mutation domain. Current authorization still applies. Receipts have no general 24-hour expiry; signing-secret recovery alone expires after 24 hours or when the secret is displaced."
+            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
+            "description": "1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Persist a unique key and the exact request before sending a logical mutation. A retry returns its stored response with Idempotency-Replayed: true. A changed intent under a finalized key returns 409 idempotency_conflict. Keys belong to the authenticated owner, credential and mutation domain. Current authorization still applies. Receipts have no general 24-hour expiry; signing-secret recovery alone expires after 24 hours or when the secret is displaced."
           }
         ],
         "requestBody": {

@@ -5,7 +5,7 @@ import { runProgram } from "../src/sandbox.ts";
 import { fakeLoader, fakeOutbound } from "./fake-loader.ts";
 import responses from "./fixtures/transcription-responses.json" with { type: "json" };
 
-it("every Premium worked example handles ready, pending, purchase required and quota without reading absent lines", async () => {
+it("every Premium worked example handles ready, pending, preparation required and quota without reading absent lines", async () => {
   const examples = EXAMPLES.filter((example) =>
     example.code.includes('quality: "premium"'),
   );
@@ -14,23 +14,13 @@ it("every Premium worked example handles ready, pending, purchase required and q
     {
       status: 200,
       body: {
-        ...responses.get_transcript.body,
+        ...responses.get_transcript_ready.body,
         quality: "premium",
         speakers: [],
       },
     },
-    responses.get_transcript.responses["202"],
-    {
-      status: 403,
-      body: {
-        error: {
-          code: "purchase_required",
-          message: "Prepare explicitly",
-          quote_url: "/v1/transcripts/dQw4w9WgXcQ/quote",
-          prepare_url: "/v1/transcriptions",
-        },
-      },
-    },
+    responses.get_transcript_pending,
+    responses.get_transcript_preparation_required,
     {
       status: 402,
       body: {
@@ -59,7 +49,7 @@ it("every Premium worked example handles ready, pending, purchase required and q
       assert.equal(execution.ok, true, example.title);
       if (!execution.ok) continue;
       const result = JSON.parse(JSON.stringify(execution.value));
-      if (variant.status === 202) assert.deepEqual(result, variant.body);
+      if ("state" in variant.body && variant.body.state !== "ready") assert.deepEqual(result, variant.body);
       if (variant.status >= 400)
         assert.equal(
           result.error.code,
