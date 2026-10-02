@@ -1,7 +1,7 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { createMcpHandler } from 'agents/mcp/server';
 import pkg from '../package.json' with { type: 'json' };
-import { CLIENT_HEADER, DEFAULT_API_BASE, SRC, USER_AGENT, apiKeyOf, createApiClient, type Env as ApiEnv } from './api.ts';
+import { CALL_HEADER, CLIENT_HEADER, DEFAULT_API_BASE, SRC, TOOL_HEADER, USER_AGENT, apiKeyOf, createApiClient, type Env as ApiEnv } from './api.ts';
 import {
   AuthUnavailable,
   AUTHORIZATION_SERVER_PATH,
@@ -14,8 +14,9 @@ import {
   tokenIsLive,
 } from './auth.ts';
 import { ICON_PATH, SERVER_CARD_PATHS, serverCardResponse } from './card.ts';
-import { MCP_PATH, createServer, isRetiredTool, retiredToolResult } from './server.ts';
+import { MCP_PATH, createServer, isRetiredTool, retiredToolResult, type CallTag } from './server.ts';
 import type { SandboxHost } from './sandbox.ts';
+import { toolCallRecorder } from './telemetry.ts';
 import { TOOL_NAMES } from './tools.ts';
 
 // Every named export of the entry module is an entrypoint to workerd: keep it to the default handler and ApiOutbound.
@@ -28,6 +29,8 @@ export interface Env extends ApiEnv {
 interface OutboundProps {
   key: string;
   client: string | null;
+  /** The tool call this program runs for; sent upstream so the API's request events join its span. */
+  call?: { id: string; tool: string };
 }
 
 const BROWSER_ORIGINS = ['claude.ai', 'chatgpt.com', 'localhost', '127.0.0.1'];
@@ -50,6 +53,10 @@ export class ApiOutbound extends WorkerEntrypoint<Env, OutboundProps> {
     url.searchParams.set('src', SRC);
     const headers = new Headers({ authorization: `Bearer ${this.ctx.props.key}`, accept: 'application/json', 'user-agent': USER_AGENT });
     if (this.ctx.props.client) headers.set(CLIENT_HEADER, this.ctx.props.client);
+    if (this.ctx.props.call) {
+      headers.set(CALL_HEADER, this.ctx.props.call.id);
+      headers.set(TOOL_HEADER, this.ctx.props.call.tool);
+    }
     const response = await fetch(url, {
       method: 'GET',
       headers,
@@ -108,16 +115,18 @@ async function retiredCall(request: Request): Promise<Response | null> {
   });
 }
 
-function sandboxFor(env: Env, ctx: ExecutionContext, props: OutboundProps): SandboxHost | null {
-  if (!env.LOADER) return null;
+/** One sandbox per tool call, so the outbound tags each upstream request with that call. */
+function sandboxFor(env: Env, ctx: ExecutionContext, key: string, inboundClient: string | null): ((call: CallTag) => SandboxHost) | null {
+  const loader = env.LOADER;
+  if (!loader) return null;
   const { exports } = ctx as unknown as {
     exports: { ApiOutbound: (options: { props: OutboundProps }) => Fetcher };
   };
-  return {
-    loader: env.LOADER,
-    outbound: exports.ApiOutbound({ props }),
+  return (call) => ({
+    loader,
+    outbound: exports.ApiOutbound({ props: { key, client: call.client ?? inboundClient, call: { id: call.id, tool: call.tool } } }),
     apiBase: env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE,
-  };
+  });
 }
 
 export default {
@@ -154,7 +163,8 @@ export default {
       if (retired !== null) return retired;
       const api = createApiClient(env, key);
       const client = request.headers.get(CLIENT_HEADER);
-      return createMcpHandler(() => createServer({ api, sandbox: sandboxFor(env, ctx, { key, client }) }, env.CF_VERSION_METADATA?.id ?? null), {
+      const record = toolCallRecorder(env, ctx, request, key);
+      return createMcpHandler(() => createServer({ api, sandbox: sandboxFor(env, ctx, key, client), record }, env.CF_VERSION_METADATA?.id ?? null), {
         route: MCP_PATH,
         allowedOriginHostnames: BROWSER_ORIGINS,
       })(request, env, ctx);

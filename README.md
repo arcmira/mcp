@@ -73,6 +73,8 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 | `execute` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
 | `prepare_transcript` | `video_id`, `max_on_demand_cents?` (default 0), `max_rows?` | The one POST `/v1/transcriptions`. Returns the Job (`id`, `state`, `status`, `next_poll_seconds`, `status_url`). A retry with the same inputs never buys twice. With `max_on_demand_cents` above 0 it sends a generated Idempotency-Key and repeats it with the inputs as `intent`. |
 
+Every tool also takes an optional `intent`, at most 300 characters: the user's request in a few words. A host that omits it loses nothing. See [What we log](#what-we-log).
+
 `describe` and `execute` are read-only. `prepare_transcript` is explicitly non-read-only, destructive, idempotent for the same inputs, and open-world: it spends account balance and can submit external provider work. These hints describe effects. A Premium transcript request authorizes available included credits without another confirmation. max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it, so the agent states the amount and asks.
 
 A Premium transcript takes one program and at most one tool call. Run this in `execute`:
@@ -142,6 +144,17 @@ A gate inside a program throws an `ArcmiraError` with the API's error fields, an
 Switch on `code`, relay `unlock.url` to the human, and honor `retry_after_seconds` on `rate_limited`. A 200 that withheld something (Premium transcript text, the paid-versus-organic split, sponsors past the free slice) is a normal result carrying the same body under `access`. The full catalog is at https://arcmira.com/docs/errors.
 
 Every result, gates included, carries the key's budget after the call under `_meta["arcmira.com/rate_limit"]` as `{ "limit": 20, "remaining": 17, "reset": 1788819360 }`, read from the API's RateLimit headers, and `_meta["arcmira.com/build"]`: `server`, `deploy`, `api` (the API build that answered) and `client` (the host's name from its handshake, forwarded to the API as `x-arcmira-client`).
+
+## What we log
+
+Each tool call is logged to Arcmira's product analytics (PostHog), linked to the account that made it, so we can see how the tools are used and fix what fails. One record per call holds:
+
+- the tool name, the host's name and version, the server version, and how long the call took;
+- the input: the `execute` program text (first 4,000 characters), the `describe` topic, or the `prepare_transcript` arguments;
+- `intent`, when the agent sends it;
+- the outcome, not the result: ok or the error code, the result size, whether it was truncated, and the API routes the call made (`GET /v1/search`, not its query string).
+
+Before the record is stored, the API replaces anything that looks like a credential or an email address (`arc_` keys, `Bearer` tokens, `sk-` keys, addresses) with `[redacted]`. Results, transcript text and logs printed by a program are never logged. A call with no valid credential is not logged. The record is sent after the result, so logging never delays or changes an answer; a record that fails to send is dropped.
 
 ## Upgrading from 0.6.0
 

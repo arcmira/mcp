@@ -14,6 +14,8 @@ export function fakeApi(answers: Record<string, ApiResult>): ApiClient & { calls
     rateLimit: () => null,
     upstreamBuild: () => null,
     setClient() {},
+    setCall() {},
+    routes: () => calls.map((call) => `GET ${call.path}`),
     async get(path, query = {}) {
       calls.push({ path, query });
       const key = Object.keys(answers).find((prefix) => path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`));

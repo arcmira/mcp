@@ -7,6 +7,7 @@ import pkg from '../package.json' with { type: 'json' };
 import { BUILD_META, RATE_LIMIT_META, okResult, withRateLimit } from '../src/result.ts';
 import { METHODS } from '../src/reference.ts';
 import { fakeLoader, fakeOutbound } from './fake-loader.ts';
+import { TOOL_CALLS_PATH } from '../src/telemetry.ts';
 
 const RATE_LIMIT = { limit: 20, remaining: 17, reset: 1788819360 };
 
@@ -45,9 +46,16 @@ async function callTool(
     }),
   });
   const outbound = fakeOutbound({ '/v1': (url) => upstream(url) });
-  const ctx = { waitUntil() {}, passThroughOnException() {}, props: {}, exports: { ApiOutbound: () => outbound } } as unknown as ExecutionContext;
-  const response = await withFetch(upstream, () => worker.fetch(request, env, ctx));
-  const text = await response.text();
+  const deferred: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (p: Promise<unknown>) => deferred.push(p), passThroughOnException() {}, props: {}, exports: { ApiOutbound: () => outbound } } as unknown as ExecutionContext;
+  // Tool-call telemetry posts land here, never on the network or the test's upstream.
+  const handler = (url: URL, init?: RequestInit) => (url.pathname === TOOL_CALLS_PATH ? new Response(null, { status: 202 }) : upstream(url, init));
+  const text = await withFetch(handler, async () => {
+    const response = await worker.fetch(request, env, ctx);
+    const body = await response.text();
+    await Promise.all(deferred);
+    return body;
+  });
   const data = text.split('\n').find((line) => line.startsWith('data:'));
   return JSON.parse(data ? data.slice(5) : text) as ToolReply;
 }
@@ -110,6 +118,7 @@ describe('the two tools through the handler', () => {
       api_build: 'v-abc123',
       rate_limit: RATE_LIMIT,
       outcome_uncertain: false,
+      routes: ['GET /v1/entities/ent_14/momentum'],
     });
   });
 
