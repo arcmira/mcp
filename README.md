@@ -184,6 +184,16 @@ Arcmira ships changes weekly. Keep auto-update on.
 
 Each release bumps the version in every plugin manifest (a test enforces it), because Claude Code only updates a plugin whose version changed.
 
+## Gemini CLI
+
+Install the remote connection and core Arcmira reference from this repository:
+
+```bash
+gemini extensions install https://github.com/arcmira/mcp
+```
+
+The root `gemini-extension.json` points to the same remote MCP and generated reference as the plugin bundle. Sign in through the MCP authorization flow. The root extension does not separately install the five optional task skills.
+
 ## Develop
 
 ```bash
