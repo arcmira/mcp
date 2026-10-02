@@ -105,7 +105,7 @@ export const executeReadTool = tool({
 export const executeWriteTool = tool({
   name: 'arcmira_execute_write',
   title: 'Change Arcmira monitors',
-  description: `Runs JavaScript like arcmira_execute_read, with the account writes added: arcmira.monitors.create, arcmira.monitors.update (including isPaused) and arcmira.monitors.addEntities. Use it only to save what the user asked to follow: list their monitors first, never assume one exists, and ask how they want updates (email or Slack; as it happens, hourly or daily) before creating one. Nothing is deleted; pause instead. ${LIMITS}`,
+  description: `Runs JavaScript like arcmira_execute_read, with the account writes added: arcmira.monitors.create, arcmira.monitors.update (including isPaused), arcmira.monitors.addEntities and arcmira.monitors.attachTrackers. Use it only to save what the user asked to follow: list their monitors first, never assume one exists, and ask how they want updates (email or Slack; as it happens, hourly or daily) before creating one. Nothing is deleted; pause instead. ${LIMITS}`,
   annotations: {
     readOnlyHint: false,
     destructiveHint: false,

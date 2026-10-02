@@ -38,9 +38,10 @@ For this task:
 1. Find what to follow and the monitors that could hold it: the first program below, in `arcmira_execute_read`. Reuse ids the research already found instead of resolving again.
 2. A monitor fits when its name or its trackers match the subject. Suggest it by name ("Add Linear and Height to your Competitors monitor?") and wait for a yes.
 3. None fits: ask how the user wants updates, one question at a time, each with a default they can accept with "yes". First where: email to the account address (default) or Slack. Then when: as it happens, an hourly digest, or a daily digest (default daily). Then the name (default: the subject, like "Data center discourse").
-4. Slack needs the workspace connected first at https://arcmira.com/dashboard/integrations: link it and wait until the user says it is done. Reuse the `slackIntegration.id` an existing monitor shows as `slackIntegrationId`. When no monitor shows one, create the monitor with email and tell the user to switch its delivery to Slack in the dashboard.
-5. Save with the second program, in `arcmira_execute_write`: create the monitor only when none fits, then `addEntities` with every id in one call. Report each id as attached, already followed, or refused with its reason.
-6. Close with what arrives, where and when, and that `arcmira.monitors.update(id, { isPaused: true })` pauses it; nothing is deleted.
+4. Slack: the first program lists the connected workspaces (`slack`). With one, deliver there: `notifySlack: true`, its id as `slackIntegrationId` and its `default_channel_id` as `slackChannelId`; with several, ask which. With none, link https://arcmira.com/dashboard/integrations to connect one, and save with email for now, saying so; switch it later with `arcmira.monitors.update`.
+5. Save with the second program, in `arcmira_execute_write`: create the monitor only when none fits (or set Slack on the one that fits), then `addEntities` with every id in one call.
+6. Tell the user plainly about every id that did not attach. `entity_not_found`: Arcmira has no such entity; offer another spelling. `entity_type_not_trackable`: that kind of entity cannot be followed. `tracker_limit_reached`: the plan's tracker limit is full; pausing or removing trackers in the dashboard, or a higher plan, makes room. `tracked_in_another_monitor`: say which monitor already follows it (`current_monitor_name`) and ask before moving it; on a yes, `arcmira.monitors.attachTrackers(monitorId, [tracker_id])` in `arcmira_execute_write` moves it. When a result carries `canonical_entity_id`, the id was merged into that one; name the canonical entity.
+7. Close with what arrives, where and when, and that `arcmira.monitors.update(id, { isPaused: true })` pauses it; nothing is deleted.
 
 ## Worked program
 
@@ -62,12 +63,13 @@ for (const t of TOPICS) {
   const e = r.best ?? r.suggested;
   if (e && !follow.some(f => f.id === e.id)) follow.push({ name: e.name, id: e.id, type: e.type, spelling: t });
 }
-const { monitors } = await arcmira.monitors.list();
+const [{ monitors }, { integrations }] = await Promise.all([arcmira.monitors.list(), arcmira.integrations.slack()]);
 const existing = await Promise.all(monitors.slice(0, 10).map(async m => ({
-  id: m.id, name: m.name, paused: m.isPaused, frequency: m.notifyFrequency, slack: m.slackIntegration ?? null,
+  id: m.id, name: m.name, paused: m.isPaused, frequency: m.notifyFrequency, slack: Boolean(m.notifySlack),
   follows: (await arcmira.monitors.trackers(m.id)).trackers.map(t => t.displayName ?? t.entityName),
 })));
-return { follow, unresolved, monitors: existing, more_monitors: Math.max(0, monitors.length - 10) };
+const slack = integrations.map(i => ({ slackIntegrationId: i.id, workspace: i.team_name, slackChannelId: i.default_channel_id, channel: i.channels.find(c => c.id === i.default_channel_id)?.name ?? null }));
+return { follow, unresolved, monitors: existing, more_monitors: Math.max(0, monitors.length - 10), slack };
 ```
 
 ### Save to a monitor (arcmira_execute_write)
@@ -75,23 +77,34 @@ return { follow, unresolved, monitors: existing, more_monitors: Math.max(0, moni
 ```javascript
 const MONITOR_ID = null;   // a fitting monitor's id from the first program, or null to create one
 const IDS = ["ent_279443"];   // every id the user agreed to follow
-const DELIVERY = { name: "Competitors", notifyFrequency: "daily" };   // the user's answers; Slack: add notifySlack: true and slackIntegrationId
-const monitor = MONITOR_ID ? { id: MONITOR_ID } : (await arcmira.monitors.create(DELIVERY)).monitor;
-const saved = await arcmira.monitors.addEntities(monitor.id, IDS);
-return { monitor: { id: monitor.id, name: monitor.name ?? null, created: !MONITOR_ID }, results: saved.results };
+const DELIVERY = { name: "Competitors", notifyFrequency: "daily" };   // the user's answers, for a new monitor
+const SLACK = null;   // the user chose Slack: { slackIntegrationId, slackChannelId } from the first program's slack
+const slack = SLACK ? { notifySlack: true, slackIntegrationId: SLACK.slackIntegrationId, ...(SLACK.slackChannelId ? { slackChannelId: SLACK.slackChannelId } : {}) } : {};
+const monitor = MONITOR_ID
+  ? (SLACK ? (await arcmira.monitors.update(MONITOR_ID, slack)).monitor : { id: MONITOR_ID })
+  : (await arcmira.monitors.create({ ...DELIVERY, ...slack })).monitor;
+const { results } = await arcmira.monitors.addEntities(monitor.id, IDS);
+const others = results.some(r => r.reason === "tracked_in_another_monitor") ? (await arcmira.monitors.list()).monitors : [];
+return {
+  monitor: { id: monitor.id, name: monitor.name ?? null, created: !MONITOR_ID, slack: Boolean(SLACK) },
+  attached: results.filter(r => r.attached).map(r => ({ entity_id: r.canonical_entity_id ?? r.entity_id, merged_from: r.canonical_entity_id ? r.entity_id : null, new_tracker: r.created })),
+  not_attached: results.filter(r => !r.attached).map(r => ({ entity_id: r.entity_id, reason: r.reason, tracker_id: r.tracker_id ?? null, current_monitor_id: r.current_monitor_id ?? null, current_monitor_name: others.find(m => m.id === r.current_monitor_id)?.name ?? null })),
+};
 ```
 
 ## A good answer
 
 - Names every entity and topic spelling it will follow, with ids, and any it could not resolve.
 - Suggests an existing monitor only after reading the user's monitors, and says which entities it already follows.
-- Asks the delivery questions one at a time with a default each, and links the Slack connection page before choosing Slack.
+- Asks the delivery questions one at a time with a default each; for Slack, uses the connected workspace, or links the connection page and says the monitor uses email until then.
+- Names every id that did not attach and why, and asks before moving a tracker another monitor holds.
 - After saving, says what arrives, where and how often, and how to pause it.
 
 ## Traps
 
 - Never create or change a monitor before the user agreed to where it goes and how it delivers.
 - A monitor id comes from `monitors.list()`, never from a name the user said.
+- `tracked_in_another_monitor` leaves the tracker where it is. Never move it without a yes.
 - `insufficient_scope` means the sign-in lacks monitors:write or trackers:write: tell the user to reconnect Arcmira and allow monitor changes.
 - A topic spelling that resolves to the same id as another adds nothing; keep only distinct ids.
 

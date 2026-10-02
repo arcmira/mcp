@@ -300,6 +300,11 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       if (jobId) return get(`/v1/transcriptions/${encodeURIComponent(jobId)}`);
       return get('/v1/me');
     },
+    integrations: {
+      async slack() {
+        return get('/v1/integrations/slack');
+      },
+    },
     monitors: {
       async list() {
         return get('/v1/monitors');
@@ -318,6 +323,13 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         const fields = monitorFields('monitors.update', patch, MONITOR_UPDATE_FIELDS);
         if (Object.keys(fields).length === 0) throw new ArcmiraError('arcmira.monitors.update needs at least one field to change, like { isPaused: true }.', 'invalid_request');
         return write('monitors.update', path, fields, 'PATCH');
+      },
+      async attachTrackers(monitorId, trackerIds) {
+        const path = `/v1/monitors/${needMonitorId(monitorId)}/trackers`;
+        const ids = Array.isArray(trackerIds) ? trackerIds : [trackerIds];
+        if (ids.length === 0 || ids.length > MAX_ENTITY_IDS) throw new ArcmiraError(`arcmira.monitors.attachTrackers takes 1 to ${MAX_ENTITY_IDS} tracker ids; split the call.`, 'too_many');
+        for (const id of ids) if (typeof id !== 'string' || !/^trk_/.test(id)) throw new ArcmiraError(`attachTrackers takes tracker ids like trk_..., the tracker_id of an addEntities result, got ${JSON.stringify(id)}.`, 'id_required');
+        return write('monitors.attachTrackers', path, { trackerIds: [...new Set(ids)] });
       },
       async addEntities(monitorId, entityIds, options) {
         const path = `/v1/monitors/${needMonitorId(monitorId)}/entities`;

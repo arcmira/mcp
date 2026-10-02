@@ -26,7 +26,7 @@ export const LINKS = {
 export const BUDGET_RULE = `On-demand spend extends the plan: the account's on-demand budget is the approval, so never ask the user for a cents amount. When a budget or plan blocks a purchase (spend_limit_exceeded, quota_exceeded, a plan gate), tell the user to raise the on-demand budget at ${LINKS.spending} or upgrade the plan at ${LINKS.pricing} (not on Ultra or Enterprise), and link unlock.url when the refusal carries one.`;
 
 /** Rule 5: monitors are the user's, so the agent reads them before it suggests or creates one. */
-export const MONITOR_RULE = `MONITORS. Never assume a monitor exists ("Competitors" may not). To follow entities the research found: list the user's monitors with arcmira.monitors.list() and suggest any whose name or trackers fit. If none fits, ask how they want updates, one question at a time, each with a default: email (default) or Slack, then as it happens, an hourly digest or a daily digest (default daily). Slack needs the workspace connected first at ${LINKS.integrations}: link it. For a topic, resolve its spelling variants ("data centers", "datacenters", "data centre") and follow every one that is its own topic id. Then in arcmira_execute_write: arcmira.monitors.create when there is no fit, and arcmira.monitors.addEntities with every id in one call. Pause with arcmira.monitors.update(id, { isPaused: true }); there is no delete.`;
+export const MONITOR_RULE = `MONITORS. Never assume a monitor exists ("Competitors" may not). To follow entities the research found: list the user's monitors with arcmira.monitors.list() and suggest any whose name or trackers fit. If none fits, ask how they want updates, one question at a time, each with a default: email (default) or Slack, then as it happens, an hourly digest or a daily digest (default daily). For Slack, read arcmira.integrations.slack(): with a workspace, set notifySlack: true, slackIntegrationId and its default_channel_id as slackChannelId; with none, link ${LINKS.integrations} to connect one and use email for now, saying so. For a topic, resolve its spelling variants ("data centers", "datacenters", "data centre") and follow every one that is its own topic id. Then in arcmira_execute_write: arcmira.monitors.create when there is no fit, and arcmira.monitors.addEntities with every id in one call. Tell the user about every result with attached: false: entity_not_found, entity_type_not_trackable, tracker_limit_reached, or tracked_in_another_monitor (name the monitor at current_monitor_id and ask before moving it with arcmira.monitors.attachTrackers). Pause with arcmira.monitors.update(id, { isPaused: true }); there is no delete.`;
 
 /** Rule 6b: the closing line of every skill. */
 export const FEEDBACK_LINE = 'If anything was wrong, slow, or missing for the user, send one arcmira_feedback.';
@@ -157,7 +157,7 @@ export const METHODS: readonly MethodDoc[] = [
     name: 'monitors.create',
     signature: 'arcmira.monitors.create({ name, notifyFrequency, notifyEmails?, notifySlack?, slackIntegrationId?, slackChannelId?, digestTime? })',
     returns: '{ monitor{id, name, notifyFrequency, notifyEmails, notifySlack, isPaused} }',
-    notes: ['notifyFrequency: realtime (as it happens) | hourly | daily (digests), from the user\'s answer. Email goes to the account email; notifyEmails adds recipients, who confirm before delivery. notifySlack needs a Slack integration connected in the dashboard.'],
+    notes: ['notifyFrequency: realtime (as it happens) | hourly | daily (digests), from the user\'s answer. Email goes to the account email; notifyEmails adds recipients, who confirm before delivery. Slack: notifySlack: true with slackIntegrationId and slackChannelId from arcmira.integrations.slack().'],
     access: 'write',
   },
   {
@@ -170,9 +170,22 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'monitors.addEntities',
     signature: 'arcmira.monitors.addEntities(monitorId, entityIds, { personMatchMode? })',
-    returns: '{ monitor_id, results[{entity_id, tracker_id, created, attached, reason?}] }',
-    notes: ['Up to 90 ent_ ids in one call. Reuses the account\'s tracker for an entity, else creates one by id, and attaches each to the monitor; an id that cannot attach comes back attached: false with reason while the rest attach. personMatchMode for people: mentions (default) | appearances | both.'],
+    returns: '{ monitor_id, results[{entity_id, canonical_entity_id?, tracker_id, created, attached, reason?, current_monitor_id?}] }',
+    notes: ['Up to 90 ent_ ids in one call. Reuses the account\'s tracker for an entity, else creates one by id, and attaches each to the monitor; a merged id answers its canonical_entity_id. An id that cannot attach comes back attached: false while the rest attach, with reason entity_not_found | entity_type_not_trackable | tracker_limit_reached | tracked_in_another_monitor (current_monitor_id names that monitor; the tracker is not moved). personMatchMode for people: mentions (default) | appearances | both.'],
     access: 'write',
+  },
+  {
+    name: 'monitors.attachTrackers',
+    signature: 'arcmira.monitors.attachTrackers(monitorId, trackerIds)',
+    returns: '{ monitorId, attachedCount, message }',
+    notes: ['Moves existing trackers (trk_ ids, the tracker_id of an addEntities result) into this monitor. Only after the user agreed to move a tracker another monitor holds.'],
+    access: 'write',
+  },
+  {
+    name: 'integrations.slack',
+    signature: 'arcmira.integrations.slack()',
+    returns: '{ integrations[{id, team_name, default_channel_id, channels[{id, name}]}] }',
+    notes: [`The Slack workspaces connected to the account. Pass id as slackIntegrationId and default_channel_id as slackChannelId. Empty: the user connects one at ${LINKS.integrations}.`],
   },
 ];
 
@@ -285,7 +298,7 @@ export function referenceText(topic?: string): string {
   const exampleHits = EXAMPLES.filter((e) => hit(`${e.title} ${e.code}`));
   const examples = exampleHits.length > 0 ? exampleHits : EXAMPLES;
   return [
-    'arcmira client (JavaScript). Every method is async and returns parsed JSON. Your program is the body of an async function with arcmira and ArcmiraError in scope: use await, console.log for progress, and return one compact value with only the fields the answer needs. arcmira_execute_read runs every method except the three marked arcmira_execute_write only; arcmira_execute_write runs them all.',
+    'arcmira client (JavaScript). Every method is async and returns parsed JSON. Your program is the body of an async function with arcmira and ArcmiraError in scope: use await, console.log for progress, and return one compact value with only the fields the answer needs. arcmira_execute_read runs every method except those marked arcmira_execute_write only; arcmira_execute_write runs them all.',
     '',
     ID_RULE,
     '',

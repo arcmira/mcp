@@ -69,9 +69,9 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 
 | Tool | Input | Returns |
 |---|---|---|
-| `arcmira_describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, every method with arguments and return fields, nine worked example programs, the quirks that cost answers, the budget and monitor rules, error codes, and doc links. About 22,000 characters; `topic` narrows it to one method and its examples. Never bills. |
+| `arcmira_describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, every method with arguments and return fields, nine worked example programs, the quirks that cost answers, the budget and monitor rules, error codes, and doc links. About 23,000 characters; `topic` narrows it to one method and its examples. Never bills. |
 | `arcmira_execute_read` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Reads, the user's monitors, and Premium preparation (`arcmira.prepare`). Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
-| `arcmira_execute_write` | `code` | The same as `arcmira_execute_read`, with the account writes added: `arcmira.monitors.create`, `arcmira.monitors.update` (including `isPaused`) and `arcmira.monitors.addEntities`. Nothing is deleted. |
+| `arcmira_execute_write` | `code` | The same as `arcmira_execute_read`, with the account writes added: `arcmira.monitors.create`, `arcmira.monitors.update` (including `isPaused`), `arcmira.monitors.addEntities` and `arcmira.monitors.attachTrackers`. Nothing is deleted. |
 | `arcmira_feedback` | `category`, `note`, `request_id?`, `call_id?` | One `POST /v1/feedback` of type `experience`. `category` is `wrong_entity`, `bad_data`, `missing`, `slow`, `confusing` or `other`; `note` says what happened. Returns the feedback id. |
 
 Every tool also takes an optional `intent`, at most 300 characters: the user's request in a few words. A host that omits it loses nothing. See [What we log](#what-we-log).
@@ -115,7 +115,9 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 | `arcmira.monitors.trackers(monitorId)` | `GET /v1/monitors/{id}/trackers` | What one monitor already follows |
 | `arcmira.monitors.create({ name, notifyFrequency, notifyEmails?, notifySlack?, ... })` | `POST /v1/monitors` | A new monitor. Write tool only |
 | `arcmira.monitors.update(monitorId, { ..., isPaused? })` | `PATCH /v1/monitors/{id}` | Delivery changes, or a pause. Write tool only |
-| `arcmira.monitors.addEntities(monitorId, entityIds, { personMatchMode? })` | `POST /v1/monitors/{id}/entities` | Follows up to 90 entity ids in one call: reuses or creates each tracker by id and attaches it. Write tool only |
+| `arcmira.monitors.addEntities(monitorId, entityIds, { personMatchMode? })` | `POST /v1/monitors/{id}/entities` | Follows up to 90 entity ids in one call: reuses or creates each tracker by id and attaches it. An id that cannot attach says why (`entity_not_found`, `entity_type_not_trackable`, `tracker_limit_reached`, `tracked_in_another_monitor`). Write tool only |
+| `arcmira.monitors.attachTrackers(monitorId, trackerIds)` | `POST /v1/monitors/{id}/trackers` | Moves trackers another monitor holds, after the user agrees. Write tool only |
+| `arcmira.integrations.slack()` | `GET /v1/integrations/slack` | The connected Slack workspaces, with the id and default channel a monitor delivers to |
 
 `arcmira.today()` and `arcmira.daysAgo(n)` give ISO dates from the server clock for date windows.
 

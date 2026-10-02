@@ -20,7 +20,18 @@ const PENDING_PARAMS = new Set(['about', 'by', 'kind']);
  * outbound still appends src=mcp-tool to every sandbox request, and v1 ignores a query key a route
  * does not read (0.8 sent it on POST /v1/transcriptions).
  */
-const NO_SRC = new Set(['get_me', 'quote_transcription', 'submit_transcription', 'list_monitors', 'list_monitor_trackers', 'create_monitor', 'update_monitor', 'add_monitor_entities']);
+const NO_SRC = new Set([
+  'get_me',
+  'quote_transcription',
+  'submit_transcription',
+  'list_monitors',
+  'list_monitor_trackers',
+  'create_monitor',
+  'update_monitor',
+  'add_monitor_trackers',
+  'add_monitor_entities',
+  'list_slack_integrations',
+]);
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
 const MTS = 'UClWkDGXEzsh77GAhs90wpXw';
 
@@ -73,6 +84,8 @@ for (const [path, method] of [
   ['/v1/monitors/{id}', 'patch'],
   ['/v1/monitors/{id}/trackers', 'get'],
   ['/v1/monitors/{id}/entities', 'post'],
+  ['/v1/monitors/{id}/trackers', 'post'],
+  ['/v1/integrations/slack', 'get'],
   ['/v1/feedback', 'post'],
 ]) {
   if (!document.paths[path]?.[method]) fail(`Operation the client or arcmira_feedback calls is absent: ${method.toUpperCase()} ${path}`);
@@ -213,6 +226,8 @@ const SAMPLE_CALLS: Record<string, (a: Arcmira) => Promise<unknown>> = {
       digestTime: '09:00',
     }),
   monitors_update: (a) => (a.monitors as unknown as Arcmira).update('mon_1', { isPaused: true, notifyFrequency: 'hourly', isCollapsed: false, sortOrder: 1 }),
+  monitors_attachTrackers: (a) => (a.monitors as unknown as Arcmira).attachTrackers('mon_1', ['trk_1']),
+  integrations_slack: (a) => (a.integrations as unknown as Arcmira).slack(),
   monitors_addEntities: (a) => (a.monitors as unknown as Arcmira).addEntities('mon_1', ['ent_14', 'ent_99'], { personMatchMode: 'both' }),
 };
 
@@ -229,6 +244,7 @@ for (const [name, call] of Object.entries(SAMPLE_CALLS)) {
       job: { id: 'j' },
       monitors: [],
       trackers: [],
+      integrations: [],
       monitor: { id: 'mon_1' },
       data: [],
       chunks: [],

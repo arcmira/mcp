@@ -85,17 +85,20 @@ describe('the sandbox client', () => {
     const read = mod.createArcmira({ base: 'https://api.arcmira.com', fetch }).arcmira as unknown as { monitors: Record<string, (...a: unknown[]) => Promise<unknown>> };
     await read.monitors.list();
     await read.monitors.trackers('mon_1');
-    for (const call of [() => read.monitors.create({ name: 'A', notifyFrequency: 'daily' }), () => read.monitors.update('mon_1', { isPaused: true }), () => read.monitors.addEntities('mon_1', ['ent_14'])])
+    await (read as unknown as { integrations: { slack(): Promise<unknown> } }).integrations.slack();
+    for (const call of [() => read.monitors.create({ name: 'A', notifyFrequency: 'daily' }), () => read.monitors.update('mon_1', { isPaused: true }), () => read.monitors.addEntities('mon_1', ['ent_14']), () => read.monitors.attachTrackers('mon_1', ['trk_1'])])
       await assert.rejects(call(), (e: Error & { code: string }) => e.code === 'write_tool_required' && /arcmira_execute_write/.test(e.message));
-    assert.equal(sent.length, 2);
+    assert.deepEqual(sent.map((c) => `${c.method} ${c.path}`), ['GET /v1/monitors', 'GET /v1/monitors/mon_1/trackers', 'GET /v1/integrations/slack']);
     const write = mod.createArcmira({ base: 'https://api.arcmira.com', fetch, access: 'write', idempotencyKey: () => `k${++n}` }).arcmira as unknown as typeof read;
     await write.monitors.create({ name: 'Competitors', notifyFrequency: 'daily', notifySlack: undefined });
     await write.monitors.update('mon_9', { isPaused: true });
     await write.monitors.addEntities('mon_9', ['ent_14', 'ent_14', 'ent_99'], { personMatchMode: 'both' });
-    assert.deepEqual(sent.slice(2), [
+    await write.monitors.attachTrackers('mon_9', ['trk_1', 'trk_1']);
+    assert.deepEqual(sent.slice(3), [
       { method: 'POST', path: '/v1/monitors', body: { name: 'Competitors', notifyFrequency: 'daily' }, key: 'k1' },
       { method: 'PATCH', path: '/v1/monitors/mon_9', body: { isPaused: true }, key: 'k2' },
       { method: 'POST', path: '/v1/monitors/mon_9/entities', body: { entity_ids: ['ent_14', 'ent_99'], person_match_mode: 'both' }, key: 'k3' },
+      { method: 'POST', path: '/v1/monitors/mon_9/trackers', body: { trackerIds: ['trk_1'] }, key: 'k4' },
     ]);
     for (const [call, code] of [
       [() => write.monitors.create({ name: 'A' }), 'invalid_request'],
@@ -106,9 +109,10 @@ describe('the sandbox client', () => {
       [() => write.monitors.addEntities('mon_9', ['Linear']), 'id_required'],
       [() => write.monitors.addEntities('mon_9', []), 'too_many'],
       [() => write.monitors.addEntities('mon_9', ['ent_1'], { personMatchMode: 'speakers' }), 'invalid_request'],
+      [() => write.monitors.attachTrackers('mon_9', ['ent_14']), 'id_required'],
     ] as const)
       await assert.rejects(call(), (e: Error & { code: string }) => e.code === code);
-    assert.equal(sent.length, 5);
+    assert.equal(sent.length, 7);
   });
 
   it('prepare reads the quote, then posts the quoted rows and on-demand cents with a key and returns the Job', async () => {
