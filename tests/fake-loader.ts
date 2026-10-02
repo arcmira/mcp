@@ -25,7 +25,8 @@ export function fakeLoader(): WorkerLoader {
           const original = globalThis.fetch;
           globalThis.fetch = (async (target: string | URL | Request, init?: RequestInit) => {
             if (outbound === null || outbound === undefined) throw new Error('no network');
-            return outbound.fetch(target, init);
+            // workerd hands globalOutbound one Request, method, headers and body included.
+            return outbound.fetch(new Request(target, init));
           }) as typeof fetch;
           try {
             return await mod.default.fetch(new Request(String(input)), code.env);

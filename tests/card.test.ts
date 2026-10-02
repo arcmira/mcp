@@ -50,11 +50,11 @@ describe('the server card', () => {
     for (const tool of card.tools) {
       assert.ok(tool.title.length > 0, `${tool.name} has no title`);
       assert.equal(tool.inputSchema.type, 'object');
-      assert.equal(tool.annotations.readOnlyHint, tool.name !== 'prepare_transcript');
+      assert.equal(tool.annotations.readOnlyHint, tool.name !== 'arcmira_execute_write');
     }
     assert.deepEqual(
       card.tools.map((tool) => tool.name),
-      ['describe', 'execute', 'prepare_transcript'],
+      ['arcmira_describe', 'arcmira_execute_read', 'arcmira_execute_write', 'arcmira_feedback'],
     );
   });
 
@@ -65,6 +65,6 @@ describe('the server card', () => {
     assert.equal(response.headers.get('cache-control'), 'public, max-age=3600');
     assert.equal(response.headers.get('access-control-allow-origin'), '*');
     const body = (await response.json()) as { tools: unknown[] };
-    assert.equal(body.tools.length, 3);
+    assert.equal(body.tools.length, 4);
   });
 });

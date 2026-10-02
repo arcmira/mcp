@@ -94,7 +94,7 @@ export default {
         Object.defineProperty(scope, 'fetch', { value: meteredFetch, writable: true, configurable: true });
     }
     globalThis.fetch = meteredFetch;
-    const { arcmira } = createArcmira({ base: env.API_BASE, maxCalls: ${MAX_CALLS} });
+    const { arcmira } = createArcmira({ base: env.API_BASE, maxCalls: ${MAX_CALLS}, access: env.ACCESS === 'write' ? 'write' : 'read' });
     const finish = execution => {
       execution.calls_started = meter.calls;
       execution.in_flight = meter.calls - meter.completed;
@@ -128,10 +128,33 @@ export default {
 };`;
 }
 
+/** Which execute tool a program runs under. The outbound enforces the routes; the client only fails faster. */
+export type Access = 'read' | 'write';
+
+/** True when `path` is `root` or under it. */
+const under = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
+
+/**
+ * The routes a sandbox program may call, by tool. Read: any GET under /v1, and POST
+ * /v1/transcriptions (Premium preparation is a read, ruling 2026-10-02). Write adds POST and PATCH
+ * under /v1/monitors and /v1/trackers, never DELETE, and never the webhook secret rotation, which
+ * breaks the user's existing webhook verification.
+ */
+export function outboundAllowed(access: Access, method: string, path: string): boolean {
+  if (/%2f|%5c/i.test(path) || !under(path, '/v1')) return false;
+  if (method === 'GET') return true;
+  if (method === 'POST' && path === '/v1/transcriptions') return true;
+  if (access !== 'write' || (method !== 'POST' && method !== 'PATCH')) return false;
+  if (path.includes('/webhook-secret')) return false;
+  return under(path, '/v1/monitors') || under(path, '/v1/trackers');
+}
+
 export interface SandboxHost {
   loader: WorkerLoader;
+  /** Refuses every request outside this host's access allowlist (ApiOutbound in src/index.ts). */
   outbound: Fetcher;
   apiBase: string;
+  access: Access;
 }
 
 /** An in-isolate render is at most RESULT_CAP characters, and UTF-8 spends at most three bytes on each. */
@@ -200,7 +223,7 @@ export async function runProgram(host: SandboxHost, code: string): Promise<Execu
         'client.js': clientSource,
         'output.js': outputSource,
       },
-      env: { API_BASE: host.apiBase, MAX_CALLS },
+      env: { API_BASE: host.apiBase, MAX_CALLS, ACCESS: host.access },
       globalOutbound: host.outbound,
       limits: { cpuMs: CPU_LIMIT_MS, subRequests: MAX_CALLS },
     });
@@ -211,7 +234,7 @@ export async function runProgram(host: SandboxHost, code: string): Promise<Execu
             unknownOutcome(
               'TimeoutError',
               'timeout',
-              'The program exceeded 30 seconds. Its call count and final outcome are unknown. Read requests may still finish and consume rows. No purchase was authorized. Retry with a smaller query or inspect the existing preparation status.',
+              'The program exceeded 30 seconds. Its call count and final outcome are unknown. Requests may still finish and consume rows; a preparation or monitor change it started may have gone through. Retry with a smaller program, or check arcmira.status({ jobId }) or arcmira.monitors.list() before repeating a change.',
             ),
           ),
         TIME_LIMIT_MS,
