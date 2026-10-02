@@ -64,11 +64,12 @@ export interface RateLimit {
   reset: number;
 }
 
+/** The POST /v1/transcriptions body, plus the Idempotency-Key header when one is sent. */
 export interface PrepareTranscript {
   video_id: string;
-  max_rows: number;
-  max_on_demand_cents?: number;
-  idempotency_key: string;
+  max_rows?: number;
+  max_on_demand_cents: number;
+  idempotency_key?: string;
 }
 
 export interface ApiClient {
@@ -171,12 +172,12 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
       client = info?.name ? `${info.name}${info.version ? `/${info.version}` : ''}`.slice(0, 120) : null;
     },
     get: (path, query = {}) => request(path, query),
-    prepareTranscript: (input) => request('/v1/transcriptions', {}, input),
+    prepareTranscript: ({ idempotency_key, ...body }) => request('/v1/transcriptions', {}, { body, idempotency_key }),
   };
   async function request<T = Record<string, unknown>>(
     path: string,
     query: Query = {},
-    purchase?: PrepareTranscript,
+    purchase?: { body: Omit<PrepareTranscript, 'idempotency_key'>; idempotency_key?: string },
   ): Promise<ApiResult<T>> {
     const url = new URL(base + path);
     for (const [key, value] of Object.entries(query)) {
@@ -192,23 +193,11 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
       redirect: 'manual',
       signal: AbortSignal.timeout(30_000),
       method: purchase ? 'POST' : 'GET',
-      ...(purchase
-        ? {
-            body: JSON.stringify({
-              videoId: purchase.video_id,
-              max_rows: purchase.max_rows,
-              max_on_demand_cents: purchase.max_on_demand_cents ?? 0,
-            }),
-          }
-        : {}),
+      ...(purchase ? { body: JSON.stringify(purchase.body) } : {}),
       headers: {
         authorization: `Bearer ${apiKey}`,
-        ...(purchase
-          ? {
-              'content-type': 'application/json',
-              'idempotency-key': purchase.idempotency_key,
-            }
-          : {}),
+        ...(purchase ? { 'content-type': 'application/json' } : {}),
+        ...(purchase?.idempotency_key ? { 'idempotency-key': purchase.idempotency_key } : {}),
         accept: 'application/json',
         'user-agent': USER_AGENT,
         ...(client ? { [CLIENT_HEADER]: client } : {}),

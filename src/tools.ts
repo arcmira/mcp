@@ -106,8 +106,7 @@ export const quoteTranscriptTool = tool({
 export const prepareTranscriptTool = tool({
   name: 'prepare_transcript',
   title: 'Prepare a Premium transcript',
-  description:
-    `Prepares a whole Premium video. A user request for Premium authorizes using available included credits; do not ask for another confirmation. Use the current quote to set max_rows. Obtain a quote first only if the current refusal did not include one. ${DOLLAR_RULE} Never infer dollar authorization from a Premium request. Persist an idempotency_key before calling; retry an uncertain outcome with the same key and exact same inputs. Returns the public {request, existing?} envelope: 201 ready, 202 pending, 200 replay, or a typed refusal with its current quote. This tool can debit the account. It can only POST /v1/transcriptions; execute remains read-only.`,
+  description: `Prepares the whole Premium transcript of one video. Call it when arcmira.transcript(video, { quality: "premium" }) answers state preparation_required. A user's Premium request authorizes included credits; do not ask again. Returns the Job: then in execute, await arcmira.wait(job) and read the transcript. ${DOLLAR_RULE} A retry with the same inputs never buys twice. The only tool that can debit the account.`,
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -117,42 +116,38 @@ export const prepareTranscriptTool = tool({
   inputSchema: z
     .object({
       video_id: video,
+      max_on_demand_cents: z.number().int().min(0).default(0).describe(DOLLAR_RULE),
       max_rows: z
         .number()
         .int()
         .min(0)
         .max(3600)
-        .describe('Whole-video row ceiling from the current quote. For requested included-credit work, set this without another confirmation.'),
-      max_on_demand_cents: z
-        .number()
-        .nonnegative()
         .optional()
-        .describe(`Maximum new dollar overage in cents. ${DOLLAR_RULE}`),
-      idempotency_key: z
-        .string()
-        .min(1)
-        .max(128)
-        .describe(
-          'Persisted intent key. Reuse unchanged after timeout or lost response; change only for a new deliberate purchase.',
-        ),
+        .describe('Whole-video row ceiling. Omit it to cap at the current quote; required with max_on_demand_cents above 0.'),
     })
     .strict(),
   async run(input, _host, api) {
     if (!api) return errorResult(sandboxUnavailable());
+    // The API requires a key only to authorize money; zero-dollar preparation dedupes per account and video.
+    const intent = input.max_on_demand_cents > 0 ? { ...input, idempotency_key: crypto.randomUUID() } : null;
     try {
-      const answer = await api.prepareTranscript(input);
+      const answer = await api.prepareTranscript(intent ?? input);
       if (!answer.ok && ['upstream_unreadable', 'redirect_refused'].includes(answer.error.code))
         throw new Error('Preparation response did not establish the outcome');
-      return answer.ok ? okResult(answer.body) : errorResult(answer.error, answer.body);
+      if (!answer.ok) return errorResult(answer.error, answer.body);
+      return okResult({ ...(answer.body.job as Record<string, unknown>), ...(intent ? { intent } : {}) });
     } catch {
-      return errorResult({
-        type: 'server_error',
-        code: 'preparation_outcome_unknown',
-        message:
-          'The purchase response was not received. The purchase may have been accepted. Retry prepare_transcript with the same idempotency_key and identical ceilings; do not create a new key.',
-        doc_url: DOCS.errors,
-        request_id: `mcp_${crypto.randomUUID()}`,
-      });
+      return errorResult(
+        {
+          type: 'server_error',
+          code: 'preparation_outcome_unknown',
+          message:
+            'The preparation response was lost, so the purchase may have been accepted. Call prepare_transcript again with the same inputs; the API answers with this video\'s existing purchase instead of buying twice.',
+          doc_url: DOCS.errors,
+          request_id: `mcp_${crypto.randomUUID()}`,
+        },
+        intent ? { intent } : undefined,
+      );
     }
   },
 });

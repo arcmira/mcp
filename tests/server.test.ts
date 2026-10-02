@@ -197,104 +197,62 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
     assert.equal(result.truncated, true);
     assert.equal(result.calls, 1);
   });
-  it('quotes with GET and prepares only the approved POST with a persisted intent and default zero money ceiling', async () => {
-    const calls: Array<{
-      path: string;
-      method: string;
-      body: unknown;
-      key: string | null;
-    }> = [];
+  it('prepares with one keyless POST of the video id and answers the Job', async () => {
+    const calls: Array<{ method: string; body: unknown; key: string | null }> = [];
     const upstream = (url: URL, init?: RequestInit) => {
-      if (url.pathname !== '/v1/me')
-        calls.push({
-          path: url.pathname,
-          method: init?.method ?? 'GET',
-          body: init?.body ? JSON.parse(String(init.body)) : null,
-          key: new Headers(init?.headers).get('idempotency-key'),
-        });
-      const specPath = url.pathname.replace('dQw4w9WgXcQ', '{video_id}');
-      const operation = Object.entries(openapi.paths).find(([path]) => path === specPath)?.[1];
-      if (url.pathname !== '/v1/me')
-        assert.ok(
-          operation && (init?.method?.toLowerCase() ?? 'get') in operation,
-          `Undocumented operation: ${url.pathname}`,
-        );
-      if (init?.method === 'POST') {
-        const body = JSON.parse(String(init.body));
-        const schema = openapi.paths['/v1/transcriptions'].post.requestBody.content['application/json'].schema;
-        for (const key of Object.keys(body)) assert.ok(key in schema.properties, `Unknown request field ${key}`);
-        assert.ok(body.videoId || body.url);
-      }
-      return Response.json(
-        url.pathname.endsWith('/quote')
-          ? responses.quote_transcription.body
-          : responses.submit_transcription_pending.body,
-        { status: url.pathname === '/v1/transcriptions' ? 202 : 200 },
-      );
+      if (url.pathname === '/v1/me') return Response.json({ id: 'caller' });
+      assert.equal(url.pathname, '/v1/transcriptions');
+      const body = JSON.parse(String(init?.body));
+      const schema = openapi.paths['/v1/transcriptions'].post.requestBody.content['application/json'].schema;
+      for (const key of Object.keys(body)) assert.ok(key in schema.properties, `Unknown request field ${key}`);
+      calls.push({ method: init?.method ?? 'GET', body, key: new Headers(init?.headers).get('idempotency-key') });
+      const answer = responses.submit_transcription_pending;
+      return Response.json(answer.body, { status: answer.status, headers: answer.headers });
     };
-    await callTool('quote_transcript', { video_id: 'dQw4w9WgXcQ' }, upstream);
-    for (let replay = 0; replay < 2; replay++) {
-      const result = await callTool(
-        'prepare_transcript',
-        {
-          video_id: 'dQw4w9WgXcQ',
-          max_rows: 300,
-          idempotency_key: 'persisted-intent',
-        },
-        upstream,
-      );
-      assert.equal(result.result.isError, undefined);
+    const reply = await callTool('prepare_transcript', { video_id: 'dQw4w9WgXcQ' }, upstream);
+    assert.equal(reply.result.isError, undefined);
+    assert.deepEqual(reply.result.structuredContent, responses.submit_transcription_pending.body.job);
+    assert.deepEqual(JSON.parse(textOf(reply)), reply.result.structuredContent);
+    assert.deepEqual(calls, [{ method: 'POST', body: { video_id: 'dQw4w9WgXcQ', max_on_demand_cents: 0 }, key: null }]);
+    for (const extra of [{ idempotency_key: 'k' }, { path: '/v1/anything' }]) {
+      const rejected = await callTool('prepare_transcript', { video_id: 'dQw4w9WgXcQ', ...extra }, upstream);
+      assert.equal(rejected.result.isError, true);
     }
-    assert.deepEqual(calls, [
-      {
-        path: '/v1/transcripts/dQw4w9WgXcQ/quote',
-        method: 'GET',
-        body: null,
-        key: null,
-      },
-      {
-        path: '/v1/transcriptions',
-        method: 'POST',
-        body: { videoId: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: 0 },
-        key: 'persisted-intent',
-      },
-      {
-        path: '/v1/transcriptions',
-        method: 'POST',
-        body: { videoId: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: 0 },
-        key: 'persisted-intent',
-      },
-    ]);
-    const rejected = await callTool(
-      'prepare_transcript',
-      {
-        video_id: 'dQw4w9WgXcQ',
-        max_rows: 300,
-        idempotency_key: 'x',
-        path: '/v1/anything',
-      },
-      upstream,
-    );
-    assert.equal(rejected.result.isError, true);
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 1);
   });
-  it('a lost preparation response instructs exact replay without claiming no purchase occurred', async () => {
-    const reply = await callTool(
-      'prepare_transcript',
-      {
-        video_id: 'dQw4w9WgXcQ',
-        max_rows: 300,
-        idempotency_key: 'lost-intent',
-      },
-      (url) => {
+  it('an approved cents ceiling sends a generated key and repeats it with the inputs', async () => {
+    let sent: string | null = null;
+    const reply = await callTool('prepare_transcript', { video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: 50 }, (url, init) => {
+      if (url.pathname === '/v1/me') return Response.json({ id: 'caller' });
+      sent = new Headers(init?.headers).get('idempotency-key');
+      assert.deepEqual(JSON.parse(String(init?.body)), { video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: 50 });
+      return Response.json(responses.submit_transcription_pending.body, { status: 202 });
+    });
+    assert.match(sent ?? '', /^[\x21-\x7e]{1,255}$/);
+    assert.deepEqual(reply.result.structuredContent, {
+      ...responses.submit_transcription_pending.body.job,
+      intent: { video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: 50, idempotency_key: sent },
+    });
+    assert.deepEqual(JSON.parse(textOf(reply)), reply.result.structuredContent);
+  });
+  it('a lost preparation response says to retry the same inputs, and repeats a generated key', async () => {
+    for (const [args, keyed] of [
+      [{ video_id: 'dQw4w9WgXcQ' }, false],
+      [{ video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: 50 }, true],
+    ] as const) {
+      let sent: string | null = null;
+      const reply = await callTool('prepare_transcript', args, (url, init) => {
         if (url.pathname === '/v1/me') return Response.json({ id: 'caller' });
+        sent = new Headers(init?.headers).get('idempotency-key');
         throw new Error('lost acknowledgement');
-      },
-    );
-    assert.equal(reply.result.isError, true);
-    const body = JSON.parse(textOf(reply));
-    assert.equal(body.error.code, 'preparation_outcome_unknown');
-    assert.match(body.error.message, /same idempotency_key/);
+      });
+      assert.equal(reply.result.isError, true);
+      const body = JSON.parse(textOf(reply));
+      assert.equal(body.error.code, 'preparation_outcome_unknown');
+      assert.match(body.error.message, /same inputs/);
+      assert.deepEqual(body.intent, keyed ? { ...args, idempotency_key: sent } : undefined);
+      assert.deepEqual(reply.result.structuredContent, body);
+    }
   });
 });
 
@@ -314,28 +272,19 @@ it('a pending Premium read stays data under a heavy payload, and a POST refusal 
   const refusal = responses.submit_transcription_max_rows_exceeded;
   const prepared = await callTool(
     'prepare_transcript',
-    { video_id: 'dQw4w9WgXcQ', max_rows: 75, idempotency_key: 'refused' },
+    { video_id: 'dQw4w9WgXcQ', max_rows: 75 },
     () => Response.json(refusal.body, { status: refusal.status }),
   );
   assert.deepEqual(JSON.parse(textOf(prepared)), refusal.body);
 });
 
-it('unreadable preparation acknowledgement requires same-key recovery', async () => {
-  const reply = await callTool(
-    'prepare_transcript',
-    {
-      video_id: 'dQw4w9WgXcQ',
-      max_rows: 300,
-      idempotency_key: 'unreadable-intent',
-    },
-    (url) =>
-      url.pathname === '/v1/me'
-        ? Response.json({ id: 'caller' })
-        : new Response('truncated acknowledgement', { status: 202 }),
+it('an unreadable preparation acknowledgement is an unknown outcome to retry with the same inputs', async () => {
+  const reply = await callTool('prepare_transcript', { video_id: 'dQw4w9WgXcQ' }, (url) =>
+    url.pathname === '/v1/me' ? Response.json({ id: 'caller' }) : new Response('truncated acknowledgement', { status: 202 }),
   );
   const body = JSON.parse(textOf(reply));
   assert.equal(body.error.code, 'preparation_outcome_unknown');
-  assert.match(body.error.message, /same idempotency_key/);
+  assert.match(body.error.message, /same inputs/);
 });
 
 it('quote transport failure returns a typed retryable result', async () => {

@@ -136,7 +136,7 @@ console.log(`${(quoteOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'quote free'.padEnd
 
 const prepared = await client.callTool({
   name: 'prepare_transcript',
-  arguments: { video_id: UNOWNED_VIDEO, max_rows: 0, max_on_demand_cents: 0, idempotency_key: `smoke-max-rows-0-${crypto.randomUUID()}` },
+  arguments: { video_id: UNOWNED_VIDEO, max_rows: 0 },
 });
 const preparedText = textOf(prepared);
 const afterPrepare = await spend();

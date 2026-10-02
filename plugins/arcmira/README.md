@@ -6,7 +6,7 @@ Arcmira is the search engine for the spoken web. This plugin connects your codin
 
 ## What it bundles
 
-- The remote Arcmira MCP server at `https://mcp.arcmira.com/mcp`. It exposes four tools: `describe` returns the client reference, `execute` runs read-only JavaScript, `quote_transcript` quotes a whole-video purchase, and `prepare_transcript` prepares requested work using included credits, a zero-dollar ceiling, and a persisted idempotency key. The host signs you in through OAuth on first use.
+- The remote Arcmira MCP server at `https://mcp.arcmira.com/mcp`. It exposes four tools: `describe` returns the client reference, `execute` runs read-only JavaScript, `quote_transcript` quotes a whole-video purchase, and `prepare_transcript` prepares requested work from included credits with a zero-dollar ceiling. The host signs you in through OAuth on first use.
 - The `arcmira` skill, which teaches the agent to resolve names to ids, run one program per question, and cite the date the index runs through.
 - Five task skills, each with a worked program and the bar for a good answer: `sponsor-research`, `company-watch`, `find-quotes`, `person-research`, `compare-shows`. Each starts from the names you give and says which entity it used.
 
