@@ -19,7 +19,7 @@ export const DOLLAR_RULE =
 
 export const ACCESS_GUIDANCE = 'When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not upgrade a plan. Requested Premium work may use included credits without another confirmation. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.';
 
-const PREMIUM_PREPARATION = `PREMIUM PREPARATION. arcmira.quote(video) is a free whole-video quote. Read quote.rows and charge.unit/amount, plus max_on_demand_cents. A 15-minute quarter is 75 rows; credit mode uses four credits per row. A window never reduces the purchase price. A user request for Premium authorizes available included credits. Do not ask again. Call prepare_transcript({video_id}) outside execute. ${DOLLAR_RULE} A retry with the same inputs never buys twice. It returns the Job; poll arcmira.status({jobId: job.id}) at job.next_poll_seconds. refund_pending is unfinished recovery, not a completed refund. Never silently downgrade Premium to captions.`;
+const PREMIUM_PREPARATION = `PREMIUM PREPARATION. Read Premium with the Premium worked example, swapping in the video id. ready: answer from lines. pending after wait's 25 seconds: run it again. preparation_required: call the prepare_transcript tool with { video_id } (a Premium request authorizes included credits; do not ask again), then run the same program again. ${DOLLAR_RULE} The quote prices the whole video (75 rows per 15-minute quarter, four credits per row); start and end never lower it, and arcmira.quote(video) reads it for free. A Job in state failed or refunded carries error; status refund_pending is not a completed refund. Plans without Premium answer captions with an access gate: report it, never present captions as Premium.`;
 
 export const ID_RULE = `ID RULE. Filters take verbatim ids only: entity ids look like ent_14, channel ids like UC-DRzaGnL_vtBUpCFH5M0tg (UC plus 22 characters), video ids are 11 characters or a YouTube URL. A name where an id belongs throws id_required before any network call. Resolve first, then query:
   const r = await arcmira.resolve("Sam", { context: "the My First Million co-host" });
@@ -82,8 +82,8 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'transcript',
     signature: 'arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })',
-    returns: '{ state: ready | pending; ready: video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name}], quality, source, language, as_of }',
-    notes: ['quality: captions (default) | premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end select returned lines only. Captions are metered reads. Premium GET never buys. Read state before lines: ready has lines; pending returns premium_job, status_url and next_poll_seconds; purchase_required is a refusal with quote_url and prepare_url.', PREMIUM_PREPARATION],
+    returns: '{ state: ready | pending | preparation_required; ready: video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name}], quality, source, language, as_of; pending: job; preparation_required: quote{rows, charge, eligible, max_on_demand_cents}, action }',
+    notes: ['quality: captions (default) | premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end select returned lines only. Captions are metered reads. Premium GET never buys. Read state before lines.', PREMIUM_PREPARATION],
   },
   {
     name: 'occurrences',
@@ -158,14 +158,13 @@ const inB = new Map(b.sponsors.map(s => [s.entity.id, s.ad_reads]));
 return a.sponsors.filter(s => inB.has(s.entity.id)).map(s => ({ name: s.entity.name, id: s.entity.id, ad_reads: [s.ad_reads, inB.get(s.entity.id)] }));`,
   },
   {
-    title: 'Who speaks in the first minute (Premium)',
-    code: `const ep = await arcmira.episodes("UC-DRzaGnL_vtBUpCFH5M0tg", { limit: 1 });
-let t;
-try { t = await arcmira.transcript(ep.episodes[0].video_id, { quality: "premium", start: 0, end: 60 }); }
-catch (error) { if (error instanceof ArcmiraError) return { error: { message: error.message, ...error } }; throw error; }
-if (t.state !== "ready") return t;
-const name = new Map((t.speakers ?? []).map(s => [s.id, s.name]));
-return { video: ep.episodes[0].title, speakers: (t.speakers ?? []).map(s => s.name), opening: t.lines.slice(0, 8).map(l => \`[\${l.start}] \${name.get(l.speaker) ?? "?"}: \${l.text}\`) };`,
+    title: 'A Premium transcript: who speaks in the first minute (run, prepare if asked, run again)',
+    code: `const read = () => arcmira.transcript("cdLeJU_1UH8", { quality: "premium", start: 0, end: 60 });
+let t = await read();
+if (t.state === "pending" && (await arcmira.wait(t.job)).state === "ready") t = await read();
+if (t.state !== "ready") return t;   // preparation_required: call prepare_transcript, then run this again
+const name = new Map(t.speakers.map(s => [s.id, s.name]));
+return t.lines.map(l => \`[\${l.start}] \${name.get(l.speaker)}: \${l.text}\`);`,
   },
   {
     title: 'A month window (after and before are both counted); return the window so the answer states it',
@@ -246,7 +245,7 @@ export function referenceText(topic?: string): string {
 export const SHORT_GUIDE = [
   'Arcmira is the search engine for the spoken web: indexed YouTube and podcast transcripts with a catalog of who is mentioned where, who sponsors whom, and who recommends what on air.',
   'This server holds the transcript data: for anything said on a show, use it before any web search.',
-  `describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first execute. execute runs read-only JavaScript and returns bounded outcome-first JSON. prepare_transcript prepares requested Premium from included credits without extra confirmation. ${DOLLAR_RULE}`,
+  `describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first execute. execute runs read-only JavaScript and returns bounded outcome-first JSON. prepare_transcript prepares Premium from included credits when a Premium read answers preparation_required; do not ask again. ${DOLLAR_RULE}`,
   'Write one program per question: resolve every name it carries (arcmira.resolve, with the user\'s own words about the name as context), use best, or suggested and tell the user you assumed it, or return ask.options for the user to pick (a name that resolves to nothing is not in the index), run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
   'Use arcmira.today() and arcmira.daysAgo(n) for date windows. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Never fill an index gap from memory or the open web.',
   ACCESS_GUIDANCE,

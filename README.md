@@ -69,13 +69,22 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 
 | Tool | Input | Returns |
 |---|---|---|
-| `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, ten methods with arguments and return fields, nine worked example programs, the quirks that cost answers, error codes, and doc links. About 16,000 characters; `topic` narrows it to one method and its examples. Never bills. |
+| `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, twelve methods with arguments and return fields, nine worked example programs, the quirks that cost answers, error codes, and doc links. About 16,000 characters; `topic` narrows it to one method and its examples. Never bills. |
 | `execute` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
 | `prepare_transcript` | `video_id`, `max_on_demand_cents?` (default 0), `max_rows?` | The one POST `/v1/transcriptions`. Returns the Job (`id`, `state`, `status`, `next_poll_seconds`, `status_url`). A retry with the same inputs never buys twice. With `max_on_demand_cents` above 0 it sends a generated Idempotency-Key and repeats it with the inputs as `intent`. |
 
 `describe` and `execute` are read-only. `prepare_transcript` is explicitly non-read-only, destructive, idempotent for the same inputs, and open-world: it spends account balance and can submit external provider work. These hints describe effects. A Premium transcript request authorizes available included credits without another confirmation. max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it, so the agent states the amount and asks.
 
-Premium preparation prices the whole video: 75 rows per 15-minute quarter, with four credits per row in credit mode. Consult the free quote for actual units and overage. `start` and `end` select lines and never lower that purchase price. Premium GET never buys; return `state: pending` and its `status_url`, or the `purchase_required` quote/prepare links. Read `.lines` only when `state` is `ready`. The execute sandbox cannot POST, including preparation. Poll `arcmira.status({jobId: request.id})`; `refund_pending` is not a completed refund.
+A Premium transcript takes one program and at most one tool call. Run this in `execute`:
+
+```javascript
+const read = () => arcmira.transcript("cdLeJU_1UH8", { quality: "premium" });
+let t = await read();
+if (t.state === "pending" && (await arcmira.wait(t.job)).state === "ready") t = await read();
+return t.state === "ready" ? t.lines : t;
+```
+
+`ready` returns the lines. `state: preparation_required` carries the whole-video `quote` and the `action` that prepares it: call `prepare_transcript` with `{ video_id }`, then run the same program again. A Premium GET never buys, and the sandbox cannot POST, so `prepare_transcript` is the only step that spends. `arcmira.wait` polls the Job at its `next_poll_seconds` for up to 25 seconds; a Job still `pending` after that needs one more run. The quote prices the whole video at 75 rows per 15-minute quarter and four credits per row, and `start` and `end` never lower it.
 
 The client's methods are the arcmira CLI's commands, with the same names and the flags as options, so the MCP, the CLI and the SDK teach one vocabulary:
 

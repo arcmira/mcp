@@ -5,7 +5,7 @@ import { runProgram } from "../src/sandbox.ts";
 import { fakeLoader, fakeOutbound } from "./fake-loader.ts";
 import responses from "./fixtures/transcription-responses.json" with { type: "json" };
 
-it("every Premium worked example handles ready, pending, preparation required and quota without reading absent lines", async () => {
+it("every Premium worked example reads lines only when ready, waits on a pending job, and hands back preparation_required and quota", async () => {
   const examples = EXAMPLES.filter((example) =>
     example.code.includes('quality: "premium"'),
   );
@@ -35,10 +35,7 @@ it("every Premium worked example handles ready, pending, preparation required an
   for (const example of examples)
     for (const variant of variants) {
       const outbound = fakeOutbound({
-        "/v1/channels": () =>
-          Response.json({
-            episodes: [{ video_id: "dQw4w9WgXcQ", title: "Fixture episode" }],
-          }),
+        "/v1/transcriptions": () => Response.json(responses.get_transcription_ready.body),
         "/v1/transcripts": () =>
           Response.json(variant.body, { status: variant.status }),
       });
@@ -46,15 +43,16 @@ it("every Premium worked example handles ready, pending, preparation required an
         { loader: fakeLoader(), outbound, apiBase: "https://api.arcmira.com" },
         example.code,
       );
+      if (variant.status >= 400) {
+        assert.equal(execution.ok, false, example.title);
+        if (!execution.ok) assert.equal(execution.error.code, "quota_exceeded");
+        continue;
+      }
       assert.equal(execution.ok, true, example.title);
       if (!execution.ok) continue;
       const result = JSON.parse(JSON.stringify(execution.value));
-      if ("state" in variant.body && variant.body.state !== "ready") assert.deepEqual(result, variant.body);
-      if (variant.status >= 400)
-        assert.equal(
-          result.error.code,
-          "error" in variant.body ? variant.body.error?.code : "unreachable",
-        );
-      assert.equal(outbound.urls.length, 2);
+      const state = "state" in variant.body ? variant.body.state : null;
+      if (state !== "ready") assert.deepEqual(result, variant.body);
+      assert.equal(outbound.urls.length, state === "pending" ? 3 : 1);
     }
 });
