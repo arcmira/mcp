@@ -7,7 +7,7 @@ description: "Researches a person across podcasts and YouTube for interview or m
 
 Three lenses on one person id. `momentum` gives attention and the shows that mention them most. `mentions` rows with `is_appearance` are episodes they were on. `search` with `speakerIds` returns their own words; `about` returns what others said about them.
 
-Use it through the arcmira MCP server (`describe`, then `execute` with a program) or the arcmira CLI, whose commands have the same names. The `arcmira` skill and `describe` carry the full method reference.
+Use it through the arcmira MCP server (`describe`, then `execute` with a program) or the arcmira CLI, whose commands have the same names. `describe` carries the full method reference (CLI: `arcmira <command> --help`), and the `arcmira` skill the shared procedure.
 
 ## When to use
 

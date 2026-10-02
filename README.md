@@ -153,7 +153,7 @@ The ten tools (`resolve_entities`, `search_transcripts`, `list_mentions`, `entit
 
 | Skill | For |
 | --- | --- |
-| `arcmira` | The client reference: the id rule, every method, worked programs |
+| `arcmira` | The shared procedure and id rule, which task skill fits which ask, and a pointer to `describe` for the method reference |
 | `sponsor-research` | Who sponsors a show, or which shows a brand sponsors, how often, since when |
 | `company-watch` | What shows said about a company this week: shows, counts, momentum, quotes |
 | `find-quotes` | Exact spoken quotes with speaker, date, a timestamped link, clip start and end |
@@ -192,7 +192,7 @@ Install the remote connection and core Arcmira reference from this repository:
 gemini extensions install https://github.com/arcmira/mcp
 ```
 
-The root `gemini-extension.json` points to the same remote MCP and generated reference as the plugin bundle. Sign in through the MCP authorization flow. The root extension does not separately install the five optional task skills.
+The root `gemini-extension.json` points to the same remote MCP and loads the `arcmira` skill as its context file, like the plugin bundle. Sign in through the MCP authorization flow. The root extension does not separately install the five optional task skills.
 
 ## Develop
 

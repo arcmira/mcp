@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1
+
+The `arcmira` skill no longer copies the method reference. It keeps the procedure, the id rule, the Premium step and the access rules, says to call `describe` once before the first `execute` (or `arcmira <command> --help` from the CLI), and lists which task skill fits which ask. It drops from about 7,600 tokens to about 2,400, which Gemini CLI saves on every session because it loads this skill as context. In an A/B on the live server (seven questions, Sonnet and Haiku, two runs each) the new skills scored the same as 0.8.0, 26 of 28, with 8% fewer input tokens. The task skills point at `describe` for the reference. No server behavior changed; the version moves so plugin hosts pick up the new skills.
+
 ## 0.8.0
 
 - Preserve bounded execution outcomes and recovery fields ahead of logs. Report actual execution calls, rate limits and API build; mark timeout counts unknown.
