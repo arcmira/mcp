@@ -63,3 +63,33 @@ test('every plugin manifest carries the package version, so hosts see each relea
     assert.equal(parsed.version, version, `plugins/arcmira/${manifest} version`);
   }
 });
+
+test('one dollar rule: the prepare surfaces state it and no surface defers to an account spending policy', async () => {
+  const { DOLLAR_RULE } = await import('../src/reference.ts');
+  const { describeTool, prepareTranscriptTool, SERVER_INSTRUCTIONS, TOOLS } = await import('../src/tools.ts');
+  const { z } = await import('zod');
+  assert.equal(
+    DOLLAR_RULE,
+    'max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it: state the amount and ask.',
+  );
+  const describeText = (await describeTool.run({} as never, null)).content[0].text as string;
+  const schemaText = (tool: (typeof TOOLS)[number]) => JSON.stringify(z.toJSONSchema(tool.inputSchema));
+  const prepareSchema = z.toJSONSchema(prepareTranscriptTool.inputSchema) as { properties: Record<string, { description: string }> };
+  for (const [where, text] of [
+    ['describe', describeText],
+    ['instructions', SERVER_INSTRUCTIONS],
+    ['prepare_transcript description', prepareTranscriptTool.description],
+    ['max_on_demand_cents', prepareSchema.properties.max_on_demand_cents.description],
+  ] as const)
+    assert.ok(text.includes(DOLLAR_RULE), `${where} states the dollar rule`);
+  const skills = spawnSync('ls', [join(ROOT, 'plugins/arcmira/skills')], { encoding: 'utf8' }).stdout.trim().split('\n');
+  const surfaces: Array<[string, string]> = [
+    ['describe', describeText],
+    ['instructions', SERVER_INSTRUCTIONS],
+    ...TOOLS.map((tool): [string, string] => [tool.name, tool.description + schemaText(tool)]),
+    ...['README.md', 'plugins/arcmira/README.md', 'llms.txt', ...skills.map((s) => `plugins/arcmira/skills/${s}/SKILL.md`)].map(
+      (path): [string, string] => [path, readFileSync(join(ROOT, path), 'utf8')],
+    ),
+  ];
+  for (const [where, text] of surfaces) assert.doesNotMatch(text, /spending policy|already authorized/i, where);
+});

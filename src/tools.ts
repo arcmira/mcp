@@ -3,7 +3,7 @@ import type { ApiClient } from './api.ts';
 import { withRateLimit } from './result.ts';
 import pkg from '../package.json' with { type: 'json' };
 import type { ToolAnnotations } from '@modelcontextprotocol/server';
-import { DOCS, SHORT_GUIDE, referenceText } from './reference.ts';
+import { DOCS, DOLLAR_RULE, SHORT_GUIDE, referenceText } from './reference.ts';
 import { errorResult, okResult, textResult, type ToolResult } from './result.ts';
 import { renderExecution, runProgram, type Execution, type SandboxHost } from './sandbox.ts';
 
@@ -103,7 +103,7 @@ export const prepareTranscriptTool = tool({
   name: 'prepare_transcript',
   title: 'Prepare a Premium transcript',
   description:
-    'Prepares a whole Premium video. A user request for Premium authorizes using available included credits; do not ask for another confirmation. Use the current quote to set max_rows and set max_on_demand_cents to zero. Obtain a quote first only if the current refusal did not include one. Extra dollar charges require explicit authorization or an existing account spending policy; never infer dollar authorization from a Premium request. Persist an idempotency_key before calling; retry an uncertain outcome with the same key and exact same inputs. Returns the public {request, existing?} envelope: 201 ready, 202 pending, 200 replay, or a typed refusal with its current quote. This tool can debit the account. It can only POST /v1/transcriptions; execute remains read-only.',
+    `Prepares a whole Premium video. A user request for Premium authorizes using available included credits; do not ask for another confirmation. Use the current quote to set max_rows. Obtain a quote first only if the current refusal did not include one. ${DOLLAR_RULE} Never infer dollar authorization from a Premium request. Persist an idempotency_key before calling; retry an uncertain outcome with the same key and exact same inputs. Returns the public {request, existing?} envelope: 201 ready, 202 pending, 200 replay, or a typed refusal with its current quote. This tool can debit the account. It can only POST /v1/transcriptions; execute remains read-only.`,
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -123,7 +123,7 @@ export const prepareTranscriptTool = tool({
         .number()
         .nonnegative()
         .optional()
-        .describe('Maximum new dollar overage in cents. Use zero for included-credit work. A positive ceiling requires explicit dollar authorization or an existing account spending policy.'),
+        .describe(`Maximum new dollar overage in cents. ${DOLLAR_RULE}`),
       idempotency_key: z
         .string()
         .min(1)
