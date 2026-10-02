@@ -70,7 +70,7 @@ export const describeTool = tool({
 export const executeTool = tool({
   name: 'execute',
   title: 'Run a program against Arcmira',
-  description: `Runs JavaScript against Arcmira's read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then actual call/rate/build facts and capped logs. Timeouts report unknown calls and may leave reads in flight. GET never purchases Premium; prepare_transcript does, from included credits. Methods and examples are documented by describe. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`,
+  description: `Runs JavaScript against the Arcmira API through its read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then actual call/rate/build facts and capped logs. Timeouts report unknown calls and may leave reads in flight. GET never purchases Premium; prepare_transcript does, from included credits. Methods and examples are documented by describe. API documentation: ${DOCS.api}. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`,
   inputSchema: z.object({
     code: z
       .string()

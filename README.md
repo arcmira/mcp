@@ -69,7 +69,7 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 
 | Tool | Input | Returns |
 |---|---|---|
-| `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, twelve methods with arguments and return fields, nine worked example programs, the quirks that cost answers, error codes, and doc links. About 16,000 characters; `topic` narrows it to one method and its examples. Never bills. |
+| `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, twelve methods with arguments and return fields, nine worked example programs, the quirks that cost answers, error codes, and doc links. About 17,000 characters; `topic` narrows it to one method and its examples. Never bills. |
 | `execute` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
 | `prepare_transcript` | `video_id`, `max_on_demand_cents?` (default 0), `max_rows?` | The one POST `/v1/transcriptions`. Returns the Job (`id`, `state`, `status`, `next_poll_seconds`, `status_url`). A retry with the same inputs never buys twice. With `max_on_demand_cents` above 0 it sends a generated Idempotency-Key and repeats it with the inputs as `intent`. |
 
