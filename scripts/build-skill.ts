@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ACCESS_GUIDANCE, COVERAGE_GUIDANCE, DOCS, ERRORS, EXAMPLES, ID_RULE, METHODS, QUIRKS } from '../src/reference.ts';
+import { ACCESS_GUIDANCE, COVERAGE_GUIDANCE, DOCS, DOLLAR_RULE, ID_RULE } from '../src/reference.ts';
 import { PICK_STEPS, TASK_SKILLS, type TaskSkill } from '../src/skills.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -11,19 +11,13 @@ const NAME = 'arcmira';
 const DESCRIPTION =
   'Answers what YouTube shows and podcasts said: transcripts, who was mentioned, sponsors, recommendations, momentum. Use for the arcmira MCP server or CLI.';
 
-const cell = (text: string): string => text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+/** The task skill's listing line without its trailing "Uses arcmira.", so the routing list says what each one is for. */
+const purpose = (t: TaskSkill): string => t.description.replace(/\s*Uses arcmira\.$/, '');
 
-function methodTable(): string {
-  const rows = METHODS.map(
-    (m) => `| \`${m.name}\` | \`${cell(m.signature)}\` | \`${cell(m.returns)}\` | ${cell(m.notes.join(' ')) || ' '} |`,
-  );
-  return ['| Method | Call | Returns | Notes |', '| --- | --- | --- | --- |', ...rows].join('\n');
-}
-
-function examples(): string {
-  return EXAMPLES.map((e) => `### ${e.title}\n\n\`\`\`javascript\n${e.code}\n\`\`\``).join('\n\n');
-}
-
+/**
+ * The core skill carries the procedure and points at describe for the method reference, so a host that
+ * loads both pays for the reference once. Gemini CLI loads this file as always-on context.
+ */
 function buildSkill(): string {
   const text = `---
 name: ${NAME}
@@ -32,7 +26,7 @@ description: ${JSON.stringify(DESCRIPTION)}
 
 # Arcmira
 
-Arcmira indexes YouTube and podcast transcripts and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes describe, execute and prepare_transcript. \`describe\` returns the client reference. \`execute\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns.
+Arcmira indexes YouTube and podcast transcripts and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes describe, execute and prepare_transcript. \`describe\` returns the client reference: every method with its arguments and return fields, worked programs, quirks and error codes. \`execute\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns. The arcmira CLI has commands with the same names; \`arcmira <command> --help\`, \`arcmira schema <command>\` and \`arcmira examples\` are its reference.
 
 ## When to use
 
@@ -47,15 +41,25 @@ Use this skill when the user asks:
 
 Use Arcmira for the indexed transcript research the user requested. Cite returned passages and keep evidence from other sources distinct. An empty result means this query returned no matches.
 
+## Task skills
+
+When the ask matches one of these, load that skill and follow its worked program:
+
+${TASK_SKILLS.map((t) => `- \`${t.name}\`: ${purpose(t)}`).join('\n')}
+
+Anything else (one video's transcript, a topic across shows, who recommends a product on air) follows the procedure below.
+
 ## Procedure
 
-1. Resolve every name in the question with \`arcmira.resolve\`, passing the user's own words about the name as \`context\` when they gave any. Filters take ids only.
-2. Act on the one answer resolve gives. \`best\`: use it and name it. \`suggested\`: use it and tell the user you assumed it, quoting \`suggested.evidence\`. \`ask\`: return \`ask.options\` for the user to pick and stop, or check every option id against the data in one program and answer per row. None of the three: the name is not in the index; say so and ask for another spelling or a link. Say in the answer which entity you used.
-3. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
-4. Write one \`execute\` program per question. Resolve, check, and run every query the question needs inside that one program.
-5. Return only the fields the answer needs, not whole responses.
-6. ${COVERAGE_GUIDANCE} Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`.
-7. Link each name in the answer to the \`page\` field the result carries. Do not build arcmira.com URLs by hand.
+1. Call \`describe\` once before your first \`execute\`. It is current on every call; \`describe({ topic })\` narrows it to one method.
+2. Resolve every name in the question with \`arcmira.resolve\`, passing the user's own words about the name as \`context\` when they gave any. Filters take ids only.
+3. Act on the one answer resolve gives. \`best\`: use it and name it. \`suggested\`: use it and tell the user you assumed it, quoting \`suggested.evidence\`. \`ask\`: return \`ask.options\` for the user to pick and stop, or check every option id against the data in one program and answer per row. None of the three: the name is not in the index; say so and ask for another spelling or a link. Say in the answer which entity you used.
+4. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
+5. Write one \`execute\` program per question. Resolve, check, and run every query the question needs inside that one program.
+6. Return only the fields the answer needs, not whole responses.
+7. ${COVERAGE_GUIDANCE} Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`.
+8. Link each name in the answer to the \`page\` field the result carries. Do not build arcmira.com URLs by hand.
+9. Premium: when a Premium read answers \`preparation_required\`, call \`prepare_transcript\` with \`{ video_id }\`, then read again. ${DOLLAR_RULE}
 
 ## The ID rule
 
@@ -63,27 +67,9 @@ Use Arcmira for the indexed transcript research the user requested. Cite returne
 ${ID_RULE}
 \`\`\`
 
-## Methods
+## Access
 
-Every method is async and returns parsed JSON. The program runs as the body of an async function with \`arcmira\` and \`ArcmiraError\` in scope. \`arcmira.today()\` returns "YYYY-MM-DD" on the server clock. \`arcmira.daysAgo(n)\` returns the ISO date n days ago.
-
-${methodTable()}
-
-The arcmira CLI (npm package \`arcmira\`) has commands with the same names. \`arcmira sponsors UC... --min-ad-reads 3\` is the shell form of \`arcmira.sponsors(id, { minAdReads: 3 })\`.
-
-## Worked examples
-
-Each block is a complete program to pass to the \`execute\` tool.
-
-${examples()}
-
-## Quirks
-
-${QUIRKS.map((q) => `- ${q}`).join('\n')}
-
-## Errors
-
-${ERRORS}
+${ACCESS_GUIDANCE}
 
 ## Docs
 
@@ -106,7 +92,7 @@ description: ${JSON.stringify(t.description)}
 
 ${t.summary}
 
-Use it through the arcmira MCP server (\`describe\`, then \`execute\` with a program) or the arcmira CLI, whose commands have the same names. The \`arcmira\` skill and \`describe\` carry the full method reference.
+Use it through the arcmira MCP server (\`describe\`, then \`execute\` with a program) or the arcmira CLI, whose commands have the same names. \`describe\` carries the full method reference (CLI: \`arcmira <command> --help\`), and the \`arcmira\` skill the shared procedure.
 
 ## When to use
 
