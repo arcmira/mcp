@@ -71,10 +71,9 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 |---|---|---|
 | `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, ten methods with arguments and return fields, nine worked example programs, the quirks that cost answers, error codes, and doc links. About 16,000 characters; `topic` narrows it to one method and its examples. Never bills. |
 | `execute` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
-| `quote_transcript` | `video_id` | Free GET `/v1/transcripts/{video_id}/quote`. Reports whole-video row/credit price and possible on-demand cents. |
 | `prepare_transcript` | `video_id`, `max_on_demand_cents?` (default 0), `max_rows?` | The one POST `/v1/transcriptions`. Returns the Job (`id`, `state`, `status`, `next_poll_seconds`, `status_url`). A retry with the same inputs never buys twice. With `max_on_demand_cents` above 0 it sends a generated Idempotency-Key and repeats it with the inputs as `intent`. |
 
-`describe`, `execute` and `quote_transcript` are read-only. `prepare_transcript` is explicitly non-read-only, destructive, idempotent for the same inputs, and open-world: it spends account balance and can submit external provider work. These hints describe effects. A Premium transcript request authorizes available included credits without another confirmation. max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it, so the agent states the amount and asks.
+`describe` and `execute` are read-only. `prepare_transcript` is explicitly non-read-only, destructive, idempotent for the same inputs, and open-world: it spends account balance and can submit external provider work. These hints describe effects. A Premium transcript request authorizes available included credits without another confirmation. max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it, so the agent states the amount and asks.
 
 Premium preparation prices the whole video: 75 rows per 15-minute quarter, with four credits per row in credit mode. Consult the free quote for actual units and overage. `start` and `end` select lines and never lower that purchase price. Premium GET never buys; return `state: pending` and its `status_url`, or the `purchase_required` quote/prepare links. Read `.lines` only when `state` is `ready`. The execute sandbox cannot POST, including preparation. Poll `arcmira.status({jobId: request.id})`; `refund_pending` is not a completed refund.
 
@@ -91,6 +90,8 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 | `arcmira.episodes(channelId, { limit?, after?, before? })` | `GET /v1/channels/{id}/videos` | Newest indexed episodes, with the `video_id` the others take |
 | `arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })` | `GET /v1/transcripts/{video_id}` | The transcript of one video, captions or Premium, whole or a window |
 | `arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })` | `GET /v1/mentions/counts` | What shows talk about, what they share, what one episode mentions |
+| `arcmira.quote(videoIdOrUrl)` | `GET /v1/transcripts/{video_id}/quote` | The free whole-video Premium quote: rows, credits, and any on-demand cents |
+| `arcmira.wait(jobOrId, { timeoutSeconds? })` | `GET /v1/transcriptions/{id}` | Polls a preparation Job at its `next_poll_seconds` until it is no longer pending, for at most 25 seconds; returns the latest Job |
 | `arcmira.status({ channelId?, jobId? })` | `GET /v1/channels/{id}/coverage`, `GET /v1/transcriptions/{id}`, `GET /v1/me` | Coverage and the index date, a transcription job, or the key |
 
 `arcmira.today()` and `arcmira.daysAgo(n)` give ISO dates from the server clock for date windows.

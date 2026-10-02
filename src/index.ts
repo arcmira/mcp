@@ -16,6 +16,7 @@ import {
 import { ICON_PATH, SERVER_CARD_PATHS, serverCardResponse } from './card.ts';
 import { MCP_PATH, createServer, isRetiredTool, retiredToolResult } from './server.ts';
 import type { SandboxHost } from './sandbox.ts';
+import { TOOL_NAMES } from './tools.ts';
 
 // Every named export of the entry module is an entrypoint to workerd: keep it to the default handler and ApiOutbound.
 
@@ -74,7 +75,7 @@ function landing(): Response {
     version: pkg.version,
     mcp: `https://mcp.arcmira.com${MCP_PATH}`,
     transport: 'streamable-http',
-    tools: ['describe', 'execute', 'quote_transcript', 'prepare_transcript'],
+    tools: TOOL_NAMES,
     auth: 'OAuth through the host (sign in at arcmira.com), or Authorization: Bearer <arc_sk_ account key>',
     oauth: `https://mcp.arcmira.com${PROTECTED_RESOURCE_PATH}`,
     sign_up:

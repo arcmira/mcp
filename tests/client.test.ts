@@ -1,9 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import responses from './fixtures/transcription-responses.json' with { type: 'json' };
 
 type Arcmira = Record<string, (...args: any[]) => Promise<any>> & { today(): string; daysAgo(n: number): string };
 const mod = (await import(new URL('../src/sandbox/client.js', import.meta.url).href)) as {
-  createArcmira(o: { base: string; fetch?: unknown; maxCalls?: number; now?: () => Date }): { arcmira: Arcmira; meter: { calls: number; rate_limit: unknown; api_build: string | null } };
+  createArcmira(o: { base: string; fetch?: unknown; maxCalls?: number; now?: () => Date; sleep?: (ms: number) => Promise<void> }): { arcmira: Arcmira; meter: { calls: number; rate_limit: unknown; api_build: string | null } };
   ArcmiraError: new (...args: any[]) => Error & { code: string };
 };
 
@@ -55,6 +56,7 @@ describe('the sandbox client', () => {
     await arcmira.occurrences({ videoIds: ['dQw4w9WgXcQ'], types: ['organization', 'product'], before: '2026-08-31' });
     await arcmira.status({ channelId: TBPN });
     await arcmira.status();
+    await arcmira.quote('dQw4w9WgXcQ');
     const seen = urls.map((u) => `${u.pathname}?${u.searchParams}`);
     assert.deepEqual(seen, [
       '/v1/entities/resolve?q=Ramp&type=organization&limit=8',
@@ -68,8 +70,9 @@ describe('the sandbox client', () => {
       '/v1/mentions/counts?video_ids=dQw4w9WgXcQ&entity_types=organization%2Cproduct&published_before=2026-09-01&limit=20',
       `/v1/channels/${TBPN}/coverage?`,
       '/v1/me?',
+      '/v1/transcripts/dQw4w9WgXcQ/quote?',
     ]);
-    assert.equal(meter.calls, 11);
+    assert.equal(meter.calls, 12);
   });
 
   it('resolve sends context and returns the server answer verbatim', async () => {
@@ -138,4 +141,62 @@ describe('the sandbox client', () => {
 it('preserves Retry-After even when an upstream error omits the numeric body field', async () => {
   const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: async () => Response.json({ error: { code: 'rate_limited' } }, { status: 429, headers: { 'retry-after': '9' } }) });
   await assert.rejects(arcmira.status({}), error => error instanceof Error && 'retry_after' in error && error.retry_after === '9');
+});
+
+describe('Premium preparation in the sandbox client', () => {
+  const pending = responses.get_transcription_pending;
+  const ready = responses.get_transcription_ready;
+  /** A clock that only moves when the client sleeps, and a fetch that answers the given polls in order. */
+  function polling(answers: Array<{ status: number; body: unknown; headers?: Record<string, string> }>) {
+    let t = Date.parse('2026-10-01T00:00:00Z');
+    const slept: number[] = [];
+    const paths: string[] = [];
+    const { arcmira } = mod.createArcmira({
+      base: 'https://api.arcmira.com',
+      now: () => new Date(t),
+      sleep: async (ms: number) => {
+        slept.push(ms / 1000);
+        t += ms;
+      },
+      fetch: async (input: string) => {
+        paths.push(new URL(input).pathname);
+        const answer = answers.shift() ?? pending;
+        if (answers.length === 0) answers.push(answer);
+        return Response.json(answer.body, { status: answer.status, headers: answer.headers });
+      },
+    });
+    return { arcmira, slept, paths };
+  }
+
+  it('a preparation_required read is data the program branches on, never a thrown error', async () => {
+    const answer = responses.get_transcript_preparation_required;
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: async () => Response.json(answer.body, { status: answer.status }) });
+    assert.deepEqual(await arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' }), answer.body);
+  });
+
+  it('wait polls the job until it is ready, sleeping next_poll_seconds between polls', async () => {
+    const soon = { ...pending, body: { ...pending.body, next_poll_seconds: 10 } };
+    const { arcmira, slept, paths } = polling([soon, soon, ready]);
+    assert.deepEqual(await arcmira.wait(pending.body), ready.body);
+    assert.deepEqual(paths, Array(3).fill(`/v1/transcriptions/${pending.body.id}`));
+    assert.deepEqual(slept, [10, 10]);
+  });
+
+  it('wait takes a job, its id, or the body that carries it, and returns the latest job at the timeout', async () => {
+    for (const given of [pending.body, pending.body.id, responses.get_transcript_pending.body, responses.submit_transcription_pending.body]) {
+      const { arcmira, slept, paths } = polling([pending]);
+      assert.deepEqual(await arcmira.wait(given, { timeoutSeconds: 20 }), pending.body);
+      assert.equal(paths[0], `/v1/transcriptions/${pending.body.id}`);
+      assert.deepEqual(slept, [20]);
+      assert.equal(paths.length, 2);
+    }
+    await assert.rejects(polling([pending]).arcmira.wait({ state: 'pending' }), (e: Error & { code: string }) => e.code === 'invalid_request');
+  });
+
+  it('wait honors Retry-After when the job carries no poll hint, and never waits past 25 seconds', async () => {
+    const { next_poll_seconds: _drop, ...bare } = pending.body;
+    const { arcmira, slept } = polling([{ status: 200, body: bare, headers: { 'retry-after': '12' } }]);
+    await arcmira.wait(bare.id, { timeoutSeconds: 600 });
+    assert.deepEqual(slept, [12, 12, 1]);
+  });
 });

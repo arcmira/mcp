@@ -256,6 +256,18 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
   });
 });
 
+it('a preparation_required read reaches the program as its value, not an error', async () => {
+  const answer = responses.get_transcript_preparation_required;
+  const reply = await callTool(
+    'execute',
+    { code: 'const t = await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" }); return { state: t.state, rows: t.quote.rows, action: t.action };' },
+    () => Response.json(answer.body, { status: answer.status }),
+    { LOADER: fakeLoader() },
+  );
+  assert.equal(reply.result.isError, undefined);
+  assert.deepEqual(JSON.parse(textOf(reply)).value, { state: 'preparation_required', rows: 300, action: answer.body.action });
+});
+
 it('a pending Premium read stays data under a heavy payload, and a POST refusal keeps its quote', async () => {
   const pending = responses.get_transcript_pending.body;
   const reply = await callTool(
@@ -285,13 +297,4 @@ it('an unreadable preparation acknowledgement is an unknown outcome to retry wit
   const body = JSON.parse(textOf(reply));
   assert.equal(body.error.code, 'preparation_outcome_unknown');
   assert.match(body.error.message, /same inputs/);
-});
-
-it('quote transport failure returns a typed retryable result', async () => {
-  const reply = await callTool('quote_transcript', { video_id: 'dQw4w9WgXcQ' }, (url) => {
-    if (url.pathname === '/v1/me') return Response.json({ id: 'caller' });
-    throw new Error('connection reset');
-  });
-  assert.equal(reply.result.isError, true);
-  assert.equal(JSON.parse(textOf(reply)).error.code, 'upstream_unavailable');
 });

@@ -16,7 +16,7 @@ const openapiUrl = process.argv[2] ?? 'https://api.arcmira.com/v1/openapi.json';
 /** Query params /v1 added for code mode on 2026-09-30; a warning, not a failure, while the OpenAPI document catches up. */
 const PENDING_PARAMS = new Set(['about', 'by', 'kind']);
 /** Operations that take no src: they are not entry points and mint no unlock links. */
-const NO_SRC = new Set(['get_me']);
+const NO_SRC = new Set(['get_me', 'quote_transcription']);
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
 const MTS = 'UClWkDGXEzsh77GAhs90wpXw';
 
@@ -153,6 +153,8 @@ const SAMPLE_CALLS: Record<string, (a: Arcmira) => Promise<unknown>> = {
   status_channel: (a) => a.status({ channelId: MTS }),
   status_job: (a) => a.status({ jobId: '00000000-0000-4000-8000-000000000000' }),
   status_me: (a) => a.status({}),
+  quote: (a) => a.quote('https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
+  wait: (a) => a.wait('00000000-0000-4000-8000-000000000000', { timeoutSeconds: 0 }),
 };
 
 const clientModule = (await import(new URL('../src/sandbox/client.js', import.meta.url).href)) as { createArcmira: (o: { base: string; fetch: unknown }) => { arcmira: Arcmira } };

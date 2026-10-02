@@ -110,8 +110,8 @@ export default {
       return finish({ ok: true, value: value === undefined ? null : value, lines, logs_truncated, outcome_uncertain: false, ...meter });
     } catch (error) {
       const e = error instanceof Error ? error : new Error(String(error));
-      const { name, message, code, status, unlock, gate, param, retry_after_seconds, retry_after, doc_url, request_id, quote, status_url, prepare_url, quote_url } = e;
-      return finish({ ok: false, error: { name, code: code ?? (name === 'SyntaxError' ? 'syntax_error' : 'program_error'), message: name === 'SyntaxError' ? message + '. Code runs as the body of an async function; import and export are not supported.' : message, status, unlock, gate, param, retry_after_seconds, retry_after, doc_url, request_id, quote, status_url, prepare_url, quote_url }, lines, logs_truncated, outcome_uncertain: false, ...meter });
+      const { name, message, code, status, unlock, gate, param, retry_after_seconds, retry_after, doc_url, request_id, quote } = e;
+      return finish({ ok: false, error: { name, code: code ?? (name === 'SyntaxError' ? 'syntax_error' : 'program_error'), message: name === 'SyntaxError' ? message + '. Code runs as the body of an async function; import and export are not supported.' : message, status, unlock, gate, param, retry_after_seconds, retry_after, doc_url, request_id, quote }, lines, logs_truncated, outcome_uncertain: false, ...meter });
     }
   },
 };`;

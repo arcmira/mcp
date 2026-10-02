@@ -8,7 +8,7 @@ import { errorResult, okResult, textResult, type ToolResult } from './result.ts'
 import { renderExecution, runProgram, type Execution, type SandboxHost } from './sandbox.ts';
 import { OUTPUT_LIMITS } from './output.ts';
 
-/** Retrieval and quote tools do not submit preparation jobs. */
+/** describe and execute only read. */
 export const READ_ONLY: ToolAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -16,7 +16,7 @@ export const READ_ONLY: ToolAnnotations = {
   openWorldHint: false,
 };
 
-export const TOOL_NAMES = ['describe', 'execute', 'quote_transcript', 'prepare_transcript'] as const;
+export const TOOL_NAMES = ['describe', 'execute', 'prepare_transcript'] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
 /** The tools 0.6.0 listed. A call to one answers with the two that replaced it. */
@@ -70,7 +70,7 @@ export const describeTool = tool({
 export const executeTool = tool({
   name: 'execute',
   title: 'Run a program against Arcmira',
-  description: `Runs JavaScript against Arcmira's read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then actual call/rate/build facts and capped logs. Timeouts report unknown calls and may leave reads in flight. GET never purchases Premium. For requested Premium work, use quote_transcript and prepare_transcript with included credits and zero dollar overage; no extra confirmation is needed. Methods and examples are documented by describe. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`,
+  description: `Runs JavaScript against Arcmira's read-only client for indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, and coverage. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then actual call/rate/build facts and capped logs. Timeouts report unknown calls and may leave reads in flight. GET never purchases Premium; prepare_transcript does, from included credits. Methods and examples are documented by describe. Filters require entity, channel, or video IDs. Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`,
   inputSchema: z.object({
     code: z
       .string()
@@ -91,18 +91,6 @@ const video = z
   .string()
   .regex(/^[A-Za-z0-9_-]{11}$/)
   .describe('Exact 11-character YouTube video ID.');
-export const quoteTranscriptTool = tool({
-  name: 'quote_transcript',
-  title: 'Quote a whole video transcript',
-  description:
-    'Returns a free quote for preparing one whole Premium video transcript, including actual row/credit units and possible on-demand cents. It does not buy or submit a provider job. A requested transcript window does not reduce the whole-video purchase price.',
-  inputSchema: z.object({ video_id: video }).strict(),
-  async run(input, _host, api) {
-    if (!api) return errorResult(sandboxUnavailable());
-    const answer = await api.get(`/v1/transcripts/${input.video_id}/quote`);
-    return answer.ok ? okResult(answer.body) : errorResult(answer.error, answer.body);
-  },
-});
 export const prepareTranscriptTool = tool({
   name: 'prepare_transcript',
   title: 'Prepare a Premium transcript',
@@ -151,7 +139,7 @@ export const prepareTranscriptTool = tool({
     }
   },
 });
-export const TOOLS: readonly AnyToolSpec[] = [describeTool, executeTool, quoteTranscriptTool, prepareTranscriptTool];
+export const TOOLS: readonly AnyToolSpec[] = [describeTool, executeTool, prepareTranscriptTool];
 
 /** A program's outcome as a tool result: text for every host, the envelope as structuredContent only when it is the whole story. */
 export function executionResult(execution: Execution): ToolResult {

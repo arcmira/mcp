@@ -19,7 +19,7 @@ export const DOLLAR_RULE =
 
 export const ACCESS_GUIDANCE = 'When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not upgrade a plan. Requested Premium work may use included credits without another confirmation. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.';
 
-const PREMIUM_PREPARATION = `PREMIUM PREPARATION. quote_transcript({video_id}) is a free whole-video quote. Read quote.rows and charge.unit/amount, plus max_on_demand_cents. A 15-minute quarter is 75 rows; credit mode uses four credits per row. A window never reduces the purchase price. A user request for Premium authorizes available included credits. Do not ask again. Call prepare_transcript({video_id}) outside execute. ${DOLLAR_RULE} A retry with the same inputs never buys twice. It returns the Job; poll arcmira.status({jobId: job.id}) at job.next_poll_seconds. refund_pending is unfinished recovery, not a completed refund. Never silently downgrade Premium to captions.`;
+const PREMIUM_PREPARATION = `PREMIUM PREPARATION. arcmira.quote(video) is a free whole-video quote. Read quote.rows and charge.unit/amount, plus max_on_demand_cents. A 15-minute quarter is 75 rows; credit mode uses four credits per row. A window never reduces the purchase price. A user request for Premium authorizes available included credits. Do not ask again. Call prepare_transcript({video_id}) outside execute. ${DOLLAR_RULE} A retry with the same inputs never buys twice. It returns the Job; poll arcmira.status({jobId: job.id}) at job.next_poll_seconds. refund_pending is unfinished recovery, not a completed refund. Never silently downgrade Premium to captions.`;
 
 export const ID_RULE = `ID RULE. Filters take verbatim ids only: entity ids look like ent_14, channel ids like UC-DRzaGnL_vtBUpCFH5M0tg (UC plus 22 characters), video ids are 11 characters or a YouTube URL. A name where an id belongs throws id_required before any network call. Resolve first, then query:
   const r = await arcmira.resolve("Sam", { context: "the My First Million co-host" });
@@ -92,6 +92,18 @@ export const METHODS: readonly MethodDoc[] = [
     notes: [
       'Ranked catalog counts per entity per channel: what a show talks about, how many episodes mentioned an entity in a window, what one episode mentions (videoIds). Needs channelIds (up to 8), entityIds (up to 20) or videoIds (up to 20). types: person | organization | product | topic | channel. With two or more channelIds read shared, not rows, for what both shows mention.',
     ],
+  },
+  {
+    name: 'quote',
+    signature: 'arcmira.quote(videoIdOrUrl)',
+    returns: '{ video_id, duration_seconds, owned, eligible, quote{quarters, rows}, charge{unit, amount, from}, max_on_demand_cents }',
+    notes: ['The free whole-video Premium quote. It never buys.'],
+  },
+  {
+    name: 'wait',
+    signature: 'arcmira.wait(jobOrId, { timeoutSeconds? })',
+    returns: 'the latest Job { id, video_id, state: pending | ready | failed | refunded, status, stage, charge, next_poll_seconds, error?, status_url }',
+    notes: ['Polls a preparation Job at its next_poll_seconds until state is not pending, for at most timeoutSeconds (default and maximum 25). Takes the Job prepare_transcript returned, a body that carries one as .job, or its id. Still pending at the timeout: call wait again in the next execute.'],
   },
   {
     name: 'status',
@@ -234,7 +246,7 @@ export function referenceText(topic?: string): string {
 export const SHORT_GUIDE = [
   'Arcmira is the search engine for the spoken web: indexed YouTube and podcast transcripts with a catalog of who is mentioned where, who sponsors whom, and who recommends what on air.',
   'This server holds the transcript data: for anything said on a show, use it before any web search.',
-  `describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first execute. execute runs read-only JavaScript and returns bounded outcome-first JSON. quote_transcript reads the price; prepare_transcript uses requested included credits without extra confirmation, with persisted intent. ${DOLLAR_RULE}`,
+  `describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first execute. execute runs read-only JavaScript and returns bounded outcome-first JSON. prepare_transcript prepares requested Premium from included credits without extra confirmation. ${DOLLAR_RULE}`,
   'Write one program per question: resolve every name it carries (arcmira.resolve, with the user\'s own words about the name as context), use best, or suggested and tell the user you assumed it, or return ask.options for the user to pick (a name that resolves to nothing is not in the index), run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
   'Use arcmira.today() and arcmira.daysAgo(n) for date windows. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Never fill an index gap from memory or the open web.',
   ACCESS_GUIDANCE,

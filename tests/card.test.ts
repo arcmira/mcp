@@ -54,7 +54,7 @@ describe('the server card', () => {
     }
     assert.deepEqual(
       card.tools.map((tool) => tool.name),
-      ['describe', 'execute', 'quote_transcript', 'prepare_transcript'],
+      ['describe', 'execute', 'prepare_transcript'],
     );
   });
 
@@ -65,6 +65,6 @@ describe('the server card', () => {
     assert.equal(response.headers.get('cache-control'), 'public, max-age=3600');
     assert.equal(response.headers.get('access-control-allow-origin'), '*');
     const body = (await response.json()) as { tools: unknown[] };
-    assert.equal(body.tools.length, 4);
+    assert.equal(body.tools.length, 3);
   });
 });

@@ -84,17 +84,21 @@ function needOptions(method, value, signature) {
   return value;
 }
 
+/** wait stops here so its last poll still fits inside the 30-second execute limit. */
+const MAX_WAIT_SECONDS = 25;
+
 const KINDS = { sponsored: 'ad_read', organic: 'endorsement', all: 'all' };
 const SEARCH_KINDS = new Set(['mention', 'recommendation_sponsored', 'recommendation_organic']);
 
 /**
- * @param {{ base: string, fetch?: typeof fetch, maxCalls?: number, now?: () => Date, onCall?: (call: object) => void }} options
+ * @param {{ base: string, fetch?: typeof fetch, maxCalls?: number, now?: () => Date, sleep?: (ms: number) => Promise<void>, onCall?: (call: object) => void }} options
  */
-export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCalls = 40, now = () => new Date(), onCall }) {
+export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCalls = 40, now = () => new Date(), sleep = (ms) => new Promise((done) => setTimeout(done, ms)), onCall }) {
   const root = base.replace(/\/$/, '');
   const meter = { calls: 0, rate_limit: null, api_build: null };
 
-  async function get(path, query = {}) {
+  /** The parsed body and headers of one v1 GET; a non-2xx answer throws ArcmiraError. */
+  async function call(path, query = {}) {
     if (meter.calls >= maxCalls) {
       throw new ArcmiraError(`This program made ${maxCalls} API calls, the cap for one execute. Narrow the query (fewer names, a tighter window) or split the work across programs.`, 'call_budget');
     }
@@ -115,7 +119,7 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
     }
     meter.api_build = res.headers.get('x-arcmira-build') ?? meter.api_build;
     onCall?.({ path, query, status: res.status, ms: Date.now() - started });
-    if (res.ok && body) return body;
+    if (res.ok && body) return { body, headers: res.headers };
     const err = body?.error ?? {};
     const option = OPTION_FOR_WIRE_PARAM.get(err.param);
     const message = err.message ?? `HTTP ${res.status}`;
@@ -128,11 +132,12 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       retry_after: res.headers.get('retry-after'),
       doc_url: err.doc_url,
       request_id: err.request_id,
-      quote: body?.quote ?? err.quote,
-      status_url: body?.status_url ?? err.status_url,
-      prepare_url: body?.prepare_url ?? err.prepare_url,
-      quote_url: body?.quote_url ?? err.quote_url,
+      quote: body?.quote,
     });
+  }
+
+  async function get(path, query = {}) {
+    return (await call(path, query)).body;
   }
 
   const arcmira = {
@@ -220,6 +225,22 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         published_before: dayAfterInclusive(before, 'before'),
         limit,
       });
+    },
+    async quote(video) {
+      return get(`/v1/transcripts/${videoIdOf(video)}/quote`);
+    },
+    async wait(jobOrId, { timeoutSeconds = MAX_WAIT_SECONDS } = {}) {
+      const given = jobOrId?.job ?? jobOrId;
+      const id = typeof given === 'string' ? given : given?.id;
+      if (typeof id !== 'string' || id === '') throw new ArcmiraError('wait takes a Job from prepare_transcript, the body that carries one (.job), or its id.', 'invalid_request');
+      const deadline = now().getTime() + Math.min(Math.max(0, Number(timeoutSeconds) || 0), MAX_WAIT_SECONDS) * 1000;
+      for (;;) {
+        const { body: job, headers } = await call(`/v1/transcriptions/${encodeURIComponent(id)}`);
+        const remaining = deadline - now().getTime();
+        if (job.state !== 'pending' || remaining <= 0) return job;
+        const poll = Number(job.next_poll_seconds ?? headers.get('retry-after')) || 10;
+        await sleep(Math.min(poll * 1000, remaining));
+      }
     },
     async status(options) {
       const { channelId, jobId } = needOptions('status', options, 'arcmira.status({ channelId }) or arcmira.status({ jobId })');
