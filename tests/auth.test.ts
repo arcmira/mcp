@@ -62,6 +62,11 @@ describe('protectedResourceMetadata', () => {
     });
     assert.deepEqual(local.authorization_servers, ['http://localhost:8787']);
   });
+
+  it('advertises the write scopes arcmira_execute_write needs, so hosts request them at sign-in', () => {
+    const scopes = protectedResourceMetadata('https://mcp.arcmira.com', {}).scopes_supported as string[];
+    for (const scope of ['read', 'monitors:write', 'trackers:write']) assert.ok(scopes.includes(scope), scope);
+  });
 });
 
 describe('tokenIsLive', () => {

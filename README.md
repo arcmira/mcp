@@ -69,24 +69,30 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 
 | Tool | Input | Returns |
 |---|---|---|
-| `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, twelve methods with arguments and return fields, nine worked example programs, the quirks that cost answers, error codes, and doc links. About 17,000 characters; `topic` narrows it to one method and its examples. Never bills. |
-| `execute` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
-| `prepare_transcript` | `video_id`, `max_on_demand_cents?` (default 0), `max_rows?` | The one POST `/v1/transcriptions`. Returns the Job (`id`, `state`, `status`, `next_poll_seconds`, `status_url`). A retry with the same inputs never buys twice. With `max_on_demand_cents` above 0 it sends a generated Idempotency-Key and repeats it with the inputs as `intent`. |
+| `arcmira_describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, every method with arguments and return fields, nine worked example programs, the quirks that cost answers, the budget and monitor rules, error codes, and doc links. About 23,000 characters; `topic` narrows it to one method and its examples. Never bills. |
+| `arcmira_execute_read` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Reads, the user's monitors, and Premium preparation (`arcmira.prepare`). Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
+| `arcmira_execute_write` | `code` | The same as `arcmira_execute_read`, with the account writes added: `arcmira.monitors.create`, `arcmira.monitors.update` (including `isPaused`), `arcmira.monitors.addEntities` and `arcmira.monitors.attachTrackers`. Nothing is deleted. |
+| `arcmira_feedback` | `category`, `note`, `request_id?`, `call_id?` | One `POST /v1/feedback` of type `experience`. `category` is `wrong_entity`, `bad_data`, `missing`, `slow`, `confusing` or `other`; `note` says what happened. Returns the feedback id. |
 
 Every tool also takes an optional `intent`, at most 300 characters: the user's request in a few words. A host that omits it loses nothing. See [What we log](#what-we-log).
 
-`describe` and `execute` are read-only. `prepare_transcript` is explicitly non-read-only, destructive, idempotent for the same inputs, and open-world: it spends account balance and can submit external provider work. These hints describe effects. A Premium transcript request authorizes available included credits without another confirmation. max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it, so the agent states the amount and asks.
+`arcmira_describe`, `arcmira_execute_read` and `arcmira_feedback` are read-only: they change nothing on the account. Premium preparation is a read; it spends credits the way any metered read does. `arcmira_execute_write` is not read-only and not destructive: it creates and changes monitors and trackers, and pauses instead of deleting.
 
-A Premium transcript takes one program and at most one tool call. Run this in `execute`:
+On-demand spend extends the plan. The account's on-demand budget is the approval, so an agent never asks the user for a cents amount. When a budget or plan blocks a purchase (`spend_limit_exceeded`, `quota_exceeded`, a plan gate), the agent tells the user to raise the on-demand budget at https://arcmira.com/dashboard/spending or upgrade the plan at https://arcmira.com/pricing, and links the refusal's `unlock.url`.
+
+A Premium transcript takes one program. Run this in `arcmira_execute_read`:
 
 ```javascript
 const read = () => arcmira.transcript("cdLeJU_1UH8", { quality: "premium" });
 let t = await read();
-if (t.state === "pending" && (await arcmira.wait(t.job)).state === "ready") t = await read();
+const job = t.state === "preparation_required" ? await arcmira.prepare("cdLeJU_1UH8") : t.job;
+if (t.state !== "ready" && (await arcmira.wait(job)).state === "ready") t = await read();
 return t.state === "ready" ? t.lines : t;
 ```
 
-`ready` returns the lines. `state: preparation_required` carries the whole-video `quote` and the `action` that prepares it: call `prepare_transcript` with `{ video_id }`, then run the same program again. A Premium GET never buys, and the sandbox cannot POST, so `prepare_transcript` is the only step that spends. `arcmira.wait` polls the Job at its `next_poll_seconds` for up to 25 seconds; a Job still `pending` after that needs one more run. The quote prices the whole video at 75 rows per 15-minute quarter and four credits per row, and `start` and `end` never lower it.
+`ready` returns the lines. `state: preparation_required` carries the whole-video `quote`; `arcmira.prepare(video)` reads the quote and sends `POST /v1/transcriptions` with `max_rows` the quoted rows, `max_on_demand_cents` the quoted on-demand cents (0 when included credits cover it) and an Idempotency-Key, and returns the Job. A video already bought answers its existing Job. `arcmira.wait` polls the Job at its `next_poll_seconds` for up to 25 seconds; a Job still `pending` after that needs one more run. The quote prices the whole video at 75 rows per 15-minute quarter and four credits per row, and `start` and `end` never lower it.
+
+Results that are empty, an error, truncated or a resolve `ask` end with one line, `feedback`, which names the call: `If this was wrong, slow, or missing for the user, send one arcmira_feedback with call_id mcpc_...`.
 
 The client's methods are the arcmira CLI's commands, with the same names and the flags as options, so the MCP, the CLI and the SDK teach one vocabulary:
 
@@ -102,8 +108,16 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 | `arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })` | `GET /v1/transcripts/{video_id}` | The transcript of one video, captions or Premium, whole or a window |
 | `arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })` | `GET /v1/mentions/counts` | What shows talk about, what they share, what one episode mentions |
 | `arcmira.quote(videoIdOrUrl)` | `GET /v1/transcripts/{video_id}/quote` | The free whole-video Premium quote: rows, credits, and any on-demand cents |
+| `arcmira.prepare(videoIdOrUrl)` | `GET /v1/transcripts/{video_id}/quote`, `POST /v1/transcriptions` | Buys the quoted Premium transcript within the account's on-demand budget; returns the Job |
 | `arcmira.wait(jobOrId, { timeoutSeconds? })` | `GET /v1/transcriptions/{id}` | Polls a preparation Job at its `next_poll_seconds` until it is no longer pending, for at most 25 seconds; returns the latest Job |
-| `arcmira.status({ channelId?, jobId? })` | `GET /v1/channels/{id}/coverage`, `GET /v1/transcriptions/{id}`, `GET /v1/me` | Coverage and the index date, a transcription job, or the key |
+| `arcmira.status({ channelId?, jobId? })` | `GET /v1/channels/{id}/coverage`, `GET /v1/transcriptions/{id}`, `GET /v1/me` | Coverage and the index date, a transcription job, or the key, plan, credits and on-demand budget |
+| `arcmira.monitors.list()` | `GET /v1/monitors` | The user's monitors, with delivery settings and tracker counts |
+| `arcmira.monitors.trackers(monitorId)` | `GET /v1/monitors/{id}/trackers` | What one monitor already follows |
+| `arcmira.monitors.create({ name, notifyFrequency, notifyEmails?, notifySlack?, ... })` | `POST /v1/monitors` | A new monitor. Write tool only |
+| `arcmira.monitors.update(monitorId, { ..., isPaused? })` | `PATCH /v1/monitors/{id}` | Delivery changes, or a pause. Write tool only |
+| `arcmira.monitors.addEntities(monitorId, entityIds, { personMatchMode? })` | `POST /v1/monitors/{id}/entities` | Follows up to 90 entity ids in one call: reuses or creates each tracker by id and attaches it. An id that cannot attach says why (`entity_not_found`, `entity_type_not_trackable`, `tracker_limit_reached`, `tracked_in_another_monitor`). Write tool only |
+| `arcmira.monitors.attachTrackers(monitorId, trackerIds)` | `POST /v1/monitors/{id}/trackers` | Moves trackers another monitor holds, after the user agrees. Write tool only |
+| `arcmira.integrations.slack()` | `GET /v1/integrations/slack` | The connected Slack workspaces, with the id and default channel a monitor delivers to |
 
 `arcmira.today()` and `arcmira.daysAgo(n)` give ISO dates from the server clock for date windows.
 
@@ -129,13 +143,18 @@ Good first ids: TBPN is channel `UC-DRzaGnL_vtBUpCFH5M0tg`, All-In Podcast is `U
 
 ## The sandbox
 
-`execute` runs the program in a fresh [Dynamic Worker](https://developers.cloudflare.com/dynamic-workers/) isolate. The isolate's only network is the parent's outbound proxy, which refuses anything that is not `GET https://api.arcmira.com/v1/*` with `outbound_refused` and adds the caller's credential to what it forwards, so the program never holds the key. The isolate gets 5 seconds of CPU, `execute` waits 30 seconds of wall time, the client stops at 40 API calls with `call_budget`, and the rendered output is cut at 12,000 characters in total, 3,000 per string and 100 items per array, with `truncated_arrays` naming each cut array and a `recovery` line that says how to get every row. A syntax error comes back as `syntax_error` with the function-body rule; a thrown error as `program_error` with its message.
+`arcmira_execute_read` and `arcmira_execute_write` run the program in a fresh [Dynamic Worker](https://developers.cloudflare.com/dynamic-workers/) isolate. The isolate's only network is the parent's outbound proxy, which adds the caller's credential to what it forwards, so the program never holds the key, and refuses anything outside the tool's allowlist with `outbound_refused`:
+
+- `arcmira_execute_read`: `GET https://api.arcmira.com/v1/*`, and `POST /v1/transcriptions`.
+- `arcmira_execute_write`: the read set, plus `POST` and `PATCH` under `/v1/monitors` and `/v1/trackers`. Never `DELETE`, and never the webhook secret rotation.
+
+The proxy enforces this in the Worker, so a raw `fetch()` gets the same answer as a client method. A write method called from `arcmira_execute_read` throws `write_tool_required` before any request. The isolate gets 5 seconds of CPU, the tool waits 30 seconds of wall time, the client stops at 40 API calls with `call_budget`, and the rendered output is cut at 12,000 characters in total, 3,000 per string and 100 items per array, with `truncated_arrays` naming each cut array and a `recovery` line that says how to get every row. A syntax error comes back as `syntax_error` with the function-body rule; a thrown error as `program_error` with its message.
 
 The result is valid bounded JSON with `ok` and `value` or `error` first, then actual `calls`, `rate_limit`, `api_build`, truncation facts and capped logs. Large results retain continuation and recovery fields. Execution metadata uses the same meter. Timeout reports `calls: null` and `outcome_uncertain: true`; in-flight reads may still finish and consume rows. Authentication 429/503 asks clients to retry with the same credential; only invalid credentials trigger reconnect.
 
 ## Gates
 
-A gate inside a program throws an `ArcmiraError` with the API's error fields, and `execute` returns it as `ERROR` with `isError: true`:
+A gate inside a program throws an `ArcmiraError` with the API's error fields, and the execute tools return it as `ERROR` with `isError: true`:
 
 ```
 {"ok":false,"error":{"code":"recommendations_not_enabled","message":"Sponsor recommendations require Pro.","gate":"plan"},"calls":1,"outcome_uncertain":false}
@@ -150,15 +169,19 @@ Every result, gates included, carries the key's budget after the call under `_me
 Each tool call is logged to Arcmira's product analytics (PostHog), linked to the account that made it, so we can see how the tools are used and fix what fails. One record per call holds:
 
 - the tool name, the host's name and version, the server version, and how long the call took;
-- the input: the `execute` program text (first 4,000 characters), the `describe` topic, or the `prepare_transcript` arguments;
+- the input: the program text of either execute tool (first 4,000 characters), the `arcmira_describe` topic, or the `arcmira_feedback` category and note;
 - `intent`, when the agent sends it;
 - the outcome, not the result: ok or the error code, the result size, whether it was truncated, and the API routes the call made (`GET /v1/search`, not its query string).
 
 Before the record is stored, the API replaces anything that looks like a credential or an email address (`arc_` keys, `Bearer` tokens, `sk-` keys, addresses) with `[redacted]`. Results, transcript text and logs printed by a program are never logged. A call with no valid credential is not logged. The record is sent after the result, so logging never delays or changes an answer; a record that fails to send is dropped.
 
+## Upgrading from 0.8
+
+`describe` is now `arcmira_describe`, `execute` is now `arcmira_execute_read`, and `prepare_transcript` is now `arcmira.prepare(video)` inside `arcmira_execute_read`. A host that cached the old list and calls an old name gets `tool_retired`, which names the replacement. `max_on_demand_cents` is no longer an input: `arcmira.prepare` sends what the quote says, and the account's on-demand budget decides.
+
 ## Upgrading from 0.6.0
 
-The ten tools (`resolve_entities`, `search_transcripts`, `list_mentions`, `entity_momentum`, `count_occurrences`, `list_episodes`, `list_sponsors`, `list_recommendations`, `index_status`, `get_transcript`) are gone from `tools/list`. A host that cached the old list and calls one gets `tool_retired`, which names `describe`. Each old tool is one client method: `resolve_entities` is `arcmira.resolve`, `search_transcripts` is `arcmira.search`, `list_mentions` is `arcmira.mentions`, `entity_momentum` is `arcmira.momentum`, `count_occurrences` is `arcmira.occurrences`, `list_episodes` is `arcmira.episodes`, `list_sponsors` is `arcmira.sponsors`, `list_recommendations` is `arcmira.recommendations`, `index_status` is `arcmira.status`, `get_transcript` is `arcmira.transcript`. The `recency` shorthand became `arcmira.daysAgo(n)`.
+The ten tools (`resolve_entities`, `search_transcripts`, `list_mentions`, `entity_momentum`, `count_occurrences`, `list_episodes`, `list_sponsors`, `list_recommendations`, `index_status`, `get_transcript`) are gone from `tools/list`. A host that cached the old list and calls one gets `tool_retired`, which names `arcmira_describe`. Each old tool is one client method: `resolve_entities` is `arcmira.resolve`, `search_transcripts` is `arcmira.search`, `list_mentions` is `arcmira.mentions`, `entity_momentum` is `arcmira.momentum`, `count_occurrences` is `arcmira.occurrences`, `list_episodes` is `arcmira.episodes`, `list_sponsors` is `arcmira.sponsors`, `list_recommendations` is `arcmira.recommendations`, `index_status` is `arcmira.status`, `get_transcript` is `arcmira.transcript`. The `recency` shorthand became `arcmira.daysAgo(n)`.
 
 ## Plugin
 
@@ -166,14 +189,14 @@ The ten tools (`resolve_entities`, `search_transcripts`, `list_mentions`, `entit
 
 | Skill | For |
 | --- | --- |
-| `arcmira` | The shared procedure and id rule, which task skill fits which ask, and a pointer to `describe` for the method reference |
+| `arcmira` | The shared procedure and id rule, which task skill fits which ask, and a pointer to `arcmira_describe` for the method reference |
 | `sponsor-research` | Who sponsors a show, or which shows a brand sponsors, how often, since when |
-| `company-watch` | What shows said about a company this week: shows, counts, momentum, quotes |
+| `company-watch` | Sets up a monitor: the entities and topic spellings to follow, the user's monitors first, then the delivery they want |
 | `find-quotes` | Exact spoken quotes with speaker, date, a timestamped link, clip start and end |
 | `person-research` | Interview or meeting prep: appearances, a person's own words, who discusses them |
 | `compare-shows` | Two shows side by side: size, topics, overlap, shared sponsors |
 
-Every skill starts from names, never ids: each program resolves the name, returns `ask` options when several entities fit and none stands out, says when it assumed one, and names the entity it used. The skills are generated from `src/reference.ts` and `src/skills.ts` by `scripts/build-skill.ts`; CI fails when a file drifts or a program calls a method the reference does not document, and `pnpm examples:check` runs every program against production.
+Every skill starts from names, never ids: each program resolves the name, returns `ask` options when several entities fit and none stands out, says when it assumed one, and names the entity it used. Every skill ends by offering to save what it found to a monitor and with the feedback line. The skills are generated from `src/reference.ts` and `src/skills.ts` by `scripts/build-skill.ts`; CI fails when a file drifts or a program calls a method the reference does not document, and `pnpm examples:check` runs every program against production.
 
 ```bash
 claude plugin marketplace add arcmira/mcp
@@ -184,7 +207,7 @@ claude plugin install arcmira@arcmira
 
 Arcmira ships changes weekly. Keep auto-update on.
 
-- **The MCP server needs nothing.** It is remote: hosts fetch its tools and instructions on connect, and `describe` returns the reference from the server on every call, opening with a version line. The MCP server alone is always current.
+- **The MCP server needs nothing.** It is remote: hosts fetch its tools and instructions on connect, and `arcmira_describe` returns the reference from the server on every call, opening with a version line. The MCP server alone is always current.
 - **Claude Code plugin.** Auto-update is off by default for a third-party marketplace. Turn it on: run `/plugin`, open **Marketplaces**, pick `arcmira`, and choose **Enable auto-update**. Or set it in `~/.claude/settings.json`:
 
   ```json
@@ -216,11 +239,11 @@ pnpm test           # node:test, sandbox programs run under a fake loader
 pnpm typecheck
 pnpm manifest:check # every client call matches the live OpenAPI document
 pnpm skill:check    # every plugins/arcmira/skills/*/SKILL.md matches src/reference.ts and src/skills.ts
-ARCMIRA_KEY=arc_sk_... pnpm examples:check   # every worked program and task-skill program runs against production
+ARCMIRA_KEY=arc_sk_... pnpm examples:check   # every worked program and read task-skill program runs against production
 pnpm sandbox:check  # src/sandbox/client-source.ts matches src/sandbox/client.js
 ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/smoke.ts http://localhost:8790/mcp
 ```
 
-`src/reference.ts` is the steering surface: the `describe` text, the server instructions and the plugin skill all come from it.
+`src/reference.ts` is the steering surface: the `arcmira_describe` text, the server instructions and the plugin skill all come from it.
 
 Copyright Arcmira. All rights reserved for the server (see `LICENSE`); `plugins/arcmira` is Apache-2.0.

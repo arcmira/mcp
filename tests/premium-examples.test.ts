@@ -5,7 +5,7 @@ import { runProgram } from "../src/sandbox.ts";
 import { fakeLoader, fakeOutbound } from "./fake-loader.ts";
 import responses from "./fixtures/transcription-responses.json" with { type: "json" };
 
-it("every Premium worked example reads lines only when ready, waits on a pending job, and hands back preparation_required and quota", async () => {
+it("every Premium worked example reads lines only when ready, waits on a pending job, prepares when asked, and hands back quota", async () => {
   const examples = EXAMPLES.filter((example) =>
     example.code.includes('quality: "premium"'),
   );
@@ -40,7 +40,7 @@ it("every Premium worked example reads lines only when ready, waits on a pending
           Response.json(variant.body, { status: variant.status }),
       });
       const execution = await runProgram(
-        { loader: fakeLoader(), outbound, apiBase: "https://api.arcmira.com" },
+        { loader: fakeLoader(), outbound, apiBase: "https://api.arcmira.com", access: "read" },
         example.code,
       );
       if (variant.status >= 400) {
@@ -53,6 +53,7 @@ it("every Premium worked example reads lines only when ready, waits on a pending
       const result = JSON.parse(JSON.stringify(execution.value));
       const state = "state" in variant.body ? variant.body.state : null;
       if (state !== "ready") assert.deepEqual(result, variant.body);
-      assert.equal(outbound.urls.length, state === "pending" ? 3 : 1);
+      // pending: read, wait, read. preparation_required: read, quote, prepare, wait, read.
+      assert.equal(outbound.urls.length, state === "pending" ? 3 : state === "preparation_required" ? 5 : 1);
     }
 });

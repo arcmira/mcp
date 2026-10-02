@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import openapi from './fixtures/openapi.json' with { type: 'json' };
 import responses from './fixtures/transcription-responses.json' with { type: 'json' };
 import worker from '../src/index.ts';
+import { outboundAllowed, type Access } from '../src/sandbox.ts';
 import pkg from '../package.json' with { type: 'json' };
 import { BUILD_META, RATE_LIMIT_META, okResult, withRateLimit } from '../src/result.ts';
 import { METHODS } from '../src/reference.ts';
-import { fakeLoader, fakeOutbound } from './fake-loader.ts';
+import { fakeLoader } from './fake-loader.ts';
 import { TOOL_CALLS_PATH } from '../src/telemetry.ts';
 
 const RATE_LIMIT = { limit: 20, remaining: 17, reset: 1788819360 };
@@ -45,9 +46,26 @@ async function callTool(
       params: { name, arguments: args },
     }),
   });
-  const outbound = fakeOutbound({ '/v1': (url) => upstream(url) });
   const deferred: Promise<unknown>[] = [];
-  const ctx = { waitUntil: (p: Promise<unknown>) => deferred.push(p), passThroughOnException() {}, props: {}, exports: { ApiOutbound: () => outbound } } as unknown as ExecutionContext;
+  /**
+   * The outbound for the access the tool asked for, applying the Worker's allowlist (tests/outbound.test.ts
+   * covers ApiOutbound itself). In node the sandbox shares the parent's global fetch, so the real
+   * outbound's upstream call would be metered as a second program call.
+   */
+  const outboundFor = ({ props }: { props: { access?: Access } }) => ({
+    async fetch(request: Request) {
+      const url = new URL(request.url);
+      if (!outboundAllowed(props.access ?? 'read', request.method, url.pathname))
+        return Response.json({ error: { type: 'invalid_request_error', code: 'outbound_refused', message: 'refused' } }, { status: 403 });
+      return upstream(url, { method: request.method, headers: request.headers, body: request.method === 'GET' ? undefined : await request.text() });
+    },
+  });
+  const ctx = {
+    waitUntil: (p: Promise<unknown>) => deferred.push(p),
+    passThroughOnException() {},
+    props: {},
+    exports: { ApiOutbound: outboundFor },
+  } as unknown as ExecutionContext;
   // Tool-call telemetry posts land here, never on the network or the test's upstream.
   const handler = (url: URL, init?: RequestInit) => (url.pathname === TOOL_CALLS_PATH ? new Response(null, { status: 202 }) : upstream(url, init));
   const text = await withFetch(handler, async () => {
@@ -74,9 +92,31 @@ describe('withRateLimit', () => {
   });
 });
 
-describe('the two tools through the handler', () => {
+describe('the four tools through the handler', () => {
+  it('tools/list serves the four tools with the ruled annotations', async () => {
+    const request = new Request('https://mcp.arcmira.com/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer arc_sk_fixture' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+    });
+    const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
+    const text = await withFetch(() => Response.json({ id: 'caller' }), async () => (await worker.fetch(request, {}, ctx)).text());
+    const data = text.split('\n').find((line) => line.startsWith('data:'));
+    const tools = (JSON.parse(data ? data.slice(5) : text) as { result: { tools: Array<{ name: string; annotations: Record<string, unknown>; inputSchema: { properties: Record<string, unknown> } }> } }).result.tools;
+    assert.deepEqual(
+      Object.fromEntries(tools.map((t) => [t.name, [t.annotations.readOnlyHint, t.annotations.destructiveHint]])),
+      {
+        arcmira_describe: [true, false],
+        arcmira_execute_read: [true, false],
+        arcmira_execute_write: [false, false],
+        arcmira_feedback: [true, false],
+      },
+    );
+    for (const tool of tools) assert.ok('intent' in tool.inputSchema.properties, `${tool.name} takes intent`);
+  });
+
   it('describe returns the reference as text with no structured copy, and names every method', async () => {
-    const reply = await callTool('describe', {}, () => Response.json({}));
+    const reply = await callTool('arcmira_describe', {}, () => Response.json({}));
     assert.equal(reply.result.isError, undefined);
     assert.equal(reply.result.structuredContent, undefined);
     const text = textOf(reply);
@@ -91,13 +131,13 @@ describe('the two tools through the handler', () => {
   });
 
   it('describe opens with the server version and the update hint', async () => {
-    const text = textOf(await callTool('describe', {}, () => Response.json({})));
+    const text = textOf(await callTool('arcmira_describe', {}, () => Response.json({})));
     assert.ok(text.startsWith(`arcmira MCP ${pkg.version}. `), text.slice(0, 120));
     assert.match(text.split('\n')[0], /auto-update/);
   });
 
   it('describe with a topic keeps the id rule and narrows the methods', async () => {
-    const text = textOf(await callTool('describe', { topic: 'sponsors' }, () => Response.json({})));
+    const text = textOf(await callTool('arcmira_describe', { topic: 'sponsors' }, () => Response.json({})));
     assert.match(text, /ID RULE/);
     assert.ok(text.includes('arcmira.sponsors('));
     assert.ok(text.includes('Recurring sponsors of one show'));
@@ -107,7 +147,7 @@ describe('the two tools through the handler', () => {
 
   it('execute runs a program in the loader, and the build names the API behind it', async () => {
     const headers = { 'RateLimit-Limit': '20', 'RateLimit-Remaining': '17', 'RateLimit-Reset': '1788819360', 'x-arcmira-build': 'v-abc123' };
-    const reply = await callTool('execute', { code: 'const m = await arcmira.momentum("ent_14"); return m.verdict;' }, () => Response.json({ verdict: 'flat' }, { headers }), { LOADER: fakeLoader() });
+    const reply = await callTool('arcmira_execute_read', { code: 'const m = await arcmira.momentum("ent_14"); return m.verdict;' }, () => Response.json({ verdict: 'flat' }, { headers }), { LOADER: fakeLoader() });
     assert.equal(reply.result.isError, undefined);
     assert.equal(JSON.parse(textOf(reply)).value, 'flat');
     assert.equal(JSON.parse(textOf(reply)).api_build, 'v-abc123');
@@ -123,15 +163,23 @@ describe('the two tools through the handler', () => {
   });
 
   it('execute without a loader binding is a server error that says to retry, not a silent miss', async () => {
-    const reply = await callTool('execute', { code: 'return 1;' }, () => Response.json({}));
+    const reply = await callTool('arcmira_execute_read', { code: 'return 1;' }, () => Response.json({}));
     assert.equal(reply.result.isError, true);
     assert.match(textOf(reply), /"code":"sandbox_unavailable"/);
   });
 
-  it('a 0.6.0 tool name answers tool_retired and points at describe', async () => {
-    const reply = await callTool('resolve_entities', { q: 'Ramp' }, () => Response.json({}));
-    assert.equal(reply.result.isError, true);
-    assert.match(textOf(reply), /"code":"tool_retired".*describe/);
+  it('a retired tool name answers tool_retired and names its replacement', async () => {
+    for (const [name, replacement] of [
+      ['resolve_entities', 'arcmira_describe'],
+      ['describe', 'arcmira_describe'],
+      ['execute', 'arcmira_execute_read'],
+      ['prepare_transcript', 'arcmira.prepare'],
+    ]) {
+      const reply = await callTool(name, {}, () => Response.json({}));
+      assert.equal(reply.result.isError, true, name);
+      assert.match(textOf(reply), /"code":"tool_retired"/, name);
+      assert.ok(textOf(reply).includes(replacement), `${name} names ${replacement}`);
+    }
   });
 });
 
@@ -147,7 +195,7 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
         doc_url: 'https://arcmira.com/docs/errors',
       };
       const reply = await callTool(
-        'execute',
+        'arcmira_execute_read',
         {
           code: 'console.log("x".repeat(20001)); return await arcmira.transcript("dQw4w9WgXcQ", {quality:"premium"});',
         },
@@ -185,7 +233,7 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
   });
   it('keeps a continuation token while bounding a long successful page and raw fetch calls', async () => {
     const reply = await callTool(
-      'execute',
+      'arcmira_execute_read',
       {
         code: 'return await (await fetch("https://api.arcmira.com/v1/mentions")).json();',
       },
@@ -206,69 +254,123 @@ describe('bounded outcomes and explicit preparation over MCP', () => {
     assert.equal(result.truncated, true);
     assert.equal(result.calls, 1);
   });
-  it('prepares with one keyless POST of the video id and answers the Job', async () => {
-    const calls: Array<{ method: string; body: unknown; key: string | null }> = [];
-    const upstream = (url: URL, init?: RequestInit) => {
-      if (url.pathname === '/v1/me') return Response.json({ id: 'caller' });
-      assert.equal(url.pathname, '/v1/transcriptions');
-      const body = JSON.parse(String(init?.body));
-      const schema = openapi.paths['/v1/transcriptions'].post.requestBody.content['application/json'].schema;
-      for (const key of Object.keys(body)) assert.ok(key in schema.properties, `Unknown request field ${key}`);
-      calls.push({ method: init?.method ?? 'GET', body, key: new Headers(init?.headers).get('idempotency-key') });
-      const answer = responses.submit_transcription_pending;
-      return Response.json(answer.body, { status: answer.status, headers: answer.headers });
-    };
-    const reply = await callTool('prepare_transcript', { video_id: 'dQw4w9WgXcQ' }, upstream);
-    assert.equal(reply.result.isError, undefined);
-    assert.deepEqual(reply.result.structuredContent, responses.submit_transcription_pending.body.job);
-    assert.deepEqual(JSON.parse(textOf(reply)), reply.result.structuredContent);
-    assert.deepEqual(calls, [{ method: 'POST', body: { video_id: 'dQw4w9WgXcQ', max_on_demand_cents: 0 }, key: null }]);
-    for (const extra of [{ idempotency_key: 'k' }, { path: '/v1/anything' }]) {
-      const rejected = await callTool('prepare_transcript', { video_id: 'dQw4w9WgXcQ', ...extra }, upstream);
-      assert.equal(rejected.result.isError, true);
-    }
-    assert.equal(calls.length, 1);
-  });
-  it('an approved cents ceiling sends a generated key and repeats it with the inputs', async () => {
-    let sent: string | null = null;
-    const reply = await callTool('prepare_transcript', { video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: 50 }, (url, init) => {
-      if (url.pathname === '/v1/me') return Response.json({ id: 'caller' });
-      sent = new Headers(init?.headers).get('idempotency-key');
-      assert.deepEqual(JSON.parse(String(init?.body)), { video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: 50 });
-      return Response.json(responses.submit_transcription_pending.body, { status: 202 });
-    });
-    assert.match(sent ?? '', /^[\x21-\x7e]{1,255}$/);
-    assert.deepEqual(reply.result.structuredContent, {
-      ...responses.submit_transcription_pending.body.job,
-      intent: { video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: 50, idempotency_key: sent },
-    });
-    assert.deepEqual(JSON.parse(textOf(reply)), reply.result.structuredContent);
-  });
-  it('a lost preparation response says to retry the same inputs, and repeats a generated key', async () => {
-    for (const [args, keyed] of [
-      [{ video_id: 'dQw4w9WgXcQ' }, false],
-      [{ video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: 50 }, true],
+  it('arcmira.prepare in a read program buys exactly the quote: rows, on-demand cents and an Idempotency-Key', async () => {
+    for (const [charge, cents, sentCents] of [
+      [{ unit: 'credits', amount: 1200, from: 'included' }, 0, 0],
+      [{ unit: 'credits', amount: 1200, from: 'mixed' }, 37, 37],
+      [{ unit: 'credits', amount: 1200, from: 'on_demand' }, 240, 240],
     ] as const) {
-      let sent: string | null = null;
-      const reply = await callTool('prepare_transcript', args, (url, init) => {
-        if (url.pathname === '/v1/me') return Response.json({ id: 'caller' });
-        sent = new Headers(init?.headers).get('idempotency-key');
-        throw new Error('lost acknowledgement');
-      });
-      assert.equal(reply.result.isError, true);
-      const body = JSON.parse(textOf(reply));
-      assert.equal(body.error.code, 'preparation_outcome_unknown');
-      assert.match(body.error.message, /same inputs/);
-      assert.deepEqual(body.intent, keyed ? { ...args, idempotency_key: sent } : undefined);
-      assert.deepEqual(reply.result.structuredContent, body);
+      const posts: Array<{ body: unknown; key: string | null }> = [];
+      const reply = await callTool(
+        'arcmira_execute_read',
+        { code: 'const job = await arcmira.prepare("dQw4w9WgXcQ"); return { id: job.id, state: job.state };' },
+        (url, init) => {
+          if (url.pathname === '/v1/transcripts/dQw4w9WgXcQ/quote') return Response.json({ ...responses.quote_transcription.body, charge, max_on_demand_cents: cents });
+          assert.equal(url.pathname, '/v1/transcriptions');
+          assert.equal(init?.method, 'POST');
+          const body = JSON.parse(String(init?.body));
+          const schema = openapi.paths['/v1/transcriptions'].post.requestBody.content['application/json'].schema;
+          for (const key of Object.keys(body)) assert.ok(key in schema.properties, `Unknown request field ${key}`);
+          posts.push({ body, key: new Headers(init?.headers).get('idempotency-key') });
+          return Response.json(responses.submit_transcription_pending.body, { status: 202 });
+        },
+        { LOADER: fakeLoader() },
+      );
+      assert.equal(reply.result.isError, undefined, textOf(reply));
+      assert.deepEqual(JSON.parse(textOf(reply)).value, { id: responses.submit_transcription_pending.body.job.id, state: 'pending' });
+      assert.equal(posts.length, 1);
+      assert.deepEqual(posts[0].body, { video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: sentCents });
+      assert.match(posts[0].key ?? '', /^[\x21-\x7e]{1,255}$/);
     }
+  });
+
+  it('a budget refusal reaches the program as an ArcmiraError with its unlock, and the result carries the feedback line', async () => {
+    const reply = await callTool(
+      'arcmira_execute_read',
+      { code: 'return await arcmira.prepare("dQw4w9WgXcQ");' },
+      (url) =>
+        url.pathname.endsWith('/quote')
+          ? Response.json({ ...responses.quote_transcription.body, charge: { unit: 'credits', amount: 1200, from: 'on_demand' }, max_on_demand_cents: 240 })
+          : Response.json(
+              { error: { type: 'quota_exceeded', code: 'spend_limit_exceeded', message: 'Over the on-demand limit.', unlock: { tier: 'pro', url: 'https://arcmira.com/dashboard/spending' }, doc_url: 'd', request_id: 'req_1' } },
+              { status: 402 },
+            ),
+      { LOADER: fakeLoader() },
+    );
+    assert.equal(reply.result.isError, true);
+    const body = JSON.parse(textOf(reply));
+    assert.equal(body.error.code, 'spend_limit_exceeded');
+    assert.equal(body.error.unlock.url, 'https://arcmira.com/dashboard/spending');
+    assert.match(body.feedback, /^If this was wrong, slow, or missing for the user, send one arcmira_feedback with call_id mcpc_[0-9a-f]{32}\.$/);
+  });
+
+  it('the feedback line rides only on an empty, error, truncated or ask outcome', async () => {
+    const cases: Array<[string, boolean]> = [
+      ['return { verdict: "flat", shows: [1] };', false],
+      ['return { chunks: [], as_of: null };', true],
+      ['return [];', true],
+      ['return null;', true],
+      ['return { ask: { question: "Which Sam?", options: [] } };', true],
+      ['return "x".repeat(5000);', true],
+      ['throw new Error("boom");', true],
+    ];
+    for (const [code, nudged] of cases) {
+      const body = JSON.parse(textOf(await callTool('arcmira_execute_read', { code }, () => Response.json({}), { LOADER: fakeLoader() })));
+      assert.equal('feedback' in body, nudged, code);
+    }
+  });
+
+  it('a monitor write from the read tool is refused in the Worker even through raw fetch, and runs from the write tool', async () => {
+    const upstreamCalls: string[] = [];
+    const upstream = (url: URL, init?: RequestInit) => {
+      upstreamCalls.push(`${init?.method ?? 'GET'} ${url.pathname}`);
+      return Response.json({ monitor_id: 'mon_1', results: [{ entity_id: 'ent_14', tracker_id: 'trk_1', created: true, attached: true }] });
+    };
+    const raw = 'const r = await fetch("https://api.arcmira.com/v1/monitors/mon_1/entities", { method: "POST", body: JSON.stringify({ entity_ids: ["ent_14"] }) }); return { status: r.status, body: await r.json() };';
+    const refused = JSON.parse(textOf(await callTool('arcmira_execute_read', { code: raw }, upstream, { LOADER: fakeLoader() })));
+    assert.equal(refused.value.status, 403);
+    assert.equal(refused.value.body.error.code, 'outbound_refused');
+    const method = JSON.parse(textOf(await callTool('arcmira_execute_read', { code: 'return await arcmira.monitors.addEntities("mon_1", ["ent_14"]);' }, upstream, { LOADER: fakeLoader() })));
+    assert.equal(method.error.code, 'write_tool_required');
+    assert.deepEqual(upstreamCalls, []);
+    const saved = await callTool('arcmira_execute_write', { code: 'return await arcmira.monitors.addEntities("mon_1", ["ent_14"], { personMatchMode: "both" });' }, upstream, { LOADER: fakeLoader() });
+    assert.equal(saved.result.isError, undefined, textOf(saved));
+    assert.equal(JSON.parse(textOf(saved)).value.results[0].attached, true);
+    assert.deepEqual(upstreamCalls, ['POST /v1/monitors/mon_1/entities']);
+    const deleted = JSON.parse(textOf(await callTool('arcmira_execute_write', { code: 'const r = await fetch("https://api.arcmira.com/v1/monitors/mon_1", { method: "DELETE" }); return r.status;' }, upstream, { LOADER: fakeLoader() })));
+    assert.equal(deleted.value, 403);
+    assert.equal(upstreamCalls.length, 1);
+  });
+
+  it('arcmira_feedback posts one experience row with the category, note and call id, and answers what the API answered', async () => {
+    const sent: Array<{ path: string; body: unknown; key: string | null }> = [];
+    const callId = `mcpc_${'a'.repeat(32)}`;
+    const reply = await callTool('arcmira_feedback', { category: 'wrong_entity', note: 'Mercury resolved to the planet.', call_id: callId, request_id: 'req_9' }, (url, init) => {
+      sent.push({ path: url.pathname, body: JSON.parse(String(init?.body)), key: new Headers(init?.headers).get('idempotency-key') });
+      return Response.json({ feedback_id: 42 }, { status: 201 });
+    });
+    assert.equal(reply.result.isError, undefined);
+    assert.deepEqual(reply.result.structuredContent, { feedback_id: 42, recorded: true });
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].path, '/v1/feedback');
+    assert.deepEqual(sent[0].body, { type: 'experience', category: 'wrong_entity', notes: 'Mercury resolved to the planet.', request_id: 'req_9', mcp_call_id: callId });
+    assert.ok(sent[0].key);
+    for (const bad of [{ category: 'nope', note: 'x' }, { category: 'slow', note: 'x', call_id: 'mcpc_short' }, { category: 'slow', note: 'x', extra: 1 }, { category: 'slow' }]) {
+      const rejected = await callTool('arcmira_feedback', bad, () => Response.json({}));
+      assert.equal(rejected.result.isError, true, JSON.stringify(bad));
+    }
+    const refused = await callTool('arcmira_feedback', { category: 'slow', note: 'x' }, () =>
+      Response.json({ error: { type: 'invalid_request_error', code: 'invalid_feedback', message: 'm', doc_url: 'd', request_id: 'r' } }, { status: 400 }),
+    );
+    assert.equal(refused.result.isError, true);
+    assert.match(textOf(refused), /"code":"invalid_feedback"/);
   });
 });
 
 it('a preparation_required read reaches the program as its value, not an error', async () => {
   const answer = responses.get_transcript_preparation_required;
   const reply = await callTool(
-    'execute',
+    'arcmira_execute_read',
     { code: 'const t = await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" }); return { state: t.state, rows: t.quote.rows, action: t.action };' },
     () => Response.json(answer.body, { status: answer.status }),
     { LOADER: fakeLoader() },
@@ -277,10 +379,10 @@ it('a preparation_required read reaches the program as its value, not an error',
   assert.deepEqual(JSON.parse(textOf(reply)).value, { state: 'preparation_required', rows: 300, action: answer.body.action });
 });
 
-it('a pending Premium read stays data under a heavy payload, and a POST refusal keeps its quote', async () => {
+it('a pending Premium read stays data under a heavy payload', async () => {
   const pending = responses.get_transcript_pending.body;
   const reply = await callTool(
-    'execute',
+    'arcmira_execute_read',
     {
       code: 'return await arcmira.transcript("dQw4w9WgXcQ",{quality:"premium"});',
     },
@@ -290,20 +392,15 @@ it('a pending Premium read stays data under a heavy payload, and a POST refusal 
   const rendered = JSON.parse(textOf(reply));
   assert.equal(rendered.value.state, 'pending');
   assert.deepEqual(rendered.value.job, pending.job);
-  const refusal = responses.submit_transcription_max_rows_exceeded;
-  const prepared = await callTool(
-    'prepare_transcript',
-    { video_id: 'dQw4w9WgXcQ', max_rows: 75 },
-    () => Response.json(refusal.body, { status: refusal.status }),
-  );
-  assert.deepEqual(JSON.parse(textOf(prepared)), refusal.body);
 });
 
-it('an unreadable preparation acknowledgement is an unknown outcome to retry with the same inputs', async () => {
-  const reply = await callTool('prepare_transcript', { video_id: 'dQw4w9WgXcQ' }, (url) =>
-    url.pathname === '/v1/me' ? Response.json({ id: 'caller' }) : new Response('truncated acknowledgement', { status: 202 }),
+it('a preparation refusal keeps its quote for the program', async () => {
+  const refusal = responses.submit_transcription_max_rows_exceeded;
+  const reply = await callTool(
+    'arcmira_execute_read',
+    { code: 'try { return await arcmira.prepare("dQw4w9WgXcQ"); } catch (e) { return { code: e.code, quote: e.quote }; }' },
+    (url) => (url.pathname.endsWith('/quote') ? Response.json(responses.quote_transcription.body) : Response.json(refusal.body, { status: refusal.status })),
+    { LOADER: fakeLoader() },
   );
-  const body = JSON.parse(textOf(reply));
-  assert.equal(body.error.code, 'preparation_outcome_unknown');
-  assert.match(body.error.message, /same inputs/);
+  assert.deepEqual(JSON.parse(textOf(reply)).value, { code: 'max_rows_exceeded', quote: refusal.body.quote });
 });

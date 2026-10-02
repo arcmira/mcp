@@ -6,7 +6,6 @@ import { CALL_HEADER, TOOL_HEADER } from '../src/api.ts';
 import { TOOL_CALLS_PATH, agentToken, intentParam, outline, traceId } from '../src/telemetry.ts';
 import { TOOLS } from '../src/tools.ts';
 import { errorResult } from '../src/result.ts';
-import responses from './fixtures/transcription-responses.json' with { type: 'json' };
 import { fakeLoader, fakeOutbound } from './fake-loader.ts';
 
 interface Posted {
@@ -89,7 +88,7 @@ async function run(
 
 describe('tool-call telemetry', () => {
   it('posts one record per call with the span facts, the intent apart from the input, and the caller credential', async () => {
-    const { reply, posts, outboundProps } = await run('execute', {
+    const { reply, posts, outboundProps } = await run('arcmira_execute_read', {
       code: 'const m = await arcmira.momentum("ent_14"); return m.verdict;',
       intent: 'is Ramp trending',
     });
@@ -100,7 +99,7 @@ describe('tool-call telemetry', () => {
     assert.match(headers.get('user-agent') ?? '', /^arcmira-mcp\//);
     assert.match(String(body.call_id), /^mcpc_[0-9a-f]{32}$/);
     assert.match(String(body.trace_id), /^mcpt_[0-9a-f]{24}$/);
-    assert.equal(body.tool, 'execute');
+    assert.equal(body.tool, 'arcmira_execute_read');
     assert.equal(body.intent, 'is Ramp trending');
     assert.deepEqual(body.input, { code: 'const m = await arcmira.momentum("ent_14"); return m.verdict;' });
     assert.deepEqual({ ...body.outline, result_chars: undefined }, { ok: true, error_code: null, truncated: false, calls: 1, result_chars: undefined });
@@ -111,7 +110,7 @@ describe('tool-call telemetry', () => {
     // No clientInfo on a stateless call, so the host comes from the user agent's product token.
     assert.equal(body.client, 'claude-code/2.1.4');
     // The sandbox outbound for this call carries the same id the record does.
-    assert.deepEqual(outboundProps.at(-1)?.call, { id: body.call_id, tool: 'execute' });
+    assert.deepEqual(outboundProps.at(-1)?.call, { id: body.call_id, tool: 'arcmira_execute_read' });
     assert.ok(!JSON.stringify(body).includes('"content"'), 'the record carries an outline, not the result body');
   });
 
@@ -122,27 +121,27 @@ describe('tool-call telemetry', () => {
       assert.equal(schema.safeParse(undefined).success, true);
       assert.equal(schema.safeParse('x'.repeat(301)).success, false);
     }
-    const { reply, posts } = await run('describe', { topic: 'sponsors' });
+    const { reply, posts } = await run('arcmira_describe', { topic: 'sponsors' });
     assert.equal(reply.result.isError, undefined);
     assert.equal(posts[0]?.body.intent, null);
     assert.deepEqual(posts[0]?.body.input, { topic: 'sponsors' });
     assert.deepEqual(posts[0]?.body.api_calls, []);
 
-    const prepared = await run(
-      'prepare_transcript',
-      { video_id: 'dQw4w9WgXcQ', intent: 'full transcript of the keynote' },
-      { answer: () => Response.json(responses.submit_transcription_pending.body, { status: 202 }) },
+    const sent = await run(
+      'arcmira_feedback',
+      { category: 'slow', note: 'The keynote transcript took a minute', intent: 'full transcript of the keynote' },
+      { answer: () => Response.json({ feedback_id: 7 }, { status: 201 }) },
     );
-    const submit = prepared.upstream.find((call) => call.url.pathname === '/v1/transcriptions');
-    assert.deepEqual(JSON.parse(submit?.body ?? '{}'), { video_id: 'dQw4w9WgXcQ', max_on_demand_cents: 0 });
-    assert.equal(submit?.headers.get(CALL_HEADER), prepared.posts[0]?.body.call_id);
-    assert.equal(submit?.headers.get(TOOL_HEADER), 'prepare_transcript');
-    assert.deepEqual(prepared.posts[0]?.body.api_calls, ['POST /v1/transcriptions']);
-    assert.equal(prepared.posts[0]?.body.intent, 'full transcript of the keynote');
+    const submit = sent.upstream.find((call) => call.url.pathname === '/v1/feedback');
+    assert.deepEqual(JSON.parse(submit?.body ?? '{}'), { type: 'experience', category: 'slow', notes: 'The keynote transcript took a minute' });
+    assert.equal(submit?.headers.get(CALL_HEADER), sent.posts[0]?.body.call_id);
+    assert.equal(submit?.headers.get(TOOL_HEADER), 'arcmira_feedback');
+    assert.deepEqual(sent.posts[0]?.body.api_calls, ['POST /v1/feedback']);
+    assert.equal(sent.posts[0]?.body.intent, 'full transcript of the keynote');
   });
 
   it('a failed, hanging or throwing post never changes or delays the result', async () => {
-    const baseline = await run('describe', { topic: 'dates' });
+    const baseline = await run('arcmira_describe', { topic: 'dates' });
     const expected = baseline.reply.result.content.map((c) => c.text).join('');
     const failing = [
       { telemetry: () => Promise.reject(new Error('network down')) },
@@ -155,12 +154,12 @@ describe('tool-call telemetry', () => {
       },
     ];
     for (const options of failing) {
-      const { reply } = await run('describe', { topic: 'dates' }, options);
+      const { reply } = await run('arcmira_describe', { topic: 'dates' }, options);
       assert.equal(reply.result.content.map((c) => c.text).join(''), expected);
     }
     // A post that never answers: the reply arrives while it is still pending.
     let pending: Promise<unknown> | null = null;
-    const hung = await run('describe', { topic: 'dates' }, {
+    const hung = await run('arcmira_describe', { topic: 'dates' }, {
       telemetry: () => new Promise<Response>(() => {}),
       waitUntil: (p) => {
         pending = p;
@@ -171,7 +170,7 @@ describe('tool-call telemetry', () => {
   });
 
   it('the trace is the host session when it sends one, else one credential, host and hour', async () => {
-    const { posts } = await run('describe', {}, { headers: { 'mcp-session-id': 'sess_abc123' } });
+    const { posts } = await run('arcmira_describe', {}, { headers: { 'mcp-session-id': 'sess_abc123' } });
     assert.equal(posts[0]?.body.trace_id, 'sess_abc123');
     const at = Date.UTC(2026, 9, 2, 10, 15);
     const a = await traceId(null, 'arc_sk_one', 'claude-code/2.1.4', at);
@@ -191,7 +190,7 @@ describe('tool-call telemetry', () => {
 
   it('the sandbox outbound sends the call id and tool upstream with the credential', async () => {
     const proxy = new ApiOutbound(
-      { props: { key: 'arc_sk_secret', client: 'claude-ai/1.0', call: { id: 'mcpc_0123', tool: 'execute' } } } as unknown as ExecutionContext,
+      { props: { key: 'arc_sk_secret', client: 'claude-ai/1.0', call: { id: 'mcpc_0123', tool: 'arcmira_execute_read' } } } as unknown as ExecutionContext,
       {},
     );
     const original = globalThis.fetch;
@@ -207,7 +206,7 @@ describe('tool-call telemetry', () => {
     }
     const headers = seen as Headers | null;
     assert.equal(headers?.get(CALL_HEADER), 'mcpc_0123');
-    assert.equal(headers?.get(TOOL_HEADER), 'execute');
+    assert.equal(headers?.get(TOOL_HEADER), 'arcmira_execute_read');
     assert.equal(headers?.get('x-arcmira-client'), 'claude-ai/1.0');
   });
 });

@@ -4,7 +4,7 @@ import responses from './fixtures/transcription-responses.json' with { type: 'js
 
 type Arcmira = Record<string, (...args: any[]) => Promise<any>> & { today(): string; daysAgo(n: number): string };
 const mod = (await import(new URL('../src/sandbox/client.js', import.meta.url).href)) as {
-  createArcmira(o: { base: string; fetch?: unknown; maxCalls?: number; now?: () => Date; sleep?: (ms: number) => Promise<void> }): { arcmira: Arcmira; meter: { calls: number; rate_limit: unknown; api_build: string | null } };
+  createArcmira(o: { base: string; fetch?: unknown; maxCalls?: number; now?: () => Date; sleep?: (ms: number) => Promise<void>; access?: 'read' | 'write'; idempotencyKey?: () => string }): { arcmira: Arcmira; meter: { calls: number; rate_limit: unknown; api_build: string | null } };
   ArcmiraError: new (...args: any[]) => Error & { code: string };
 };
 
@@ -75,6 +75,69 @@ describe('the sandbox client', () => {
     assert.equal(meter.calls, 12);
   });
 
+  it('monitor methods: reads in either access, writes only with access write, each write a JSON body with its own Idempotency-Key', async () => {
+    const sent: Array<{ method: string; path: string; body: unknown; key: string | null }> = [];
+    const fetch = async (input: string, init?: RequestInit) => {
+      sent.push({ method: init?.method ?? 'GET', path: new URL(input).pathname, body: typeof init?.body === 'string' ? JSON.parse(init.body) : null, key: new Headers(init?.headers).get('idempotency-key') });
+      return Response.json({ monitors: [], trackers: [], monitor: { id: 'mon_9' }, monitor_id: 'mon_9', results: [] });
+    };
+    let n = 0;
+    const read = mod.createArcmira({ base: 'https://api.arcmira.com', fetch }).arcmira as unknown as { monitors: Record<string, (...a: unknown[]) => Promise<unknown>> };
+    await read.monitors.list();
+    await read.monitors.trackers('mon_1');
+    await (read as unknown as { integrations: { slack(): Promise<unknown> } }).integrations.slack();
+    for (const call of [() => read.monitors.create({ name: 'A', notifyFrequency: 'daily' }), () => read.monitors.update('mon_1', { isPaused: true }), () => read.monitors.addEntities('mon_1', ['ent_14']), () => read.monitors.attachTrackers('mon_1', ['trk_1'])])
+      await assert.rejects(call(), (e: Error & { code: string }) => e.code === 'write_tool_required' && /arcmira_execute_write/.test(e.message));
+    assert.deepEqual(sent.map((c) => `${c.method} ${c.path}`), ['GET /v1/monitors', 'GET /v1/monitors/mon_1/trackers', 'GET /v1/integrations/slack']);
+    const write = mod.createArcmira({ base: 'https://api.arcmira.com', fetch, access: 'write', idempotencyKey: () => `k${++n}` }).arcmira as unknown as typeof read;
+    await write.monitors.create({ name: 'Competitors', notifyFrequency: 'daily', notifySlack: undefined });
+    await write.monitors.update('mon_9', { isPaused: true });
+    await write.monitors.addEntities('mon_9', ['ent_14', 'ent_14', 'ent_99'], { personMatchMode: 'both' });
+    await write.monitors.attachTrackers('mon_9', ['trk_1', 'trk_1']);
+    assert.deepEqual(sent.slice(3), [
+      { method: 'POST', path: '/v1/monitors', body: { name: 'Competitors', notifyFrequency: 'daily' }, key: 'k1' },
+      { method: 'PATCH', path: '/v1/monitors/mon_9', body: { isPaused: true }, key: 'k2' },
+      { method: 'POST', path: '/v1/monitors/mon_9/entities', body: { entity_ids: ['ent_14', 'ent_99'], person_match_mode: 'both' }, key: 'k3' },
+      { method: 'POST', path: '/v1/monitors/mon_9/trackers', body: { trackerIds: ['trk_1'] }, key: 'k4' },
+    ]);
+    for (const [call, code] of [
+      [() => write.monitors.create({ name: 'A' }), 'invalid_request'],
+      [() => write.monitors.create({ name: 'A', notifyFrequency: 'weekly' }), 'invalid_request'],
+      [() => write.monitors.create({ name: 'A', notifyFrequency: 'daily', color: 'red' }), 'invalid_request'],
+      [() => write.monitors.update('Competitors monitor name that is far too long'.repeat(5), { isPaused: true }), 'id_required'],
+      [() => write.monitors.update('mon_9', {}), 'invalid_request'],
+      [() => write.monitors.addEntities('mon_9', ['Linear']), 'id_required'],
+      [() => write.monitors.addEntities('mon_9', []), 'too_many'],
+      [() => write.monitors.addEntities('mon_9', ['ent_1'], { personMatchMode: 'speakers' }), 'invalid_request'],
+      [() => write.monitors.attachTrackers('mon_9', ['ent_14']), 'id_required'],
+    ] as const)
+      await assert.rejects(call(), (e: Error & { code: string }) => e.code === code);
+    assert.equal(sent.length, 7);
+  });
+
+  it('prepare reads the quote, then posts the quoted rows and on-demand cents with a key and returns the Job', async () => {
+    for (const [charge, cents, expected] of [
+      [{ from: 'included' }, 99, 0],
+      [{ from: 'mixed' }, 12.2, 13],
+      [{ from: 'on_demand' }, 240, 240],
+    ] as const) {
+      const sent: Array<{ method: string; path: string; body: unknown; key: string | null }> = [];
+      const { arcmira } = mod.createArcmira({
+        base: 'https://api.arcmira.com',
+        fetch: async (input: string, init?: RequestInit) => {
+          sent.push({ method: init?.method ?? 'GET', path: new URL(input).pathname, body: typeof init?.body === 'string' ? JSON.parse(init.body) : null, key: new Headers(init?.headers).get('idempotency-key') });
+          return init?.method === 'POST' ? Response.json(responses.submit_transcription_pending.body, { status: 202 }) : Response.json({ ...responses.quote_transcription.body, charge, max_on_demand_cents: cents });
+        },
+      });
+      assert.deepEqual(await arcmira.prepare('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), responses.submit_transcription_pending.body.job);
+      assert.deepEqual(sent.map((c) => [c.method, c.path]), [['GET', '/v1/transcripts/dQw4w9WgXcQ/quote'], ['POST', '/v1/transcriptions']]);
+      assert.deepEqual(sent[1].body, { video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: expected });
+      assert.ok(sent[1].key);
+    }
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: async () => Response.json({ quote: {} }) });
+    await assert.rejects(arcmira.prepare('dQw4w9WgXcQ'), (e: Error & { code: string }) => e.code === 'quote_unreadable');
+  });
+
   it('resolve sends context and returns the server answer verbatim', async () => {
     const suggested = { id: 'ent_7', name: 'Sam Parr', type: 'person', appearance_count: 900, match: 'word', reason: 'context', evidence: 'the context matches its description', assumed: true };
     const ask = { question: 'Which Sam do you mean?', options: [{ id: 'ent_7', name: 'Sam Parr', type: 'person', label: 'Sam Parr (person)' }] };
@@ -86,7 +149,26 @@ describe('the sandbox client', () => {
     const asked = { ...body, context: null, suggested: null, ask };
     const second = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: recording(asked).fetch });
     assert.deepEqual((await second.arcmira.resolve('Sam')).ask, ask);
+    await arcmira.resolve({ name: 'Sam', context: 'the My First Million co-host' });
+    assert.equal(`${urls[1]?.pathname}?${urls[1]?.searchParams}`, '/v1/entities/resolve?q=Sam&context=the+My+First+Million+co-host&limit=8');
     await assert.rejects(arcmira.resolve('Sam', { context: ['co-host'] }), (e: Error & { code: string }) => e.code === 'invalid_request');
+  });
+
+  it('resolve says to move a description into context when a multi-word name finds nothing', async () => {
+    const none = { query: 'Ramp fintech company', context: null, confidence: 'none', best: null, suggested: null, ask: null, candidates: [], note: 'No match under that name.' };
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: recording(none).fetch });
+    assert.match((await arcmira.resolve('Ramp fintech company')).note, /only the name and the description as context/);
+    assert.equal((await arcmira.resolve('Ramp fintech company', { context: 'fintech' })).note, 'No match under that name.');
+    assert.equal((await arcmira.resolve('Zzyzx')).note, 'No match under that name.');
+  });
+
+  it('refuses an option name it does not know before any network call, naming the signature', async () => {
+    const { urls, fetch } = recording();
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch });
+    await assert.rejects(arcmira.search({ query: 'Anthropic pricing', publishedAfter: '2026-09-01' }), (e: Error & { code: string }) => e.code === 'invalid_request' && /publishedAfter/.test(e.message) && /after\?/.test(e.message));
+    await assert.rejects(arcmira.recommendations('ent_14', { since: '2026-09-01' }), (e: Error & { code: string }) => e.code === 'invalid_request');
+    await assert.rejects(arcmira.resolve({ name: 'Ramp', hint: 'fintech' }), (e: Error & { code: string }) => e.code === 'invalid_request');
+    assert.equal(urls.length, 0);
   });
 
   it('turns a v1 error body into an ArcmiraError with the code and unlock, and keeps the rate limit', async () => {

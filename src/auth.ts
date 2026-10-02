@@ -34,7 +34,7 @@ export function protectedResourceMetadata(origin: string, env: Env): Record<stri
     resource: `${origin}${MCP_PATH}`,
     authorization_servers: [apiBase(env)],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['openid', 'profile', 'email', 'offline_access', 'read', 'recommendations:read'],
+    scopes_supported: ['openid', 'profile', 'email', 'offline_access', 'read', 'recommendations:read', 'monitors:write', 'trackers:write'],
     resource_name: 'Arcmira MCP',
     resource_documentation: 'https://arcmira.com/docs/authentication#oauth-for-mcp-clients',
   };

@@ -12,6 +12,7 @@ function host(answers: Parameters<typeof fakeOutbound>[0]) {
       loader: fakeLoader(),
       outbound,
       apiBase: 'https://api.arcmira.com',
+      access: 'read' as const,
     },
     outbound,
   };

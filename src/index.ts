@@ -15,7 +15,7 @@ import {
 } from './auth.ts';
 import { ICON_PATH, SERVER_CARD_PATHS, serverCardResponse } from './card.ts';
 import { MCP_PATH, createServer, isRetiredTool, retiredToolResult, type CallTag } from './server.ts';
-import type { SandboxHost } from './sandbox.ts';
+import { outboundAllowed, type Access, type SandboxHost } from './sandbox.ts';
 import { toolCallRecorder } from './telemetry.ts';
 import { TOOL_NAMES } from './tools.ts';
 
@@ -31,6 +31,35 @@ interface OutboundProps {
   client: string | null;
   /** The tool call this program runs for; sent upstream so the API's request events join its span. */
   call?: { id: string; tool: string };
+  /** Which allowlist applies. Absent means read. */
+  access?: Access;
+}
+
+/** The largest request body a sandbox program may send upstream. Monitor and preparation bodies are a few hundred bytes. */
+const OUTBOUND_BODY_CAP = 16_384;
+
+const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,255}$/;
+
+function refused(base: URL, access: Access, method: string, path: string, message?: string): Response {
+  const writable = access === 'read' && outboundAllowed('write', method, path);
+  return Response.json(
+    {
+      error: {
+        type: 'invalid_request_error',
+        code: 'outbound_refused',
+        message:
+          message ??
+          (writable
+            ? `${method} ${path} changes the account; run it in arcmira_execute_write.`
+            : access === 'write'
+              ? `The sandbox reaches only GET ${base.origin}/v1/*, POST /v1/transcriptions, and POST or PATCH under /v1/monitors and /v1/trackers. Use the arcmira client methods; there is no other network.`
+              : `The sandbox reaches only GET ${base.origin}/v1/* and POST /v1/transcriptions. Use the arcmira client methods; there is no other network.`),
+        doc_url: 'https://arcmira.com/docs/mcp-server',
+        request_id: `mcp_${crypto.randomUUID()}`,
+      },
+    },
+    { status: 403 },
+  );
 }
 
 const BROWSER_ORIGINS = ['claude.ai', 'chatgpt.com', 'localhost', '127.0.0.1'];
@@ -44,22 +73,28 @@ export class ApiOutbound extends WorkerEntrypoint<Env, OutboundProps> {
   async fetch(request: Request): Promise<Response> {
     const base = new URL(this.env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE);
     const url = new URL(request.url);
-    if (url.origin !== base.origin || !url.pathname.startsWith('/v1/') || request.method !== 'GET') {
-      return Response.json(
-        { error: { type: 'invalid_request_error', code: 'outbound_refused', message: `The sandbox reaches only GET ${base.origin}/v1/*. Use the arcmira client methods; there is no other network.`, doc_url: 'https://arcmira.com/docs/mcp-server', request_id: `mcp_${crypto.randomUUID()}` } },
-        { status: 403 },
-      );
+    const access: Access = this.ctx.props.access === 'write' ? 'write' : 'read';
+    const method = request.method.toUpperCase();
+    if (url.origin !== base.origin || !outboundAllowed(access, method, url.pathname)) return refused(base, access, method, url.pathname);
+    let body: string | undefined;
+    if (method !== 'GET') {
+      body = await request.text();
+      if (body.length > OUTBOUND_BODY_CAP) return refused(base, access, method, url.pathname, `The request body is over ${OUTBOUND_BODY_CAP} characters.`);
     }
     url.searchParams.set('src', SRC);
     const headers = new Headers({ authorization: `Bearer ${this.ctx.props.key}`, accept: 'application/json', 'user-agent': USER_AGENT });
+    if (body !== undefined) headers.set('content-type', 'application/json');
+    const idempotencyKey = request.headers.get('idempotency-key');
+    if (body !== undefined && idempotencyKey !== null && IDEMPOTENCY_KEY.test(idempotencyKey)) headers.set('idempotency-key', idempotencyKey);
     if (this.ctx.props.client) headers.set(CLIENT_HEADER, this.ctx.props.client);
     if (this.ctx.props.call) {
       headers.set(CALL_HEADER, this.ctx.props.call.id);
       headers.set(TOOL_HEADER, this.ctx.props.call.tool);
     }
     const response = await fetch(url, {
-      method: 'GET',
+      method,
       headers,
+      body,
       redirect: 'manual',
     });
     if (response.status >= 300 && response.status < 400)
@@ -95,7 +130,7 @@ function landing(): Response {
   });
 }
 
-/** A tools/call for a 0.6.0 tool name, so a host with a cached tool list learns the current tools instead of "not found". */
+/** A tools/call for a retired tool name, so a host with a cached tool list learns the current tools instead of "not found". */
 async function retiredCall(request: Request): Promise<Response | null> {
   if (request.method !== 'POST') return null;
   const body = (await request
@@ -116,16 +151,17 @@ async function retiredCall(request: Request): Promise<Response | null> {
 }
 
 /** One sandbox per tool call, so the outbound tags each upstream request with that call. */
-function sandboxFor(env: Env, ctx: ExecutionContext, key: string, inboundClient: string | null): ((call: CallTag) => SandboxHost) | null {
+function sandboxFor(env: Env, ctx: ExecutionContext, key: string, inboundClient: string | null): ((call: CallTag, access: Access) => SandboxHost) | null {
   const loader = env.LOADER;
   if (!loader) return null;
   const { exports } = ctx as unknown as {
     exports: { ApiOutbound: (options: { props: OutboundProps }) => Fetcher };
   };
-  return (call) => ({
+  return (call, access) => ({
     loader,
-    outbound: exports.ApiOutbound({ props: { key, client: call.client ?? inboundClient, call: { id: call.id, tool: call.tool } } }),
+    outbound: exports.ApiOutbound({ props: { key, client: call.client ?? inboundClient, call: { id: call.id, tool: call.tool }, access } }),
     apiBase: env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE,
+    access,
   });
 }
 

@@ -36,7 +36,7 @@ test('task skill programs call only methods the reference documents', async () =
   const known = new Set([...METHODS.map((m) => m.name), 'today', 'daysAgo']);
   for (const skill of TASK_SKILLS) {
     for (const program of skill.programs) {
-      const called = [...program.code.matchAll(/arcmira\.(\w+)\(/g)].map((m) => m[1]);
+      const called = [...program.code.matchAll(/arcmira\.([\w.]+)\(/g)].map((m) => m[1]);
       assert.ok(called.length > 0, `${skill.name}: ${program.title} calls the client`);
       for (const name of called) assert.ok(known.has(name), `${skill.name}: ${program.title} calls arcmira.${name}, which describe does not document`);
     }
@@ -65,24 +65,21 @@ test('every plugin manifest carries the package version, so hosts see each relea
   }
 });
 
-test('one dollar rule: the prepare surfaces state it and no surface defers to an account spending policy', async () => {
-  const { DOLLAR_RULE } = await import('../src/reference.ts');
-  const { describeTool, prepareTranscriptTool, SERVER_INSTRUCTIONS, TOOLS } = await import('../src/tools.ts');
+test('one budget rule: describe, the instructions and the core skill state it, and no surface asks the user for cents', async () => {
+  const { BUDGET_RULE, FEEDBACK_LINE } = await import('../src/reference.ts');
+  const { describeTool, SERVER_INSTRUCTIONS, TOOLS } = await import('../src/tools.ts');
   const { z } = await import('zod');
-  assert.equal(
-    DOLLAR_RULE,
-    'max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it: state the amount and ask.',
-  );
-  const describeText = (await describeTool.run({} as never, null)).content[0].text as string;
-  const schemaText = (tool: (typeof TOOLS)[number]) => JSON.stringify(z.toJSONSchema(tool.inputSchema));
-  const prepareSchema = z.toJSONSchema(prepareTranscriptTool.inputSchema) as { properties: Record<string, { description: string }> };
+  const describeText = (await describeTool.run({} as never, null as never)).content[0].text as string;
   for (const [where, text] of [
     ['describe', describeText],
     ['instructions', SERVER_INSTRUCTIONS],
-    ['prepare_transcript description', prepareTranscriptTool.description],
-    ['max_on_demand_cents', prepareSchema.properties.max_on_demand_cents.description],
+    ['arcmira skill', readFileSync(SKILL, 'utf8')],
   ] as const)
-    assert.ok(text.includes(DOLLAR_RULE), `${where} states the dollar rule`);
+    assert.ok(text.includes(BUDGET_RULE), `${where} states the budget rule`);
+  assert.match(BUDGET_RULE, /never ask the user for a cents amount/);
+  assert.match(BUDGET_RULE, /dashboard\/spending/);
+  assert.match(BUDGET_RULE, /pricing/);
+  const schemaText = (tool: (typeof TOOLS)[number]) => JSON.stringify(z.toJSONSchema(tool.inputSchema));
   const skills = spawnSync('ls', [join(ROOT, 'plugins/arcmira/skills')], { encoding: 'utf8' }).stdout.trim().split('\n');
   const surfaces: Array<[string, string]> = [
     ['describe', describeText],
@@ -92,7 +89,17 @@ test('one dollar rule: the prepare surfaces state it and no surface defers to an
       (path): [string, string] => [path, readFileSync(join(ROOT, path), 'utf8')],
     ),
   ];
-  for (const [where, text] of surfaces) assert.doesNotMatch(text, /spending policy|already authorized/i, where);
+  for (const [where, text] of surfaces) {
+    assert.doesNotMatch(text, /spending policy|already authorized/i, where);
+    assert.doesNotMatch(text, /approved a cents amount|state the amount and ask|unless the user approved|approval link/i, where);
+    // README keeps an upgrade note that names the retired tools.
+    if (where !== 'README.md') assert.doesNotMatch(text, /prepare_transcript|`describe`|`execute`/, `${where} names a retired tool`);
+  }
+  for (const skill of skills) {
+    const text = readFileSync(join(ROOT, 'plugins/arcmira/skills', skill, 'SKILL.md'), 'utf8');
+    assert.ok(text.trimEnd().endsWith(FEEDBACK_LINE), `${skill} ends with the feedback line`);
+    assert.match(text, /save them to a monitor/, `${skill} offers to save to a monitor`);
+  }
 });
 
 test('the Premium block appears once, in the transcript notes, and stays out of the instructions and every skill', async () => {
@@ -102,7 +109,7 @@ test('the Premium block appears once, in the transcript notes, and stays out of 
   const count = (text: string) => text.split('PREMIUM PREPARATION').length - 1;
   const transcript = METHODS.find((m) => m.name === 'transcript')!;
   assert.equal(count(transcript.notes.join(' ')), 1);
-  assert.equal(count((await describeTool.run({} as never, null)).content[0].text as string), 1);
+  assert.equal(count((await describeTool.run({} as never, null as never)).content[0].text as string), 1);
   assert.equal(count(SERVER_INSTRUCTIONS), 0);
   assert.equal(count(readFileSync(SKILL, 'utf8')), 0);
   for (const skill of TASK_SKILLS) assert.equal(count(readFileSync(join(ROOT, 'plugins/arcmira/skills', skill.name, 'SKILL.md'), 'utf8')), 0, skill.name);
@@ -116,14 +123,14 @@ test('README states the whole-reference size the describe input reports', async 
 
 test('README tools table is one table with every tool, and execute states the real output limits', async () => {
   const { OUTPUT_LIMITS } = await import('../src/output.ts');
-  const { TOOLS, executeTool } = await import('../src/tools.ts');
+  const { TOOLS, executeReadTool } = await import('../src/tools.ts');
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   const section = readme.slice(readme.indexOf('## Tools'));
   const table = /\| Tool \| Input \| Returns \|\n(\|.*\|\n)+/.exec(section)?.[0] ?? '';
   for (const tool of TOOLS) assert.match(table, new RegExp(`^\\| \`${tool.name}\` \\|`, 'm'), `${tool.name} row in the tools table`);
   assert.equal(OUTPUT_LIMITS, '12,000 characters of output in total, 3,000 per string, and 100 items per array');
-  const executeRow = table.split('\n').find((line) => line.startsWith('| `execute`')) ?? '';
-  for (const [where, text] of [['execute description', executeTool.description], ['README execute row', executeRow]] as const) {
+  const executeRow = table.split('\n').find((line) => line.startsWith('| `arcmira_execute_read`')) ?? '';
+  for (const [where, text] of [['arcmira_execute_read description', executeReadTool.description], ['README arcmira_execute_read row', executeRow]] as const) {
     assert.ok(text.includes(OUTPUT_LIMITS), `${where} states ${OUTPUT_LIMITS}`);
     assert.doesNotMatch(text, /20,000/, where);
   }

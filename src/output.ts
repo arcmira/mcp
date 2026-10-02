@@ -49,8 +49,27 @@ const priority = (key: string) => {
   return index < 0 ? CONTROL.length : index;
 };
 
-/** Bound data without slicing JSON, retaining outcome and continuation fields before bulk arrays. */
-export function renderExecution(execution: Execution): string {
+/** An empty answer: nothing, or an object whose every top-level array came back empty. */
+function isEmpty(value: unknown): boolean {
+  if (value === null || value === undefined || value === "") return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value !== "object") return false;
+  const values = Object.values(value);
+  if (values.length === 0) return true;
+  const arrays = values.filter(Array.isArray);
+  return arrays.length > 0 && arrays.every((array) => array.length === 0);
+}
+
+/** A resolve ask the program handed back for the user to pick from. */
+function isAsk(value: unknown): boolean {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && Boolean((value as { ask?: unknown }).ask);
+}
+
+/**
+ * Bound data without slicing JSON, retaining outcome and continuation fields before bulk arrays.
+ * `feedback` is the one line added when the outcome is an error, empty, truncated or a resolve ask.
+ */
+export function renderExecution(execution: Execution, options: { feedback?: string } = {}): string {
   let budget = OUTPUT_BUDGET;
   let truncated = execution.truncated ?? false;
   let cuts = [...(execution.truncated_arrays ?? [])];
@@ -121,6 +140,7 @@ export function renderExecution(execution: Execution): string {
     api_build: execution.api_build,
     truncated,
     ...(truncated ? { truncated_arrays: cuts, recovery: RECOVERY } : {}),
+    ...(options.feedback && (!execution.ok || truncated || isEmpty(execution.value) || isAsk(execution.value)) ? { feedback: options.feedback } : {}),
     logs: execution.lines,
     logs_truncated: execution.logs_truncated,
   };
@@ -137,6 +157,7 @@ export function renderExecution(execution: Execution): string {
     envelope.logs_truncated =
       execution.lines.length > 0 || execution.logs_truncated;
     envelope.truncated = true;
+    if (options.feedback) envelope.feedback = options.feedback;
     text = JSON.stringify(envelope);
   }
   return text;

@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import pkg from '../package.json' with { type: 'json' };
 import { noKeyError, type ApiClient } from './api.ts';
 import { clientLabel, errorResult, withBuild, withRateLimit } from './result.ts';
-import type { SandboxHost } from './sandbox.ts';
+import type { Access, SandboxHost } from './sandbox.ts';
 import { callId, inputState, outline, type Recorder } from './telemetry.ts';
 import { READ_ONLY, RETIRED_TOOLS, SERVER_INSTRUCTIONS, TOOLS, retiredToolResult } from './tools.ts';
 
@@ -14,9 +14,10 @@ export interface Caller {
   api: ApiClient | null;
   /**
    * The sandbox one tool call's program runs in; its outbound tags every upstream request with the
-   * call. Null under a deployment without a Worker Loader binding.
+   * call and refuses every route outside the access allowlist. Null under a deployment without a
+   * Worker Loader binding.
    */
-  sandbox: ((call: CallTag) => SandboxHost) | null;
+  sandbox: ((call: CallTag, access: Access) => SandboxHost) | null;
   /** Takes each finished call's record. Never awaited, and a throw is ignored. */
   record?: Recorder;
 }
@@ -58,10 +59,14 @@ export function createServer(caller: Caller, deploy: string | null = null): McpS
         // The handshake has completed by the time a tool runs, so the host's name is known here.
         caller.api?.setClient(server.server.getClientVersion());
         caller.api?.setCall(call);
+        const sandbox = caller.sandbox;
         const result = build(
           caller.api === null
             ? errorResult(noKeyError())
-            : withRateLimit(await tool.run(input, caller.sandbox?.(call) ?? null, caller.api), caller.api.rateLimit()),
+            : withRateLimit(
+                await tool.run(input, { call, api: caller.api, sandbox: sandbox ? (access) => sandbox(call, access) : null }),
+                caller.api.rateLimit(),
+              ),
         );
         try {
           const execution = result._meta?.['arcmira.com/execution'] as { routes?: string[] } | undefined;
@@ -88,7 +93,7 @@ export function createServer(caller: Caller, deploy: string | null = null): McpS
 }
 
 export function isRetiredTool(name: string): boolean {
-  return (RETIRED_TOOLS as readonly string[]).includes(name);
+  return Object.hasOwn(RETIRED_TOOLS, name);
 }
 
 export { retiredToolResult };
