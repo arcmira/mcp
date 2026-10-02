@@ -32,7 +32,7 @@ description: ${JSON.stringify(DESCRIPTION)}
 
 # Arcmira
 
-Arcmira indexes YouTube and podcast transcripts and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes two tools. \`describe\` returns the client reference. \`execute\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns.
+Arcmira indexes YouTube and podcast transcripts and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes describe, execute and prepare_transcript. \`describe\` returns the client reference. \`execute\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns.
 
 ## When to use
 

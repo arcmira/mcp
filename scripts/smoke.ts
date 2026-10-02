@@ -7,7 +7,11 @@
  * paths a host will hit (a name where an id belongs, a retired tool name, a gate). With no key
  * the transport must answer 401 with the OAuth challenge, and the script stops there. Prints
  * one line per call and never prints the key. Exit 1 when any call is not what the manifest
- * promises. Each execute is one or two production calls; the whole run is about 20.
+ * promises. Most probes make one or two API reads. The budget probe makes 40. The purchase probes
+ * read a free quote with arcmira.quote, then send prepare_transcript with max_rows 0 and no key,
+ * which the API refuses before it claims anything (max_rows_exceeded below the quote, or
+ * paid_plan_required on a free plan). The key's usage is read before and after each to show
+ * neither spent anything.
  */
 import { Client } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
@@ -17,6 +21,8 @@ import { METHODS } from '../src/reference.ts';
 const url = new URL(process.argv[2] ?? 'https://mcp.arcmira.com/mcp');
 const key = process.env.ARCMIRA_KEY ?? '';
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
+/** A video the smoke key has not prepared, so a zero row ceiling is below its quote. */
+const UNOWNED_VIDEO = 'cdLeJU_1UH8';
 
 interface Probe {
   label: string;
@@ -33,10 +39,10 @@ const PROBES: Probe[] = [
   { label: 'describe topic', tool: 'describe', args: { topic: 'sponsors' }, expect: 'ok', contains: 'arcmira.sponsors(' },
   { label: 'resolve', tool: 'execute', args: { code: 'const r = await arcmira.resolve("Ramp", { type: "organization" }); return { confidence: r.confidence, best: r.best && { id: r.best.id, name: r.best.name } };' }, expect: 'ok', contains: 'ent_14' },
   { label: 'dates', tool: 'execute', args: { code: 'return { today: arcmira.today(), ago: arcmira.daysAgo(90) };' }, expect: 'ok', contains: 'today' },
-  { label: 'console.log', tool: 'execute', args: { code: 'console.log("hello", { a: 1 }); return 2;' }, expect: 'ok', contains: 'hello {"a":1}\nRETURN: 2' },
+  { label: 'console.log', tool: 'execute', args: { code: 'console.log("hello", { a: 1 }); return 2;' }, expect: 'ok', contains: '"value":2' },
   { label: 'status channel', tool: 'execute', args: { code: `const s = await arcmira.status({ channelId: "${TBPN}" }); return { indexed: s.channel.searchable_videos, through: s.channel.indexed_through };` }, expect: 'ok', contains: 'indexed' },
   { label: 'status me', tool: 'execute', args: { code: 'const me = await arcmira.status(); return Object.keys(me);' }, expect: 'ok' },
-  { label: 'episodes', tool: 'execute', args: { code: `const e = await arcmira.episodes("${TBPN}", { limit: 2 }); return e.episodes.map(x => x.video_id);` }, expect: 'ok', contains: 'RETURN: ["' },
+  { label: 'episodes', tool: 'execute', args: { code: `const e = await arcmira.episodes("${TBPN}", { limit: 2 }); return e.episodes.map(x => x.video_id);` }, expect: 'ok', contains: '"value":["' },
   { label: 'mentions', tool: 'execute', args: { code: `const m = await arcmira.mentions({ entityId: "ent_14", channelId: "${TBPN}", limit: 3 }); return { n: m.data.length, first: m.data[0]?.media?.title };` }, expect: 'ok' },
   { label: 'momentum', tool: 'execute', args: { code: 'const m = await arcmira.momentum("ent_14"); return { verdict: m.verdict, d30: m.volume.mentions_30d };' }, expect: 'ok', contains: 'verdict' },
   { label: 'occurrences', tool: 'execute', args: { code: `const o = await arcmira.occurrences({ channelIds: ["${TBPN}"], types: ["organization"], limit: 3 }); return o.rows.map(r => [r.name, r.count]);` }, expect: 'ok' },
@@ -71,13 +77,14 @@ let failed = false;
 const tools = await client.listTools();
 const names = tools.tools.map((tool) => tool.name).sort();
 console.log(`tools/list: ${names.join(', ')}`);
-if (names.join(',') !== 'describe,execute') {
+if (names.join(',') !== 'describe,execute,prepare_transcript') {
   failed = true;
-  console.log('  expected exactly describe and execute');
+  console.log('  expected describe, execute, and prepare_transcript');
 }
 for (const tool of tools.tools) {
   const hints = tool.annotations ?? {};
-  if (!(hints.readOnlyHint === true && hints.destructiveHint === false && hints.idempotentHint === true && hints.openWorldHint === false)) {
+  const prepares = tool.name === 'prepare_transcript';
+  if (!(hints.readOnlyHint === !prepares && hints.destructiveHint === prepares && hints.idempotentHint === true && hints.openWorldHint === prepares)) {
     failed = true;
     console.log(`  ${tool.name}: hints wrong ${JSON.stringify(hints)}`);
   }
@@ -114,6 +121,35 @@ for (const probe of PROBES) {
   const summary = text.replace(/\s+/g, ' ').slice(0, 110);
   console.log(`${verdict.padEnd(10)} ${probe.label.padEnd(22)} ${probe.tool.padEnd(8)} ${isError ? 'isError' : 'result '} ${String(Date.now() - started).padStart(5)}ms  ${summary}`);
 }
+
+/** What a purchase can move: rows, monetary spend and credits. Read through execute, which never purchases. */
+async function spend(): Promise<string> {
+  const text = textOf(await client.callTool({ name: 'execute', arguments: { code: 'const { usage } = await arcmira.status(); return [usage.rows_used, usage.current_spend_cents, usage.credits?.available ?? null];' } }));
+  return JSON.stringify((JSON.parse(text) as { value: unknown }).value);
+}
+
+const beforeQuote = await spend();
+const quote = await client.callTool({
+  name: 'execute',
+  arguments: { code: `const q = await arcmira.quote("${UNOWNED_VIDEO}"); return { owned: q.owned, eligible: q.eligible, rows: q.quote.rows, charge: q.charge };` },
+});
+const quoteText = textOf(quote);
+const quoted = quote.isError === true ? null : (JSON.parse(quoteText) as { value: { owned: boolean; rows: number } }).value;
+const afterQuote = await spend();
+const quoteOk = afterQuote === beforeQuote && quoted !== null && !quoted.owned && quoted.rows > 0;
+if (!quoteOk) failed = true;
+console.log(`${(quoteOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'quote free, unowned'.padEnd(22)} execute  spend ${beforeQuote} -> ${afterQuote}  ${quoteText.replace(/\s+/g, ' ').slice(0, 90)}`);
+
+/** Only below a positive quote on an unowned video does max_rows 0 refuse before any claim. */
+if (quoteOk) {
+  const prepared = await client.callTool({ name: 'prepare_transcript', arguments: { video_id: UNOWNED_VIDEO, max_rows: 0 } });
+  const preparedText = textOf(prepared);
+  const afterPrepare = await spend();
+  const refusedCode = prepared.isError === true ? /"code":"([a-z_]+)"/.exec(preparedText)?.[1] : undefined;
+  const prepareOk = (refusedCode === 'max_rows_exceeded' || refusedCode === 'paid_plan_required') && afterPrepare === afterQuote;
+  if (!prepareOk) failed = true;
+  console.log(`${(prepareOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'prepare max_rows 0'.padEnd(22)} prepare  spend ${afterQuote} -> ${afterPrepare}  ${refusedCode ?? preparedText.replace(/\s+/g, ' ').slice(0, 90)}`);
+} else console.log(`skipped    ${'prepare max_rows 0'.padEnd(22)} prepare  ${UNOWNED_VIDEO} is owned or unquoted for this key; pick another UNOWNED_VIDEO`);
 
 const retired = await fetch(url, {
   method: 'POST',

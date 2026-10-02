@@ -23,16 +23,31 @@ describe('challenge', () => {
   it('is a 401 naming the protected-resource document, with the signup action in the body', async () => {
     const response = challenge('https://mcp.arcmira.com');
     assert.equal(response.status, 401);
-    assert.equal(response.headers.get('www-authenticate'), `Bearer resource_metadata="https://mcp.arcmira.com${PROTECTED_RESOURCE_PATH}"`);
+    assert.equal(
+      response.headers.get('www-authenticate'),
+      `Bearer resource_metadata="https://mcp.arcmira.com${PROTECTED_RESOURCE_PATH}"`,
+    );
     assert.equal(response.headers.get('access-control-expose-headers'), 'WWW-Authenticate');
-    const body = (await response.json()) as { jsonrpc: string; error: { code: number; data: { code: string; unlock: { url: string; action: { kind: string; url: string } } } } };
+    const body = (await response.json()) as {
+      jsonrpc: string;
+      error: {
+        code: number;
+        data: {
+          code: string;
+          unlock: { url: string; action: { kind: string; url: string } };
+        };
+      };
+    };
     assert.equal(body.jsonrpc, '2.0');
     assert.equal(body.error.code, -32000);
     assert.equal(body.error.data.code, 'invalid_api_key');
     assert.equal((body.error.data as { reason?: string }).reason, 'no_credential');
     assert.equal(body.error.data.unlock.action.kind, 'send_signup_code');
     assert.equal(body.error.data.unlock.action.url, 'https://api.arcmira.com/v1/signups?src=mcp-tool');
-    assert.equal(body.error.data.unlock.url, 'https://arcmira.com/docs/authentication?src=mcp-tool#sign-up-from-the-api');
+    assert.equal(
+      body.error.data.unlock.url,
+      'https://arcmira.com/docs/authentication?src=mcp-tool#sign-up-from-the-api',
+    );
   });
 });
 
@@ -42,7 +57,9 @@ describe('protectedResourceMetadata', () => {
     assert.equal(doc.resource, 'https://mcp.arcmira.com/mcp');
     assert.deepEqual(doc.authorization_servers, ['https://api.arcmira.com']);
     assert.deepEqual(doc.bearer_methods_supported, ['header']);
-    const local = protectedResourceMetadata('http://localhost:8790', { ARCMIRA_API_BASE: 'http://localhost:8787/' });
+    const local = protectedResourceMetadata('http://localhost:8790', {
+      ARCMIRA_API_BASE: 'http://localhost:8787/',
+    });
     assert.deepEqual(local.authorization_servers, ['http://localhost:8787']);
   });
 });
@@ -56,7 +73,10 @@ describe('tokenIsLive', () => {
     const result = await withFetch(
       (url, init) => {
         calls.push({ url, init });
-        return Response.json({ id: 'tok', accessTokenExpiresAt: '2026-09-02T12:02:00Z' });
+        return Response.json({
+          id: 'tok',
+          accessTokenExpiresAt: '2026-09-02T12:02:00Z',
+        });
       },
       async () => {
         const first = await tokenIsLive('LiveTokenAAAAAAAAAAAAAAAAAAAAAAA', env, now);
@@ -93,20 +113,38 @@ describe('tokenIsLive', () => {
 
 /** One initialize handshake through the Worker's fetch, the way a host opens the connection. */
 function initialize(key: string | null, upstream: (url: URL) => Response): Promise<Response> {
-  const headers: Record<string, string> = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' };
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    accept: 'application/json, text/event-stream',
+  };
   if (key !== null) headers.authorization = `Bearer ${key}`;
   const request = new Request('https://mcp.arcmira.com/mcp', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } } }),
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'test', version: '0' },
+      },
+    }),
   });
-  const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
+  const ctx = {
+    waitUntil() {},
+    passThroughOnException() {},
+    props: {},
+  } as unknown as ExecutionContext;
   return withFetch(upstream, () => worker.fetch(request, { ARCMIRA_API_BASE: 'https://api.test' }, ctx));
 }
 
 /** Every challenge mints its own request_id, so the rest of the body is what two of them share. */
 async function challengeBody(response: Response): Promise<unknown> {
-  const body = (await response.json()) as { error: { data: { request_id?: string } } };
+  const body = (await response.json()) as {
+    error: { data: { request_id?: string } };
+  };
   assert.match(body.error.data.request_id ?? '', /^mcp_/);
   delete body.error.data.request_id;
   return body;
@@ -164,4 +202,43 @@ describe('the handshake checks the account key', () => {
     const response = await initialize('arc_sk_quota', me(402, { error: { code: 'over_quota' } }));
     assert.equal(response.status, 200);
   });
+});
+
+describe('authentication availability is not a credential verdict', () => {
+  for (const prefix of ['arc_sk_', 'OAuth'])
+    for (const status of [429, 503]) {
+      it(`preserves ${status} for ${prefix} without a reconnect challenge`, async () => {
+        const response = await initialize(`${prefix}${status}availability`, () =>
+          Response.json({ error: { code: 'upstream_busy' } }, { status, headers: { 'retry-after': '9' } }),
+        );
+        assert.equal(response.status, status);
+        assert.equal(response.headers.get('www-authenticate'), null);
+        assert.equal(response.headers.get('retry-after'), '9');
+      });
+    }
+  it('refuses a bearer redirect during OAuth validation', async () => {
+    let targetCalls = 0;
+    const original = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      if (String(input).includes('evil.invalid')) targetCalls++;
+      assert.equal(init?.redirect, 'manual');
+      return new Response(null, {
+        status: 302,
+        headers: { location: 'https://evil.invalid/token' },
+      });
+    };
+    try {
+      await assert.rejects(tokenIsLive('OAuthRedirectUnique', {}), /temporarily unavailable/);
+      assert.equal(targetCalls, 0);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
+
+it('unreadable OAuth verification remains a temporary outage', async () => {
+  await withFetch(
+    () => new Response('not-json', { headers: { 'retry-after': '7' } }),
+    () => assert.rejects(tokenIsLive('malformed-oauth-response', {}), /temporarily unavailable/),
+  );
 });

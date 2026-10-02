@@ -13,7 +13,13 @@ export const DOCS = {
   openapi: 'https://api.arcmira.com/v1/openapi.json',
 } as const;
 
-export const ACCESS_GUIDANCE = 'When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not initiate a purchase. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.';
+/** The one rule for new dollar charges. A model cannot see an account's spending settings, so authorization lives in the conversation. */
+export const DOLLAR_RULE =
+  'max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it: state the amount and ask.';
+
+export const ACCESS_GUIDANCE = 'When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not upgrade a plan. Requested Premium work may use included credits without another confirmation. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.';
+
+const PREMIUM_PREPARATION = `PREMIUM PREPARATION. Read Premium with the Premium worked example, swapping in the video id. ready: answer from lines. pending after wait's 25 seconds: run it again. preparation_required: call the prepare_transcript tool with { video_id } (a Premium request authorizes included credits; do not ask again), then run the same program again. ${DOLLAR_RULE} The quote prices the whole video (75 rows per 15-minute quarter, four credits per row); start and end never lower it, and arcmira.quote(video) reads it for free. A Job in state failed or refunded carries error; status refund_pending is not a completed refund. Plans without Premium answer captions with an access gate: report it, never present captions as Premium.`;
 
 export const COVERAGE_GUIDANCE = 'Search as_of is the newest publication date among the returned passages, not the date the whole index was updated. For channel freshness, call arcmira.status({ channelId }) and report channel.search_indexed_through for transcript search. A result date or an empty query does not establish missing recent episodes.';
 
@@ -79,8 +85,8 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'transcript',
     signature: 'arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })',
-    returns: '{ video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name}], quality, source, language, as_of }',
-    notes: ['quality: captions (default) | premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end in seconds bill only that window: pass them for "the first minute".'],
+    returns: '{ state: ready | pending | preparation_required; ready: video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name}], quality, source, language, as_of; pending: job; preparation_required: quote{rows, charge, eligible, max_on_demand_cents}, action }',
+    notes: ['quality: captions (default) | premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end select returned lines only. Captions are metered reads. Premium GET never buys. Read state before lines.', PREMIUM_PREPARATION],
   },
   {
     name: 'occurrences',
@@ -89,6 +95,18 @@ export const METHODS: readonly MethodDoc[] = [
     notes: [
       'Ranked catalog counts per entity per channel: what a show talks about, how many episodes mentioned an entity in a window, what one episode mentions (videoIds). Needs channelIds (up to 8), entityIds (up to 20) or videoIds (up to 20). types: person | organization | product | topic | channel. With two or more channelIds read shared, not rows, for what both shows mention.',
     ],
+  },
+  {
+    name: 'quote',
+    signature: 'arcmira.quote(videoIdOrUrl)',
+    returns: '{ video_id, duration_seconds, owned, eligible, quote{quarters, rows}, charge{unit, amount, from}, max_on_demand_cents }',
+    notes: ['The free whole-video Premium quote. It never buys.'],
+  },
+  {
+    name: 'wait',
+    signature: 'arcmira.wait(jobOrId, { timeoutSeconds? })',
+    returns: 'the latest Job { id, video_id, state: pending | ready | failed | refunded, status, stage, charge, next_poll_seconds, error?, status_url }',
+    notes: ['Polls a preparation Job at its next_poll_seconds until state is not pending, for at most timeoutSeconds (default and maximum 25). Takes the Job prepare_transcript returned, a body that carries one as .job, or its id. Still pending at the timeout: call wait again in the next execute.'],
   },
   {
     name: 'status',
@@ -143,11 +161,13 @@ const inB = new Map(b.sponsors.map(s => [s.entity.id, s.ad_reads]));
 return a.sponsors.filter(s => inB.has(s.entity.id)).map(s => ({ name: s.entity.name, id: s.entity.id, ad_reads: [s.ad_reads, inB.get(s.entity.id)] }));`,
   },
   {
-    title: 'Who speaks in the first minute (Premium)',
-    code: `const ep = await arcmira.episodes("UC-DRzaGnL_vtBUpCFH5M0tg", { limit: 1 });
-const t = await arcmira.transcript(ep.episodes[0].video_id, { quality: "premium", start: 0, end: 60 });
-const name = new Map((t.speakers ?? []).map(s => [s.id, s.name]));
-return { video: ep.episodes[0].title, speakers: (t.speakers ?? []).map(s => s.name), opening: t.lines.slice(0, 8).map(l => \`[\${l.start}] \${name.get(l.speaker) ?? "?"}: \${l.text}\`) };`,
+    title: 'A Premium transcript: who speaks in the first minute (run, prepare if asked, run again)',
+    code: `const read = () => arcmira.transcript("cdLeJU_1UH8", { quality: "premium", start: 0, end: 60 });
+let t = await read();
+if (t.state === "pending" && (await arcmira.wait(t.job)).state === "ready") t = await read();
+if (t.state !== "ready") return t;   // preparation_required: call prepare_transcript, then run this again
+const name = new Map(t.speakers.map(s => [s.id, s.name]));
+return t.lines.map(l => \`[\${l.start}] \${name.get(l.speaker)}: \${l.text}\`);`,
   },
   {
     title: 'A month window (after and before are both counted); return the window so the answer states it',
@@ -224,10 +244,12 @@ export function referenceText(topic?: string): string {
   ].join('\n');
 }
 
+
+
 export const SHORT_GUIDE = [
   'Arcmira is the search engine for the spoken web: indexed YouTube and podcast transcripts with a catalog of who is mentioned where, who sponsors whom, and who recommends what on air.',
   'Searches indexed YouTube and podcast transcripts for the passages and metadata requested by the user.',
-  'Two tools. describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first execute. execute runs JavaScript you write against that client and returns what you print or return.',
+  `describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first execute. execute runs read-only JavaScript and returns bounded outcome-first JSON. prepare_transcript prepares Premium from included credits when a Premium read answers preparation_required; do not ask again. ${DOLLAR_RULE}`,
   'Write one program per question: resolve every name it carries (arcmira.resolve, with the user\'s own words about the name as context), use best, or suggested and tell the user you assumed it, or return ask.options for the user to pick (a name that resolves to nothing is not in the index), run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
   'Use arcmira.today() and arcmira.daysAgo(n) for date windows. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Keep outside evidence separate from Arcmira results.',
   ACCESS_GUIDANCE,

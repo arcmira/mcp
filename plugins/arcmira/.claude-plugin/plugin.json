@@ -1,7 +1,7 @@
 {
   "name": "arcmira",
-  "version": "0.7.14",
-  "description": "Give your AI the ability to find who said what with timestamps, discover what\u2019s being discussed across videos and livestreams, and distinguish organic recommendations from sponsored ad reads.",
+  "version": "0.8.0",
+  "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations.",
   "author": {
     "name": "Arcmira",
     "url": "https://arcmira.com"

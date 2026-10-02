@@ -44,7 +44,10 @@ export type ToolResult = {
  */
 export function withRateLimit(result: ToolResult, rateLimit: RateLimit | null): ToolResult {
   if (rateLimit === null) return result;
-  return { ...result, _meta: { ...result._meta, [RATE_LIMIT_META]: rateLimit } };
+  return {
+    ...result,
+    _meta: { ...result._meta, [RATE_LIMIT_META]: rateLimit },
+  };
 }
 
 /** Plain text with no structured copy: what describe and a rendered program return. */
@@ -54,7 +57,10 @@ export function textResult(text: string): ToolResult {
 
 /** A usable answer, including a 200 that carries an access block for what was withheld. */
 export function okResult(body: Record<string, unknown>): ToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(body) }], structuredContent: body };
+  return {
+    content: [{ type: 'text', text: JSON.stringify(body) }],
+    structuredContent: body,
+  };
 }
 
 /**
@@ -70,7 +76,11 @@ export function transcriptResult(text: string, metadata: Record<string, unknown>
  * A gate or failure. The catalog body rides as both the text and the structured content, so an
  * agent that reads either sees the same code, gate, and unlock.
  */
-export function errorResult(error: ApiErrorBody): ToolResult {
-  const body = { error };
-  return { content: [{ type: 'text', text: JSON.stringify(body) }], structuredContent: body, isError: true };
+export function errorResult(error: ApiErrorBody, details?: Record<string, unknown>): ToolResult {
+  const body = { ...details, error };
+  return {
+    content: [{ type: 'text', text: JSON.stringify(body) }],
+    structuredContent: body,
+    isError: true,
+  };
 }

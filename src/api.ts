@@ -33,15 +33,26 @@ export interface ApiErrorBody {
   message: string;
   param?: string;
   gate?: string;
-  unlock?: { tier: string; url: string; offer: null; action?: { kind: string; method: string; url: string } };
+  unlock?: {
+    tier: string;
+    url: string;
+    offer: null;
+    action?: { kind: string; method: string; url: string };
+  };
   retry_after_seconds?: number;
+  retry_after?: string;
   doc_url: string;
   request_id: string;
 }
 
 export type ApiResult<T = Record<string, unknown>> =
   | { ok: true; status: number; body: T }
-  | { ok: false; status: number; error: ApiErrorBody };
+  | {
+      ok: false;
+      status: number;
+      error: ApiErrorBody;
+      body?: Record<string, unknown>;
+    };
 
 export type Query = Record<string, string | number | string[] | undefined | null>;
 
@@ -53,7 +64,16 @@ export interface RateLimit {
   reset: number;
 }
 
+/** The POST /v1/transcriptions body, plus the Idempotency-Key header when one is sent. */
+export interface PrepareTranscript {
+  video_id: string;
+  max_rows?: number;
+  max_on_demand_cents: number;
+  idempotency_key?: string;
+}
+
 export interface ApiClient {
+  prepareTranscript(input: PrepareTranscript): Promise<ApiResult>;
   get<T = Record<string, unknown>>(path: string, query?: Query): Promise<ApiResult<T>>;
   /** Name the host every later call is made for. Sent upstream as x-arcmira-client. */
   setClient(client: ClientInfo | undefined): void;
@@ -103,7 +123,11 @@ export function noKeyError(reason: CredentialFailure = 'no_credential'): ApiErro
       tier: 'free',
       url: `https://arcmira.com/docs/authentication?src=${SRC}#sign-up-from-the-api`,
       offer: null,
-      action: { kind: 'send_signup_code', method: 'POST', url: `${DEFAULT_API_BASE}/v1/signups?src=${SRC}` },
+      action: {
+        kind: 'send_signup_code',
+        method: 'POST',
+        url: `${DEFAULT_API_BASE}/v1/signups?src=${SRC}`,
+      },
     },
     doc_url: 'https://arcmira.com/docs/errors#invalid_api_key',
     request_id: `mcp_${crypto.randomUUID()}`,
@@ -147,57 +171,103 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
     setClient(info) {
       client = info?.name ? `${info.name}${info.version ? `/${info.version}` : ''}`.slice(0, 120) : null;
     },
-    async get(path, query = {}) {
-      const url = new URL(base + path);
-      for (const [key, value] of Object.entries(query)) {
-        if (value === undefined || value === null) continue;
-        if (Array.isArray(value)) {
-          if (value.length > 0) url.searchParams.set(key, value.join(','));
-          continue;
-        }
-        url.searchParams.set(key, String(value));
+    get: (path, query = {}) => request(path, query),
+    prepareTranscript: ({ idempotency_key, ...body }) => request('/v1/transcriptions', {}, { body, idempotency_key }),
+  };
+  async function request<T = Record<string, unknown>>(
+    path: string,
+    query: Query = {},
+    purchase?: { body: Omit<PrepareTranscript, 'idempotency_key'>; idempotency_key?: string },
+  ): Promise<ApiResult<T>> {
+    const url = new URL(base + path);
+    for (const [key, value] of Object.entries(query)) {
+      if (value === undefined || value === null) continue;
+      if (Array.isArray(value)) {
+        if (value.length > 0) url.searchParams.set(key, value.join(','));
+        continue;
       }
-      url.searchParams.set('src', SRC);
-      const response = await fetch(url, {
-        headers: {
-          authorization: `Bearer ${apiKey}`,
-          accept: 'application/json',
-          'user-agent': USER_AGENT,
-          ...(client ? { [CLIENT_HEADER]: client } : {}),
-        },
-      });
-      latest = rateLimitOf(response.headers) ?? latest;
-      build = response.headers.get(BUILD_HEADER) ?? build;
-      const body: unknown = await response.json().catch(() => null);
-      if (response.ok && body !== null && typeof body === 'object') {
-        return { ok: true, status: response.status, body: body as never };
-      }
-      if (isErrorBody(body)) return { ok: false, status: response.status, error: body.error };
-      const legacy = legacyErrorMessage(body);
-      if (legacy !== null) {
-        return {
-          ok: false,
-          status: response.status,
+      url.searchParams.set(key, String(value));
+    }
+    url.searchParams.set('src', SRC);
+    const response = await fetch(url, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(30_000),
+      method: purchase ? 'POST' : 'GET',
+      ...(purchase ? { body: JSON.stringify(purchase.body) } : {}),
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        ...(purchase ? { 'content-type': 'application/json' } : {}),
+        ...(purchase?.idempotency_key ? { 'idempotency-key': purchase.idempotency_key } : {}),
+        accept: 'application/json',
+        'user-agent': USER_AGENT,
+        ...(client ? { [CLIENT_HEADER]: client } : {}),
+      },
+    }).catch((error: unknown) => {
+      if (purchase) throw error;
+      return Response.json(
+        {
           error: {
-            type: response.status === 404 ? 'not_found' : response.status < 500 ? 'invalid_request_error' : 'server_error',
-            code: response.status === 404 ? 'not_found' : 'upstream_error',
-            message: legacy,
-            doc_url: 'https://arcmira.com/docs/errors#not_found',
-            request_id: response.headers.get('x-request-id') ?? `mcp_${crypto.randomUUID()}`,
+            type: 'server_error',
+            code: 'upstream_unavailable',
+            message: 'The API read did not complete. Keep the current credential and retry.',
+            doc_url: 'https://arcmira.com/docs/errors',
+            request_id: `mcp_${crypto.randomUUID()}`,
           },
-        };
-      }
+        },
+        { status: 503 },
+      );
+    });
+    if (response.status >= 300 && response.status < 400)
+      return {
+        ok: false,
+        status: 502,
+        error: {
+          type: 'server_error',
+          code: 'redirect_refused',
+          message: 'The authenticated API request redirected. No credentials were sent to the redirect target.',
+          doc_url: 'https://arcmira.com/docs/errors',
+          request_id: `mcp_${crypto.randomUUID()}`,
+        },
+      };
+    latest = rateLimitOf(response.headers) ?? latest;
+    build = response.headers.get(BUILD_HEADER) ?? build;
+    const body: unknown = await response.json().catch(() => null);
+    if (response.ok && body !== null && typeof body === 'object') {
+      return { ok: true, status: response.status, body: body as never };
+    }
+    const retryAfter = response.headers.get('retry-after');
+    if (isErrorBody(body))
+      return {
+        ok: false,
+        status: response.status,
+        error: { ...body.error, ...(retryAfter !== null ? { retry_after: retryAfter } : {}) },
+        body: { ...body },
+      };
+    const legacy = legacyErrorMessage(body);
+    if (legacy !== null) {
       return {
         ok: false,
         status: response.status,
         error: {
-          type: 'server_error',
-          code: 'upstream_unreadable',
-          message: `The Arcmira API answered ${response.status} without an error body. Retry in a few seconds.`,
-          doc_url: 'https://arcmira.com/docs/errors#server_error',
+          type:
+            response.status === 404 ? 'not_found' : response.status < 500 ? 'invalid_request_error' : 'server_error',
+          code: response.status === 404 ? 'not_found' : 'upstream_error',
+          message: legacy,
+          doc_url: 'https://arcmira.com/docs/errors#not_found',
           request_id: response.headers.get('x-request-id') ?? `mcp_${crypto.randomUUID()}`,
         },
       };
-    },
-  };
+    }
+    return {
+      ok: false,
+      status: response.status,
+      error: {
+        type: 'server_error',
+        code: 'upstream_unreadable',
+        message: `The Arcmira API answered ${response.status} without an error body. Retry in a few seconds.`,
+        doc_url: 'https://arcmira.com/docs/errors#server_error',
+        request_id: response.headers.get('x-request-id') ?? `mcp_${crypto.randomUUID()}`,
+      },
+    };
+  }
 }
