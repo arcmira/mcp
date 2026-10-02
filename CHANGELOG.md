@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.2
+
+A Premium read still transcribing after its 25-second wait returns `eta_seconds` beside the job, and its note says about how many minutes are left, so the agent can tell the user when to come back.
+
 ## 0.9.1
 
 A Premium transcript is one read. `arcmira.transcript(video, { quality: "premium" })` returns the lines; when the video is not transcribed yet, the same call buys it at its quote (included credits, then on-demand within the account's budget), waits up to 25 seconds and reads again. Still pending after that: run the same read again, which never buys twice. `arcmira.prepare` and `arcmira.wait` are gone and throw `method_retired` naming the read; `prepare_transcript` now points at it too. `arcmira.quote` still reads the price for free.

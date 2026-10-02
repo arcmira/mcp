@@ -301,13 +301,10 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       if (quality !== 'premium' || (first.state !== 'preparation_required' && first.state !== 'pending')) return first;
       const job = await waitFor(first.state === 'pending' ? first.job : await buy(id));
       if (job.state === 'ready') return read();
-      return {
-        state: job.state,
-        job,
-        note: job.state === 'pending'
-          ? 'Still transcribing. Run the same read in the next program; it reads this job and never buys twice.'
-          : 'The transcript was not produced; job.error says why. Report it; never substitute captions.',
-      };
+      if (job.state !== 'pending') return { state: job.state, job, note: 'The transcript was not produced; job.error says why. Report it; never substitute captions.' };
+      const eta = Number.isFinite(job.eta_seconds) ? job.eta_seconds : undefined;
+      const left = eta === undefined ? '' : `, about ${Math.max(1, Math.round(eta / 60))} min left`;
+      return { state: 'pending', eta_seconds: eta, job, note: `Still transcribing${left}. Tell the user, then run the same read again later; it reads this job and never buys twice.` };
     },
     async occurrences(options) {
       const { channelIds, entityIds, videoIds, types, mode, after, before, limit = 20 } = needOptions('occurrences', options, 'arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })');

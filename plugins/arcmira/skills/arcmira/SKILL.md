@@ -43,7 +43,7 @@ Anything else (one video's transcript, a topic across shows, who recommends a pr
 6. Return only the fields the answer needs, not whole responses.
 7. Search as_of is the newest publication date among the returned passages, not the date the whole index was updated. For channel freshness, call arcmira.status({ channelId }) and report channel.search_indexed_through for transcript search. A result date or an empty query does not establish missing recent episodes. Build date windows from `arcmira.today()` and `arcmira.daysAgo(n)`. When the user names no window, use the last 30 days; a week of the index is often thin.
 8. Link each name in the answer to the `page` field the result carries. Do not build arcmira.com URLs by hand.
-9. Premium: `arcmira.transcript(video, { quality: "premium" })` returns the lines, buying the transcript within the account's budget when it is not transcribed yet. A Premium request is the go-ahead; do not ask. Still pending: read again in the next program.
+9. Premium: `arcmira.transcript(video, { quality: "premium" })` returns the lines, buying the transcript within the account's budget when it is not transcribed yet. A Premium request is the go-ahead; do not ask. Still pending: tell the user the `eta_seconds` it returns, then read again once it has passed.
 10. On-demand spend extends the plan: the account's on-demand budget is the approval, so never ask the user for a cents amount. When a budget or plan blocks a purchase (spend_limit_exceeded, quota_exceeded, a plan gate), tell the user to raise the on-demand budget at https://arcmira.com/dashboard/spending or upgrade the plan at https://arcmira.com/pricing (not on Ultra or Enterprise), and link unlock.url when the refusal carries one.
 
 ## Monitors

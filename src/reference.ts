@@ -106,7 +106,7 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'transcript',
     signature: 'arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })',
-    returns: '{ state: ready | pending | failed | refunded; ready: video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name}], quality, source, language, as_of; otherwise: job{id, state, status, charge, error?}, note }',
+    returns: '{ state: ready | pending | failed | refunded; ready: video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name}], quality, source, language, as_of; pending: eta_seconds?, job{id, state, status, charge, eta_seconds?}, note; failed | refunded: job{id, state, status, charge, error}, note }',
     notes: ['quality: captions (default) | premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end select returned lines only. Every read is metered. Read state before lines.', PREMIUM],
   },
   {
