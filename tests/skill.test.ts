@@ -93,3 +93,22 @@ test('one dollar rule: the prepare surfaces state it and no surface defers to an
   ];
   for (const [where, text] of surfaces) assert.doesNotMatch(text, /spending policy|already authorized/i, where);
 });
+
+test('the Premium block appears once, in the transcript notes, and stays out of the instructions and task skills', async () => {
+  const { METHODS } = await import('../src/reference.ts');
+  const { TASK_SKILLS } = await import('../src/skills.ts');
+  const { describeTool, SERVER_INSTRUCTIONS } = await import('../src/tools.ts');
+  const count = (text: string) => text.split('PREMIUM PREPARATION').length - 1;
+  const transcript = METHODS.find((m) => m.name === 'transcript')!;
+  assert.equal(count(transcript.notes.join(' ')), 1);
+  assert.equal(count((await describeTool.run({} as never, null)).content[0].text as string), 1);
+  assert.equal(count(SERVER_INSTRUCTIONS), 0);
+  assert.equal(count(readFileSync(SKILL, 'utf8')), 1);
+  for (const skill of TASK_SKILLS) assert.equal(count(readFileSync(join(ROOT, 'plugins/arcmira/skills', skill.name, 'SKILL.md'), 'utf8')), 0, skill.name);
+});
+
+test('README states the whole-reference size the describe input reports', async () => {
+  const { REFERENCE_SIZE } = await import('../src/tools.ts');
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  assert.ok(readme.includes(REFERENCE_SIZE.replace(/^about/, 'About')), `README should say ${REFERENCE_SIZE}`);
+});

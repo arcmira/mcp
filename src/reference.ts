@@ -19,7 +19,7 @@ export const DOLLAR_RULE =
 
 export const ACCESS_GUIDANCE = 'When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not upgrade a plan. Requested Premium work may use included credits without another confirmation. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.';
 
-export const PREMIUM_PREPARATION = `PREMIUM PREPARATION. quote_transcript({video_id}) is a free whole-video quote. Read quote.rows and charge.unit/amount, plus max_on_demand_cents. A 15-minute quarter is 75 rows; credit mode uses four credits per row. A window never reduces the purchase price. A user request for Premium authorizes available included credits. Do not ask again. Use the current refusal quote, or call quote_transcript if needed, then set max_rows to quote.rows and max_on_demand_cents to 0 and call prepare_transcript({video_id,max_rows,max_on_demand_cents,idempotency_key}) outside execute. ${DOLLAR_RULE} Persist the key first; absent monetary ceiling means zero new on-demand cents. Same key and inputs recover an unknown response without a second purchase. POST returns {request,existing?}; inspect request.state and poll arcmira.status({jobId:request.id}) at request.nextPollSeconds. Premium GET ready has lines; pending has premium_job/status_url/next_poll_seconds; purchase_required is a refusal with quote/prepare URLs. refund_pending is unfinished recovery, not a completed refund. Never silently downgrade Premium to captions.`;
+const PREMIUM_PREPARATION = `PREMIUM PREPARATION. quote_transcript({video_id}) is a free whole-video quote. Read quote.rows and charge.unit/amount, plus max_on_demand_cents. A 15-minute quarter is 75 rows; credit mode uses four credits per row. A window never reduces the purchase price. A user request for Premium authorizes available included credits. Do not ask again. Use the current refusal quote, or call quote_transcript if needed, then set max_rows to quote.rows and call prepare_transcript({video_id,max_rows,max_on_demand_cents,idempotency_key}) outside execute. ${DOLLAR_RULE} Persist the key first; absent monetary ceiling means zero new on-demand cents. Same key and inputs recover an unknown response without a second purchase. POST returns {request,existing?}; inspect request.state and poll arcmira.status({jobId:request.id}) at request.nextPollSeconds. refund_pending is unfinished recovery, not a completed refund. Never silently downgrade Premium to captions.`;
 
 export const ID_RULE = `ID RULE. Filters take verbatim ids only: entity ids look like ent_14, channel ids like UC-DRzaGnL_vtBUpCFH5M0tg (UC plus 22 characters), video ids are 11 characters or a YouTube URL. A name where an id belongs throws id_required before any network call. Resolve first, then query:
   const r = await arcmira.resolve("Sam", { context: "the My First Million co-host" });
@@ -83,7 +83,7 @@ export const METHODS: readonly MethodDoc[] = [
     name: 'transcript',
     signature: 'arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })',
     returns: '{ state: ready | pending; ready: video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name}], quality, source, language, as_of }',
-    notes: ['quality: captions (default) | premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end select returned lines only. Premium GET never buys; preparing Premium charges the whole video, even for a short window. Read state before lines: pending returns premium_job, status_url and next_poll_seconds; purchase_required gives quote_url and prepare_url. Requested Premium work authorizes included credits. Use the current quote for max_rows and prepare with max_on_demand_cents: 0 without another confirmation; never silently authorize extra dollars. Captions are metered reads.'],
+    notes: ['quality: captions (default) | premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end select returned lines only. Captions are metered reads. Premium GET never buys. Read state before lines: ready has lines; pending returns premium_job, status_url and next_poll_seconds; purchase_required is a refusal with quote_url and prepare_url.', PREMIUM_PREPARATION],
   },
   {
     name: 'occurrences',
@@ -184,7 +184,6 @@ export const QUIRKS = [
   'Momentum, mentions and counts measure the shows Arcmira indexes, not the internet; say so when it matters. An empty result means the index has no match: never fill it from memory or the web.',
   'Before asserting a mention, read its description or the passage text and say which sense of the name it is (Mercury the bank, not the planet or the element). Drop rows about another sense.',
   ACCESS_GUIDANCE,
-  PREMIUM_PREPARATION,
   'Results carry names beside ids and arcmira.com page links; link names to those pages and never invent an arcmira.com URL.',
 ];
 
@@ -213,7 +212,6 @@ export function referenceText(topic?: string): string {
     ID_RULE,
     '',
     ROUTING,
-    PREMIUM_PREPARATION,
     '',
     'METHODS (names match the arcmira CLI commands)',
     methods.join('\n'),
@@ -240,7 +238,6 @@ export const SHORT_GUIDE = [
   'Write one program per question: resolve every name it carries (arcmira.resolve, with the user\'s own words about the name as context), use best, or suggested and tell the user you assumed it, or return ask.options for the user to pick (a name that resolves to nothing is not in the index), run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
   'Use arcmira.today() and arcmira.daysAgo(n) for date windows. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Never fill an index gap from memory or the open web.',
   ACCESS_GUIDANCE,
-  PREMIUM_PREPARATION,
   'Connect with no key and the host signs you in through OAuth, or send Authorization: Bearer <key>. With no account, POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"} and then /v1/signups/verify with the code.',
   `Good first ids: TBPN is channel UC-DRzaGnL_vtBUpCFH5M0tg, All-In Podcast is UCESLZhusAkFfsNsApnjF_Cg, Ramp is ent_14. Docs: ${DOCS.mcp} and ${DOCS.llms}.`,
 ].join(' ');

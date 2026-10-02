@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ACCESS_GUIDANCE, PREMIUM_PREPARATION, DOCS, ERRORS, EXAMPLES, ID_RULE, METHODS, QUIRKS } from '../src/reference.ts';
+import { ACCESS_GUIDANCE, DOCS, ERRORS, EXAMPLES, ID_RULE, METHODS, QUIRKS } from '../src/reference.ts';
 import { PICK_STEPS, TASK_SKILLS, type TaskSkill } from '../src/skills.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -137,8 +137,6 @@ ${t.good.map((g) => `- ${g}`).join('\n')}
 ${t.traps.map((g) => `- ${g}`).join('\n')}
 
 ${ACCESS_GUIDANCE}
-
-${PREMIUM_PREPARATION}
 
 Never fill an index gap from memory or the web. Docs: ${DOCS.mcp}
 `;

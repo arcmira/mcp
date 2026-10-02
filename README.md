@@ -69,7 +69,7 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 
 | Tool | Input | Returns |
 |---|---|---|
-| `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, ten methods with arguments and return fields, eight worked example programs, the quirks that cost answers, error codes, and doc links. About 2,800 tokens; `topic` narrows it to one method and its examples. Never bills. |
+| `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, ten methods with arguments and return fields, eight worked example programs, the quirks that cost answers, error codes, and doc links. About 16,000 characters; `topic` narrows it to one method and its examples. Never bills. |
 | `execute` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Limits: 30 seconds, 40 API calls, 20,000 characters of output. |
 
 `describe`, `execute` and `quote_transcript` are read-only. `prepare_transcript` is explicitly non-read-only, destructive, idempotent for the same persisted key and inputs, and open-world: it spends account balance and can submit external provider work. These hints describe effects. A Premium transcript request authorizes available included credits without another confirmation. The agent takes max_rows from the current quote and persists the retry key. max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it, so the agent states the amount and asks.
