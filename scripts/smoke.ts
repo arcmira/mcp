@@ -7,7 +7,7 @@
  * paths a host will hit (a name where an id belongs, a retired tool name, a gate). With no key
  * the transport must answer 401 with the OAuth challenge, and the script stops there. Prints
  * one line per call and never prints the key. Exit 1 when any call is not what the manifest
- * promises. Each execute is one or two production calls; the whole run is about 20.
+ * promises. Most probes make one or two API reads. The budget probe makes 40. No probe prepares a transcript.
  */
 import { Client } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
@@ -71,13 +71,14 @@ let failed = false;
 const tools = await client.listTools();
 const names = tools.tools.map((tool) => tool.name).sort();
 console.log(`tools/list: ${names.join(', ')}`);
-if (names.join(',') !== 'describe,execute') {
+if (names.join(',') !== 'describe,execute,prepare_transcript,quote_transcript') {
   failed = true;
-  console.log('  expected exactly describe and execute');
+  console.log('  expected describe, execute, quote_transcript, and prepare_transcript');
 }
 for (const tool of tools.tools) {
   const hints = tool.annotations ?? {};
-  if (!(hints.readOnlyHint === true && hints.destructiveHint === false && hints.idempotentHint === true && hints.openWorldHint === false)) {
+  const prepares = tool.name === 'prepare_transcript';
+  if (!(hints.readOnlyHint === !prepares && hints.destructiveHint === prepares && hints.idempotentHint === true && hints.openWorldHint === prepares)) {
     failed = true;
     console.log(`  ${tool.name}: hints wrong ${JSON.stringify(hints)}`);
   }
