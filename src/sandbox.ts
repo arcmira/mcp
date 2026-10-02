@@ -123,6 +123,37 @@ export interface SandboxHost {
   apiBase: string;
 }
 
+/** An in-isolate render is at most RESULT_CAP characters, and UTF-8 spends at most three bytes on each. */
+export const RESPONSE_BYTE_CAP = 65_536;
+
+/** The response text, or null when it is over RESPONSE_BYTE_CAP; never buffers more than the cap plus one chunk. */
+async function readCapped(response: Response): Promise<string | null> {
+  if (Number(response.headers.get('content-length')) > RESPONSE_BYTE_CAP) {
+    await response.body?.cancel();
+    return null;
+  }
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  const reader = response.body?.getReader();
+  for (;;) {
+    const next = await reader?.read();
+    if (next === undefined || next.done) break;
+    size += next.value.byteLength;
+    if (size > RESPONSE_BYTE_CAP) {
+      await reader?.cancel();
+      return null;
+    }
+    chunks.push(next.value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 function unknownOutcome(name: string, code: string, message: string): Execution {
   return {
     ok: false,
@@ -165,9 +196,8 @@ export async function runProgram(host: SandboxHost, code: string): Promise<Execu
         TIME_LIMIT_MS,
       );
     });
-    const run = (async () => {
+    const run = (async (): Promise<Execution> => {
       const response = await worker.getEntrypoint().fetch('https://sandbox.invalid/run');
-      const execution = executionSchema.parse(await response.json());
       const rawCalls = response.headers.get('x-execution-calls');
       if (rawCalls === null || !/^\d+$/.test(rawCalls) || Number(rawCalls) > MAX_CALLS)
         throw new Error('Sandbox response lacks authoritative call accounting');
@@ -175,15 +205,29 @@ export async function runProgram(host: SandboxHost, code: string): Promise<Execu
       if (rawCompleted === null || !/^\d+$/.test(rawCompleted) || Number(rawCompleted) > Number(rawCalls))
         throw new Error('Sandbox response lacks completed call accounting');
       const inFlight = Number(rawCalls) - Number(rawCompleted);
-      return {
-        ...execution,
+      const accounting = {
         calls: inFlight ? null : Number(rawCompleted),
         calls_started: Number(rawCalls),
         in_flight: inFlight,
-        outcome_uncertain: execution.outcome_uncertain || inFlight > 0,
         rate_limit: rateLimitOf(response.headers),
         api_build: response.headers.get('x-arcmira-build'),
       };
+      const body = await readCapped(response);
+      if (body === null)
+        return {
+          ok: false,
+          error: {
+            name: 'SandboxError',
+            code: 'sandbox_error',
+            message: `The program's result exceeded ${RESPONSE_BYTE_CAP} bytes at the sandbox boundary and was discarded. Return fewer or shorter fields.`,
+          },
+          lines: [],
+          logs_truncated: false,
+          outcome_uncertain: inFlight > 0,
+          ...accounting,
+        };
+      const execution = executionSchema.parse(JSON.parse(body));
+      return { ...execution, ...accounting, outcome_uncertain: execution.outcome_uncertain || inFlight > 0 };
     })();
     return await Promise.race([run, timeout]);
   } catch (error) {

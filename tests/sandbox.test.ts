@@ -203,3 +203,79 @@ it('a page cut by the output budget recovers every row by rerunning with fewer f
   assert.deepEqual(collected, ids);
   assert.deepEqual(outbound.urls.map((u) => u.searchParams.get('cursor')), [null, null, 'after-row-100']);
 });
+
+/** Wraps a loader so the program's response streams in 16 KB chunks and counts the bytes the parent pulls. */
+function countingLoader(inner: WorkerLoader, pulled: { bytes: number }): WorkerLoader {
+  return {
+    load(code: WorkerLoaderWorkerCode) {
+      const stub = inner.load(code);
+      return {
+        getEntrypoint: () => ({
+          async fetch(input: string) {
+            const response = await stub.getEntrypoint().fetch(input);
+            const reader = response.body!.getReader();
+            let pending: Uint8Array = new Uint8Array(0);
+            const body = new ReadableStream<Uint8Array>(
+              {
+                async pull(controller) {
+                  while (pending.byteLength === 0) {
+                    const { done, value } = await reader.read();
+                    if (done) return controller.close();
+                    pending = value;
+                  }
+                  const chunk = pending.subarray(0, 16_384);
+                  pending = pending.subarray(chunk.byteLength);
+                  pulled.bytes += chunk.byteLength;
+                  controller.enqueue(chunk);
+                },
+                cancel: (reason) => reader.cancel(reason),
+              },
+              { highWaterMark: 0 },
+            );
+            return new Response(body, { headers: response.headers });
+          },
+        }),
+      };
+    },
+  } as unknown as WorkerLoader;
+}
+
+it('caps the parent read when user code defeats the in-isolate bound', async () => {
+  const pulled = { bytes: 0 };
+  const { host: h } = host({});
+  const slice = String.prototype.slice;
+  let run;
+  try {
+    run = await runProgram(
+      { ...h, loader: countingLoader(h.loader, pulled) },
+      'String.prototype.slice = function () { return String(this); }; return "x".repeat(60_000_000);',
+    );
+  } finally {
+    String.prototype.slice = slice;
+  }
+  assert.equal(run.ok, false);
+  if (!run.ok) assert.equal(run.error.code, 'sandbox_error');
+  assert.equal(run.calls, 0);
+  assert.ok(pulled.bytes <= 65_536 + 16_384, `parent pulled ${pulled.bytes} bytes`);
+  assert.ok(renderExecution(run).length < RESULT_CAP);
+});
+
+it('refuses a sandbox response whose declared length is over the cap without reading it', async () => {
+  let read = false;
+  const body = new ReadableStream({ pull() { read = true; } }, { highWaterMark: 0 });
+  const headers = { 'content-length': '70000', 'x-execution-calls': '1', 'x-execution-completed': '1' };
+  const loader = { load: () => ({ getEntrypoint: () => ({ fetch: async () => new Response(body, { headers }) }) }) } as unknown as WorkerLoader;
+  const { host: h } = host({});
+  const run = await runProgram({ ...h, loader }, 'return 1;');
+  assert.equal(run.ok, false);
+  if (!run.ok) assert.equal(run.error.code, 'sandbox_error');
+  assert.equal(run.calls, 1);
+  assert.equal(read, false);
+});
+
+it('an honest result at the render cap in three-byte characters fits under the parent read cap', async () => {
+  const { host: h } = host({});
+  const run = await runProgram(h, 'return { ["€".repeat(110)]: 1, rows: Array.from({ length: 100 }, () => "€".repeat(3000)) };');
+  assert.equal(run.ok, true);
+  assert.equal(run.truncated, true);
+});
