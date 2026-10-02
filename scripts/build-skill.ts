@@ -68,7 +68,7 @@ Anything else (one video's transcript, a topic across shows, who recommends a pr
 4. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
 5. Write one \`arcmira_execute_read\` program per question. Resolve, check, and run every query the question needs inside that one program.
 6. Return only the fields the answer needs, not whole responses.
-7. ${COVERAGE_GUIDANCE} Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`.
+7. ${COVERAGE_GUIDANCE} Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`. When the user names no window, use the last 30 days; a week of the index is often thin.
 8. Link each name in the answer to the \`page\` field the result carries. Do not build arcmira.com URLs by hand.
 9. Premium: when a Premium read answers \`preparation_required\`, the same program calls \`arcmira.prepare(video)\`, then \`arcmira.wait(job)\`, then reads again. A Premium request is the go-ahead; do not ask.
 10. ${BUDGET_RULE}

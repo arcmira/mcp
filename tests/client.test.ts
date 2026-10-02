@@ -154,6 +154,14 @@ describe('the sandbox client', () => {
     await assert.rejects(arcmira.resolve('Sam', { context: ['co-host'] }), (e: Error & { code: string }) => e.code === 'invalid_request');
   });
 
+  it('resolve says to move a description into context when a multi-word name finds nothing', async () => {
+    const none = { query: 'Ramp fintech company', context: null, confidence: 'none', best: null, suggested: null, ask: null, candidates: [], note: 'No match under that name.' };
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: recording(none).fetch });
+    assert.match((await arcmira.resolve('Ramp fintech company')).note, /only the name and the description as context/);
+    assert.equal((await arcmira.resolve('Ramp fintech company', { context: 'fintech' })).note, 'No match under that name.');
+    assert.equal((await arcmira.resolve('Zzyzx')).note, 'No match under that name.');
+  });
+
   it('refuses an option name it does not know before any network call, naming the signature', async () => {
     const { urls, fetch } = recording();
     const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch });

@@ -26,7 +26,7 @@ Use Arcmira for the indexed transcript research the user requested. Cite returne
 When the ask matches one of these, load that skill and follow its worked program:
 
 - `sponsor-research`: Sponsor and ad-read research on podcasts and YouTube: who sponsors a show, or which shows a brand sponsors, how often, since when.
-- `company-watch`: Sets up Arcmira monitors: finds the companies, people and topic spellings to follow, then saves them to the right monitor with the delivery the user wants.
+- `company-watch`: Watches a company or topic on podcasts and YouTube: what was said lately (shows, counts, momentum, quotes), then an Arcmira monitor to keep following it.
 - `find-quotes`: Finds exact spoken quotes and clip-ready moments on podcasts and YouTube: verbatim words, speaker, date, a timestamped link, clip start and end.
 - `person-research`: Researches a person across podcasts and YouTube for interview or meeting prep: where they appeared, their own words, who discusses them.
 - `compare-shows`: Compares two podcasts or YouTube shows side by side: size, latest episode, what each talks about, what both cover, and shared sponsors.
@@ -41,7 +41,7 @@ Anything else (one video's transcript, a topic across shows, who recommends a pr
 4. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
 5. Write one `arcmira_execute_read` program per question. Resolve, check, and run every query the question needs inside that one program.
 6. Return only the fields the answer needs, not whole responses.
-7. Search as_of is the newest publication date among the returned passages, not the date the whole index was updated. For channel freshness, call arcmira.status({ channelId }) and report channel.search_indexed_through for transcript search. A result date or an empty query does not establish missing recent episodes. Build date windows from `arcmira.today()` and `arcmira.daysAgo(n)`.
+7. Search as_of is the newest publication date among the returned passages, not the date the whole index was updated. For channel freshness, call arcmira.status({ channelId }) and report channel.search_indexed_through for transcript search. A result date or an empty query does not establish missing recent episodes. Build date windows from `arcmira.today()` and `arcmira.daysAgo(n)`. When the user names no window, use the last 30 days; a week of the index is often thin.
 8. Link each name in the answer to the `page` field the result carries. Do not build arcmira.com URLs by hand.
 9. Premium: when a Premium read answers `preparation_required`, the same program calls `arcmira.prepare(video)`, then `arcmira.wait(job)`, then reads again. A Premium request is the go-ahead; do not ask.
 10. On-demand spend extends the plan: the account's on-demand budget is the approval, so never ask the user for a cents amount. When a budget or plan blocks a purchase (spend_limit_exceeded, quota_exceeded, a plan gate), tell the user to raise the on-demand budget at https://arcmira.com/dashboard/spending or upgrade the plan at https://arcmira.com/pricing (not on Ultra or Enterprise), and link unlock.url when the refusal carries one.

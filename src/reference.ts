@@ -332,7 +332,7 @@ export const SHORT_GUIDE = [
   'arcmira_describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first program. arcmira_execute_read runs JavaScript that reads, including Premium preparation (arcmira.prepare), and returns bounded outcome-first JSON. arcmira_execute_write runs the same client plus the monitor writes (create, update, addEntities). arcmira_feedback tells Arcmira what was wrong, slow, missing or confusing.',
   BUDGET_RULE,
   'Write one program per question: resolve every name it carries (arcmira.resolve, with the user\'s own words about the name as context), use best, or suggested and tell the user you assumed it, or return ask.options for the user to pick (a name that resolves to nothing is not in the index), run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
-  'Use arcmira.today() and arcmira.daysAgo(n) for date windows. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Keep outside evidence separate from Arcmira results.',
+  'Use arcmira.today() and arcmira.daysAgo(n) for date windows; when the user names no window, use the last 30 days, since a week of the index is often thin. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Keep outside evidence separate from Arcmira results.',
   ACCESS_GUIDANCE,
   COVERAGE_GUIDANCE,
   'When research finds entities worth following, offer to save them to a monitor: list the user\'s monitors first and never assume one exists (describe topic monitors).',

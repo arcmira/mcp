@@ -201,7 +201,12 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       if (typeof q !== 'string' || q.trim().length < 2) throw new ArcmiraError('resolve takes a name of 2 or more characters: arcmira.resolve("Ramp", { context })', 'invalid_name');
       if (context !== undefined && typeof context !== 'string') throw new ArcmiraError('context takes the user\'s own words about the name, as one string', 'invalid_request');
       const body = await get('/v1/entities/resolve', { q, type, context, limit });
-      return { query: body.query, context: body.context, confidence: body.confidence, best: body.best, suggested: body.suggested, ask: body.ask, candidates: body.candidates, note: body.note };
+      // "Ramp fintech company" finds nothing where "Ramp" with that context finds the company.
+      const describedInName = body.confidence === 'none' && context === undefined && /\s/.test(q.trim());
+      const note = describedInName
+        ? `No match for "${q}". If some of those words describe the name rather than spell it, resolve again with only the name and the description as context, like arcmira.resolve("Ramp", { context: "fintech company" }), before asking the user.`
+        : body.note;
+      return { query: body.query, context: body.context, confidence: body.confidence, best: body.best, suggested: body.suggested, ask: body.ask, candidates: body.candidates, note };
     },
     async search(options) {
       const { query, channelIds, about, entityIds, speakerIds, kind, after, before, source, limit = 5 } = needOptions('search', options, 'arcmira.search({ query, channelIds?, about?, entityIds?, speakerIds?, kind?, after?, before?, source?, limit? })');
