@@ -7,7 +7,9 @@
  * paths a host will hit (a name where an id belongs, a retired tool name, a gate). With no key
  * the transport must answer 401 with the OAuth challenge, and the script stops there. Prints
  * one line per call and never prints the key. Exit 1 when any call is not what the manifest
- * promises. Most probes make one or two API reads. The budget probe makes 40. No probe prepares a transcript.
+ * promises. Most probes make one or two API reads. The budget probe makes 40. The purchase probes
+ * read a free quote, then send prepare_transcript with max_rows 0, which the API must refuse; the
+ * key's usage is read before and after each to show neither spent anything.
  */
 import { Client } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
@@ -17,6 +19,8 @@ import { METHODS } from '../src/reference.ts';
 const url = new URL(process.argv[2] ?? 'https://mcp.arcmira.com/mcp');
 const key = process.env.ARCMIRA_KEY ?? '';
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
+/** A video the smoke key has not prepared, so a zero row ceiling is below its quote. */
+const UNOWNED_VIDEO = 'cdLeJU_1UH8';
 
 interface Probe {
   label: string;
@@ -115,6 +119,31 @@ for (const probe of PROBES) {
   const summary = text.replace(/\s+/g, ' ').slice(0, 110);
   console.log(`${verdict.padEnd(10)} ${probe.label.padEnd(22)} ${probe.tool.padEnd(8)} ${isError ? 'isError' : 'result '} ${String(Date.now() - started).padStart(5)}ms  ${summary}`);
 }
+
+/** What a purchase can move: rows, monetary spend and credits. Read through execute, which never purchases. */
+async function spend(): Promise<string> {
+  const text = textOf(await client.callTool({ name: 'execute', arguments: { code: 'const { usage } = await arcmira.status(); return [usage.rows_used, usage.current_spend_cents, usage.credits?.available ?? null];' } }));
+  return JSON.stringify((JSON.parse(text) as { value: unknown }).value);
+}
+
+const beforeQuote = await spend();
+const quote = await client.callTool({ name: 'quote_transcript', arguments: { video_id: UNOWNED_VIDEO } });
+const quoteText = textOf(quote);
+const afterQuote = await spend();
+const quoteOk = afterQuote === beforeQuote && (quote.isError === true ? /"code":"/.test(quoteText) : /"rows"/.test(quoteText));
+if (!quoteOk) failed = true;
+console.log(`${(quoteOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'quote free'.padEnd(22)} quote    spend ${beforeQuote} -> ${afterQuote}  ${quoteText.replace(/\s+/g, ' ').slice(0, 90)}`);
+
+const prepared = await client.callTool({
+  name: 'prepare_transcript',
+  arguments: { video_id: UNOWNED_VIDEO, max_rows: 0, max_on_demand_cents: 0, idempotency_key: `smoke-max-rows-0-${crypto.randomUUID()}` },
+});
+const preparedText = textOf(prepared);
+const afterPrepare = await spend();
+const refusedCode = prepared.isError === true ? /"code":"([a-z_]+)"/.exec(preparedText)?.[1] : undefined;
+const prepareOk = refusedCode !== undefined && refusedCode !== 'preparation_outcome_unknown' && afterPrepare === afterQuote;
+if (!prepareOk) failed = true;
+console.log(`${(prepareOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'prepare max_rows 0'.padEnd(22)} prepare  spend ${afterQuote} -> ${afterPrepare}  ${refusedCode ?? preparedText.replace(/\s+/g, ' ').slice(0, 90)}`);
 
 const retired = await fetch(url, {
   method: 'POST',

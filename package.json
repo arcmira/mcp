@@ -31,7 +31,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --port 8790",
-    "deploy": "wrangler deploy",
+    "deploy": "pnpm manifest:check && wrangler deploy",
     "types": "wrangler types",
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types --import ./tests/register.mjs tests/*.test.ts",
