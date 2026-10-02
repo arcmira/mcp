@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0
+
+- Preserve bounded execution outcomes and recovery fields ahead of logs. Report actual execution calls, rate limits and API build; mark timeout counts unknown.
+- Add `prepare_transcript`, the one tool that spends: it takes `{ video_id }`, prepares Premium from included credits, and returns the Job. Money needs `max_on_demand_cents` above 0, which the user approves in the conversation. Premium GET remains a read and answers `state: preparation_required` with the quote and the action.
+- Add `arcmira.quote(video)` for the free whole-video quote and `arcmira.wait(jobOrId)`, which polls a preparation Job for up to 25 seconds inside one `execute`.
+- Keep OAuth upstream throttling/outages distinct from invalid credentials; refuse authenticated redirects.
+
 ## 0.7.11
 
 - A revoked key's 401 body says to create a new key at https://arcmira.com/dashboard/api and send it with `Authorization: Bearer`. It no longer points at `unlock.url`, which is the sign-up page. The `unlock` object is unchanged.

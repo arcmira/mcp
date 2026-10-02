@@ -18,7 +18,7 @@ body:
     attributes:
       label: Plugin version and installation method
       description: Include the installed plugin version if available. The describe tool reports the remote server version, which can differ.
-      placeholder: "Plugin 0.7.13, installed through a marketplace"
+      placeholder: "Plugin 0.8.0, installed through a marketplace"
     validations:
       required: true
   - type: input

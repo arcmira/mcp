@@ -69,10 +69,22 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 
 | Tool | Input | Returns |
 |---|---|---|
-| `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, ten methods with arguments and return fields, eight worked example programs, the quirks that cost answers, error codes, and doc links. About 2,800 tokens; `topic` narrows it to one method and its examples. Never bills. |
-| `execute` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Limits: 30 seconds, 40 API calls, 20,000 characters of output. |
+| `describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, twelve methods with arguments and return fields, nine worked example programs, the quirks that cost answers, error codes, and doc links. About 17,000 characters; `topic` narrows it to one method and its examples. Never bills. |
+| `execute` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
+| `prepare_transcript` | `video_id`, `max_on_demand_cents?` (default 0), `max_rows?` | The one POST `/v1/transcriptions`. Returns the Job (`id`, `state`, `status`, `next_poll_seconds`, `status_url`). A retry with the same inputs never buys twice. With `max_on_demand_cents` above 0 it sends a generated Idempotency-Key and repeats it with the inputs as `intent`. |
 
-Both tools declare `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: false`. Two tools cost about 1,500 tokens of definitions per conversation; the ten tools they replace cost 8,163.
+`describe` and `execute` are read-only. `prepare_transcript` is explicitly non-read-only, destructive, idempotent for the same inputs, and open-world: it spends account balance and can submit external provider work. These hints describe effects. A Premium transcript request authorizes available included credits without another confirmation. max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it, so the agent states the amount and asks.
+
+A Premium transcript takes one program and at most one tool call. Run this in `execute`:
+
+```javascript
+const read = () => arcmira.transcript("cdLeJU_1UH8", { quality: "premium" });
+let t = await read();
+if (t.state === "pending" && (await arcmira.wait(t.job)).state === "ready") t = await read();
+return t.state === "ready" ? t.lines : t;
+```
+
+`ready` returns the lines. `state: preparation_required` carries the whole-video `quote` and the `action` that prepares it: call `prepare_transcript` with `{ video_id }`, then run the same program again. A Premium GET never buys, and the sandbox cannot POST, so `prepare_transcript` is the only step that spends. `arcmira.wait` polls the Job at its `next_poll_seconds` for up to 25 seconds; a Job still `pending` after that needs one more run. The quote prices the whole video at 75 rows per 15-minute quarter and four credits per row, and `start` and `end` never lower it.
 
 The client's methods are the arcmira CLI's commands, with the same names and the flags as options, so the MCP, the CLI and the SDK teach one vocabulary:
 
@@ -87,6 +99,8 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 | `arcmira.episodes(channelId, { limit?, after?, before? })` | `GET /v1/channels/{id}/videos` | Newest indexed episodes, with the `video_id` the others take |
 | `arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })` | `GET /v1/transcripts/{video_id}` | The transcript of one video, captions or Premium, whole or a window |
 | `arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })` | `GET /v1/mentions/counts` | What shows talk about, what they share, what one episode mentions |
+| `arcmira.quote(videoIdOrUrl)` | `GET /v1/transcripts/{video_id}/quote` | The free whole-video Premium quote: rows, credits, and any on-demand cents |
+| `arcmira.wait(jobOrId, { timeoutSeconds? })` | `GET /v1/transcriptions/{id}` | Polls a preparation Job at its `next_poll_seconds` until it is no longer pending, for at most 25 seconds; returns the latest Job |
 | `arcmira.status({ channelId?, jobId? })` | `GET /v1/channels/{id}/coverage`, `GET /v1/transcriptions/{id}`, `GET /v1/me` | Coverage and the index date, a transcription job, or the key |
 
 `arcmira.today()` and `arcmira.daysAgo(n)` give ISO dates from the server clock for date windows.
@@ -113,16 +127,16 @@ Good first ids: TBPN is channel `UC-DRzaGnL_vtBUpCFH5M0tg`, All-In Podcast is `U
 
 ## The sandbox
 
-`execute` runs the program in a fresh [Dynamic Worker](https://developers.cloudflare.com/dynamic-workers/) isolate. The isolate's only network is the parent's outbound proxy, which refuses anything that is not `GET https://api.arcmira.com/v1/*` with `outbound_refused` and adds the caller's credential to what it forwards, so the program never holds the key. The isolate gets 5 seconds of CPU, `execute` waits 30 seconds of wall time, the client stops at 40 API calls with `call_budget`, and the rendered output is cut at 20,000 characters with a line that says how to shrink it. A syntax error comes back as `syntax_error` with the function-body rule; a thrown error as `program_error` with its message.
+`execute` runs the program in a fresh [Dynamic Worker](https://developers.cloudflare.com/dynamic-workers/) isolate. The isolate's only network is the parent's outbound proxy, which refuses anything that is not `GET https://api.arcmira.com/v1/*` with `outbound_refused` and adds the caller's credential to what it forwards, so the program never holds the key. The isolate gets 5 seconds of CPU, `execute` waits 30 seconds of wall time, the client stops at 40 API calls with `call_budget`, and the rendered output is cut at 12,000 characters in total, 3,000 per string and 100 items per array, with `truncated_arrays` naming each cut array and a `recovery` line that says how to get every row. A syntax error comes back as `syntax_error` with the function-body rule; a thrown error as `program_error` with its message.
 
-The result is one text block: the `console.log` lines, then `RETURN: <json>` or `ERROR: <json>`. There is no `structuredContent`, so every host reads the same thing. `_meta["arcmira.com/execution"]` carries the call count and the API build.
+The result is valid bounded JSON with `ok` and `value` or `error` first, then actual `calls`, `rate_limit`, `api_build`, truncation facts and capped logs. Large results retain continuation and recovery fields. Execution metadata uses the same meter. Timeout reports `calls: null` and `outcome_uncertain: true`; in-flight reads may still finish and consume rows. Authentication 429/503 asks clients to retry with the same credential; only invalid credentials trigger reconnect.
 
 ## Gates
 
 A gate inside a program throws an `ArcmiraError` with the API's error fields, and `execute` returns it as `ERROR` with `isError: true`:
 
 ```
-ERROR: {"name":"ArcmiraError","code":"recommendations_not_enabled","message":"Sponsor recommendations require Pro.","unlock":{"tier":"pro","url":"https://arcmira.com/pricing?src=mcp-tool","offer":null},"gate":"plan","status":403,...}
+{"ok":false,"error":{"code":"recommendations_not_enabled","message":"Sponsor recommendations require Pro.","gate":"plan"},"calls":1,"outcome_uncertain":false}
 ```
 
 Switch on `code`, relay `unlock.url` to the human, and honor `retry_after_seconds` on `rate_limited`. A 200 that withheld something (Premium transcript text, the paid-versus-organic split, sponsors past the free slice) is a normal result carrying the same body under `access`. The full catalog is at https://arcmira.com/docs/errors.

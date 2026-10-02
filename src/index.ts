@@ -2,10 +2,21 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 import { createMcpHandler } from 'agents/mcp/server';
 import pkg from '../package.json' with { type: 'json' };
 import { CLIENT_HEADER, DEFAULT_API_BASE, SRC, USER_AGENT, apiKeyOf, createApiClient, type Env as ApiEnv } from './api.ts';
-import { AUTHORIZATION_SERVER_PATH, PROTECTED_RESOURCE_PATH, authorizationServerMetadata, challenge, isOAuthBearer, keyFailure, protectedResourceMetadata, tokenIsLive } from './auth.ts';
+import {
+  AuthUnavailable,
+  AUTHORIZATION_SERVER_PATH,
+  PROTECTED_RESOURCE_PATH,
+  authorizationServerMetadata,
+  challenge,
+  isOAuthBearer,
+  keyFailure,
+  protectedResourceMetadata,
+  tokenIsLive,
+} from './auth.ts';
 import { ICON_PATH, SERVER_CARD_PATHS, serverCardResponse } from './card.ts';
 import { MCP_PATH, createServer, isRetiredTool, retiredToolResult } from './server.ts';
 import type { SandboxHost } from './sandbox.ts';
+import { TOOL_NAMES } from './tools.ts';
 
 // Every named export of the entry module is an entrypoint to workerd: keep it to the default handler and ApiOutbound.
 
@@ -39,7 +50,22 @@ export class ApiOutbound extends WorkerEntrypoint<Env, OutboundProps> {
     url.searchParams.set('src', SRC);
     const headers = new Headers({ authorization: `Bearer ${this.ctx.props.key}`, accept: 'application/json', 'user-agent': USER_AGENT });
     if (this.ctx.props.client) headers.set(CLIENT_HEADER, this.ctx.props.client);
-    return fetch(url, { method: 'GET', headers });
+    const response = await fetch(url, {
+      method: 'GET',
+      headers,
+      redirect: 'manual',
+    });
+    if (response.status >= 300 && response.status < 400)
+      return Response.json(
+        {
+          error: {
+            code: 'redirect_refused',
+            message: 'Authenticated redirect refused; no bearer reached the target.',
+          },
+        },
+        { status: 502 },
+      );
+    return response;
   }
 }
 
@@ -49,10 +75,11 @@ function landing(): Response {
     version: pkg.version,
     mcp: `https://mcp.arcmira.com${MCP_PATH}`,
     transport: 'streamable-http',
-    tools: ['describe', 'execute'],
+    tools: TOOL_NAMES,
     auth: 'OAuth through the host (sign in at arcmira.com), or Authorization: Bearer <arc_sk_ account key>',
     oauth: `https://mcp.arcmira.com${PROTECTED_RESOURCE_PATH}`,
-    sign_up: 'POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"}, then /v1/signups/verify with the code',
+    sign_up:
+      'POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"}, then /v1/signups/verify with the code',
     server_card: `https://mcp.arcmira.com${[...SERVER_CARD_PATHS][0]}`,
     icon: `https://mcp.arcmira.com${ICON_PATH}`,
     docs: 'https://arcmira.com/docs/mcp-server',
@@ -61,19 +88,36 @@ function landing(): Response {
   });
 }
 
-/** A tools/call for a 0.6.0 tool name, so a host with a cached tool list learns the two tools instead of "not found". */
+/** A tools/call for a 0.6.0 tool name, so a host with a cached tool list learns the current tools instead of "not found". */
 async function retiredCall(request: Request): Promise<Response | null> {
   if (request.method !== 'POST') return null;
-  const body = (await request.clone().json().catch(() => null)) as { id?: unknown; method?: string; params?: { name?: string } } | null;
+  const body = (await request
+    .clone()
+    .json()
+    .catch(() => null)) as {
+    id?: unknown;
+    method?: string;
+    params?: { name?: string };
+  } | null;
   const name = body?.params?.name;
   if (body?.method !== 'tools/call' || typeof name !== 'string' || !isRetiredTool(name)) return null;
-  return Response.json({ jsonrpc: '2.0', id: body.id ?? null, result: retiredToolResult(name) });
+  return Response.json({
+    jsonrpc: '2.0',
+    id: body.id ?? null,
+    result: retiredToolResult(name),
+  });
 }
 
 function sandboxFor(env: Env, ctx: ExecutionContext, props: OutboundProps): SandboxHost | null {
   if (!env.LOADER) return null;
-  const { exports } = ctx as unknown as { exports: { ApiOutbound: (options: { props: OutboundProps }) => Fetcher } };
-  return { loader: env.LOADER, outbound: exports.ApiOutbound({ props }), apiBase: env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE };
+  const { exports } = ctx as unknown as {
+    exports: { ApiOutbound: (options: { props: OutboundProps }) => Fetcher };
+  };
+  return {
+    loader: env.LOADER,
+    outbound: exports.ApiOutbound({ props }),
+    apiBase: env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE,
+  };
 }
 
 export default {
@@ -82,7 +126,29 @@ export default {
     if (url.pathname === MCP_PATH) {
       const key = apiKeyOf(request);
       if (key === null) return challenge(url.origin);
-      const failure = isOAuthBearer(key) ? ((await tokenIsLive(key, env)) ? null : 'invalid') : await keyFailure(key, env);
+      let failure;
+      try {
+        failure = isOAuthBearer(key) ? ((await tokenIsLive(key, env)) ? null : 'invalid') : await keyFailure(key, env);
+      } catch (error) {
+        if (!(error instanceof AuthUnavailable)) throw error;
+        return Response.json(
+          {
+            jsonrpc: '2.0',
+            id: null,
+            error: {
+              code: -32000,
+              message: error.message,
+              data: {
+                code: error.status === 429 ? 'rate_limited' : 'auth_upstream_unavailable',
+              },
+            },
+          },
+          {
+            status: error.status,
+            headers: error.retryAfter ? { 'retry-after': error.retryAfter } : {},
+          },
+        );
+      }
       if (failure !== null) return challenge(url.origin, failure);
       const retired = await retiredCall(request);
       if (retired !== null) return retired;
@@ -99,6 +165,14 @@ export default {
     if (url.pathname === AUTHORIZATION_SERVER_PATH) return authorizationServerMetadata(env);
     if (SERVER_CARD_PATHS.has(url.pathname)) return serverCardResponse(url.origin);
     if (url.pathname === '/' || url.pathname === '/health') return landing();
-    return Response.json({ error: { code: 'not_found', message: `Nothing at ${url.pathname}. The MCP endpoint is ${MCP_PATH}.` } }, { status: 404 });
+    return Response.json(
+      {
+        error: {
+          code: 'not_found',
+          message: `Nothing at ${url.pathname}. The MCP endpoint is ${MCP_PATH}.`,
+        },
+      },
+      { status: 404 },
+    );
   },
 } satisfies ExportedHandler<Env>;

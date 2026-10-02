@@ -42,8 +42,8 @@ export function serverCard(origin: string): Record<string, unknown> {
       name: tool.name,
       title: tool.title,
       description: tool.description,
-      inputSchema: z.toJSONSchema(tool.inputSchema),
-      annotations: { ...READ_ONLY, title: tool.title },
+      inputSchema: z.toJSONSchema(tool.inputSchema, { io: 'input' }),
+      annotations: { ...(tool.annotations ?? READ_ONLY), title: tool.title },
     })),
   };
 }

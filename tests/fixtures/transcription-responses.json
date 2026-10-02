@@ -1,0 +1,225 @@
+{
+  "_source": "Bodies the v1 backend answers at arcmira 7a708648d (frozen OpenAPI sha256 798865d9). preparation_required is the literal body in apps/backend/tests/v1-transcripts.test.ts; the Job follows formatRequest and the PendingJob schema in tests/v1-transcription-submit.test.ts.",
+  "get_transcript_ready": {
+    "status": 200,
+    "body": {
+      "state": "ready",
+      "video": {
+        "id": "dQw4w9WgXcQ",
+        "title": "TBPN | Tuesday, August 4",
+        "channel_id": "UC-DRzaGnL_vtBUpCFH5M0tg",
+        "channel_name": "TBPN",
+        "published_at": "2026-08-04T17:00:00.000Z",
+        "duration_seconds": 3600,
+        "watch_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+      },
+      "quality": "captions",
+      "source": "creator_captions",
+      "language": "en",
+      "languages": [
+        {
+          "code": "en",
+          "name": "English",
+          "generated": false
+        },
+        {
+          "code": "de",
+          "name": "Deutsch (auto)",
+          "generated": true
+        }
+      ],
+      "lines": [
+        {
+          "start": 0,
+          "end": 20,
+          "text": "Ramp has been on the show for a while now."
+        },
+        {
+          "start": 20,
+          "end": 45,
+          "text": "The pitch is still the same, spend less time on expenses."
+        },
+        {
+          "start": 45,
+          "end": 70,
+          "text": "We asked the founders how they think about that."
+        },
+        {
+          "start": 700,
+          "end": 730,
+          "text": "Back after the break with the rest of the interview."
+        }
+      ],
+      "rows_billed": 4,
+      "as_of": "2026-09-01T09:00:00.000Z",
+      "note": "This transcript is the video's own caption track. `creator_captions` were written or approved by the channel; `third_party_quick` are YouTube's automatic captions and can misspell names and drop punctuation. `language` says which track you got."
+    }
+  },
+  "get_transcript_preparation_required": {
+    "status": 200,
+    "body": {
+      "state": "preparation_required",
+      "quality": "premium",
+      "video_id": "dQw4w9WgXcQ",
+      "quote": {
+        "rows": 300,
+        "charge": {
+          "unit": "credits",
+          "amount": 1200,
+          "from": "included"
+        },
+        "eligible": true,
+        "max_on_demand_cents": 0
+      },
+      "action": {
+        "method": "POST",
+        "url": "https://api.arcmira.com/v1/transcriptions",
+        "body": {
+          "video_id": "dQw4w9WgXcQ"
+        }
+      },
+      "last_attempt": {
+        "status": "refunded",
+        "error": "Transcription timed out."
+      }
+    }
+  },
+  "get_transcript_pending": {
+    "status": 202,
+    "headers": {
+      "retry-after": "29"
+    },
+    "body": {
+      "state": "pending",
+      "quality": "premium",
+      "video_id": "dQw4w9WgXcQ",
+      "job": {
+        "id": "6f1c2b9e-1d2a-4c55-9a43-6b7f0e2d9c11",
+        "video_id": "dQw4w9WgXcQ",
+        "state": "pending",
+        "status": "queued",
+        "stage": "queued",
+        "charge": {
+          "unit": "credits",
+          "amount": 1200,
+          "from": "included"
+        },
+        "eta_seconds": 172,
+        "next_poll_seconds": 29,
+        "created_at": "2026-10-01 00:00:00",
+        "status_url": "https://api.arcmira.com/v1/transcriptions/6f1c2b9e-1d2a-4c55-9a43-6b7f0e2d9c11"
+      }
+    }
+  },
+  "quote_transcription": {
+    "status": 200,
+    "body": {
+      "video_id": "dQw4w9WgXcQ",
+      "duration_seconds": 3600,
+      "billing_scope": "full_video",
+      "owned": false,
+      "eligible": true,
+      "quote": {
+        "quarters": 4,
+        "rows": 300
+      },
+      "charge": {
+        "unit": "credits",
+        "amount": 1200,
+        "from": "included"
+      },
+      "credits_per_row": 4,
+      "max_on_demand_cents": 0,
+      "on_demand_cents_per_unit": 0.2,
+      "prepare_url": "/v1/transcriptions",
+      "refund_policy": "Failed generation is refunded. Delivered unlocks are permanent."
+    }
+  },
+  "submit_transcription_pending": {
+    "status": 202,
+    "headers": {
+      "retry-after": "29"
+    },
+    "body": {
+      "job": {
+        "id": "6f1c2b9e-1d2a-4c55-9a43-6b7f0e2d9c11",
+        "video_id": "dQw4w9WgXcQ",
+        "state": "pending",
+        "status": "queued",
+        "stage": "queued",
+        "charge": {
+          "unit": "credits",
+          "amount": 1200,
+          "from": "included"
+        },
+        "eta_seconds": 172,
+        "next_poll_seconds": 29,
+        "created_at": "2026-10-01 00:00:00",
+        "status_url": "https://api.arcmira.com/v1/transcriptions/6f1c2b9e-1d2a-4c55-9a43-6b7f0e2d9c11"
+      },
+      "existing": false
+    }
+  },
+  "get_transcription_pending": {
+    "status": 200,
+    "headers": {
+      "retry-after": "29"
+    },
+    "body": {
+      "id": "6f1c2b9e-1d2a-4c55-9a43-6b7f0e2d9c11",
+      "video_id": "dQw4w9WgXcQ",
+      "state": "pending",
+      "status": "queued",
+      "stage": "queued",
+      "charge": {
+        "unit": "credits",
+        "amount": 1200,
+        "from": "included"
+      },
+      "eta_seconds": 172,
+      "next_poll_seconds": 29,
+      "created_at": "2026-10-01 00:00:00",
+      "status_url": "https://api.arcmira.com/v1/transcriptions/6f1c2b9e-1d2a-4c55-9a43-6b7f0e2d9c11"
+    }
+  },
+  "get_transcription_ready": {
+    "status": 200,
+    "body": {
+      "id": "6f1c2b9e-1d2a-4c55-9a43-6b7f0e2d9c11",
+      "video_id": "dQw4w9WgXcQ",
+      "state": "ready",
+      "status": "complete",
+      "stage": null,
+      "charge": {
+        "unit": "credits",
+        "amount": 1200,
+        "from": "included"
+      },
+      "created_at": "2026-10-01 00:00:00",
+      "completed_at": "2026-10-01 00:03:10",
+      "status_url": "https://api.arcmira.com/v1/transcriptions/6f1c2b9e-1d2a-4c55-9a43-6b7f0e2d9c11"
+    }
+  },
+  "submit_transcription_max_rows_exceeded": {
+    "status": 409,
+    "body": {
+      "error": {
+        "type": "conflict_error",
+        "code": "max_rows_exceeded",
+        "message": "The whole-video price exceeds max_rows. Review the current quote before a new intent.",
+        "doc_url": "https://arcmira.com/docs/errors#max_rows_exceeded",
+        "request_id": "req_fixture"
+      },
+      "quote": {
+        "quarters": 4,
+        "rows": 300,
+        "charge": {
+          "unit": "credits",
+          "amount": 1200,
+          "from": "included"
+        },
+        "max_on_demand_cents": 0
+      }
+    }
+  }
+}

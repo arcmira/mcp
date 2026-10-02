@@ -14,6 +14,15 @@ export const AUTHORIZATION_SERVER_PATH = '/.well-known/oauth-authorization-serve
 const ARCMIRA_KEY_PREFIX = 'arc_';
 const SESSION_PATH = '/api/auth/mcp/get-session';
 const ME_PATH = '/v1/me';
+export class AuthUnavailable extends Error {
+  readonly status: number;
+  readonly retryAfter: string | null;
+  constructor(status: number, retryAfter: string | null) {
+    super('Authentication upstream is temporarily unavailable. Keep the current credential and retry.');
+    this.status = status;
+    this.retryAfter = retryAfter;
+  }
+}
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export function apiBase(env: Env): string {
@@ -39,7 +48,11 @@ export function isOAuthBearer(key: string | null): key is string {
 export function challenge(origin: string, reason: CredentialFailure = 'no_credential'): Response {
   const error = noKeyError(reason);
   return Response.json(
-    { jsonrpc: '2.0', error: { code: -32000, message: error.message, data: error }, id: null },
+    {
+      jsonrpc: '2.0',
+      error: { code: -32000, message: error.message, data: error },
+      id: null,
+    },
     {
       status: 401,
       headers: {
@@ -58,7 +71,10 @@ export async function authorizationServerMetadata(env: Env): Promise<Response> {
   } as RequestInit);
   return new Response(upstream.body, {
     status: upstream.status,
-    headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=300' },
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': 'public, max-age=300',
+    },
   });
 }
 
@@ -77,11 +93,23 @@ export async function tokenIsLive(token: string, env: Env, now = Date.now()): Pr
   if (cached !== undefined && cached > now) return true;
   live.delete(token);
   const response = await fetch(`${apiBase(env)}${SESSION_PATH}`, {
-    headers: { authorization: `Bearer ${token}`, accept: 'application/json', 'user-agent': USER_AGENT },
+    redirect: 'manual',
+    signal: AbortSignal.timeout(10_000),
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: 'application/json',
+      'user-agent': USER_AGENT,
+    },
+  }).catch(() => {
+    throw new AuthUnavailable(503, null);
   });
-  if (!response.ok) return false;
-  const row = (await response.json().catch(() => null)) as SessionRow | null;
-  if (row === null || typeof row !== 'object') return false;
+  if (response.status === 401) return false;
+  if (!response.ok) throw new AuthUnavailable(response.status === 429 ? 429 : 503, response.headers.get('retry-after'));
+  const row = (await response.json().catch(() => {
+    throw new AuthUnavailable(503, response.headers.get('retry-after'));
+  })) as SessionRow | null;
+  if (row === null) return false;
+  if (typeof row !== 'object') throw new AuthUnavailable(503, response.headers.get('retry-after'));
   const expiry = row.accessTokenExpiresAt === undefined ? Number.NaN : new Date(row.accessTokenExpiresAt).getTime();
   const until = Math.min(now + CACHE_TTL_MS, Number.isFinite(expiry) ? expiry : now + CACHE_TTL_MS);
   if (until <= now) return false;
@@ -107,13 +135,24 @@ export async function keyFailure(key: string, env: Env, now = Date.now()): Promi
   if (cached !== undefined && cached > now) return null;
   liveKeys.delete(key);
   const response = await fetch(`${apiBase(env)}${ME_PATH}`, {
-    headers: { authorization: `Bearer ${key}`, accept: 'application/json', 'user-agent': USER_AGENT },
-  }).catch(() => null);
-  if (response === null) return null;
+    redirect: 'manual',
+    signal: AbortSignal.timeout(10_000),
+    headers: {
+      authorization: `Bearer ${key}`,
+      accept: 'application/json',
+      'user-agent': USER_AGENT,
+    },
+  }).catch(() => {
+    throw new AuthUnavailable(503, null);
+  });
   if (response.status === 401) {
-    const body = (await response.json().catch(() => null)) as { error?: { reason?: string } } | null;
+    const body = (await response.json().catch(() => null)) as {
+      error?: { reason?: string };
+    } | null;
     return body?.error?.reason === 'revoked' ? 'revoked' : 'invalid';
   }
+  if (response.status === 429 || response.status >= 500 || (response.status >= 300 && response.status < 400))
+    throw new AuthUnavailable(response.status === 429 ? 429 : 503, response.headers.get('retry-after'));
   if (!response.ok) return null;
   liveKeys.set(key, now + CACHE_TTL_MS);
   return null;

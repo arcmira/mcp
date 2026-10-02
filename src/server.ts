@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/server';
 import pkg from '../package.json' with { type: 'json' };
 import { noKeyError, type ApiClient } from './api.ts';
@@ -20,16 +21,31 @@ export interface Caller {
  */
 export function createServer(caller: Caller, deploy: string | null = null): McpServer {
   const server = new McpServer({ name: 'arcmira', version: pkg.version }, { instructions: SERVER_INSTRUCTIONS });
-  const build = (result: Parameters<typeof withBuild>[0]) =>
-    withBuild(result, { server: pkg.version, deploy, api: caller.api?.upstreamBuild() ?? null, client: clientLabel(server.server.getClientVersion()) });
+  const build = (result: Parameters<typeof withBuild>[0]) => {
+    const execution = z.object({ api_build: z.string().nullable() }).safeParse(result._meta?.['arcmira.com/execution']);
+    return withBuild(result, {
+      server: pkg.version,
+      deploy,
+      api: execution.success ? execution.data.api_build : (caller.api?.upstreamBuild() ?? null),
+      client: clientLabel(server.server.getClientVersion()),
+    });
+  };
   for (const tool of TOOLS) {
     server.registerTool(
       tool.name,
-      { title: tool.title, description: tool.description, inputSchema: tool.inputSchema, annotations: { ...READ_ONLY, title: tool.title } },
+      {
+        title: tool.title,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        annotations: { ...(tool.annotations ?? READ_ONLY), title: tool.title },
+      },
       async (input) => {
         // The handshake has completed by the time a tool runs, so the host's name is known here.
         caller.api?.setClient(server.server.getClientVersion());
-        const result = caller.api === null ? errorResult(noKeyError()) : withRateLimit(await tool.run(input, caller.sandbox), caller.api.rateLimit());
+        const result =
+          caller.api === null
+            ? errorResult(noKeyError())
+            : withRateLimit(await tool.run(input, caller.sandbox, caller.api), caller.api.rateLimit());
         return build(result);
       },
     );

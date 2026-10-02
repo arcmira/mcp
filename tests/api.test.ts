@@ -12,7 +12,14 @@ function withFetch<T>(handler: (url: URL, init: RequestInit) => Response | Promi
 
 describe('apiKeyOf', () => {
   it('reads a bearer or an x-api-key header and nothing else', () => {
-    assert.equal(apiKeyOf(new Request('https://x', { headers: { authorization: 'Bearer arc_sk_abc' } })), 'arc_sk_abc');
+    assert.equal(
+      apiKeyOf(
+        new Request('https://x', {
+          headers: { authorization: 'Bearer arc_sk_abc' },
+        }),
+      ),
+      'arc_sk_abc',
+    );
     assert.equal(apiKeyOf(new Request('https://x', { headers: { 'x-api-key': ' arc_sk_abc ' } })), 'arc_sk_abc');
     assert.equal(apiKeyOf(new Request('https://x', { headers: { authorization: 'Basic abc' } })), null);
     assert.equal(apiKeyOf(new Request('https://x')), null);
@@ -28,7 +35,15 @@ describe('the v1 client', () => {
         seen.push({ url, init });
         return Response.json({ chunks: [] });
       },
-      () => client.get('/v1/transcripts/search', { q: 'Ramp', channel_ids: ['UC1', 'UC2'], entity_ids: [], limit: 5, published_after: null, source: undefined }),
+      () =>
+        client.get('/v1/transcripts/search', {
+          q: 'Ramp',
+          channel_ids: ['UC1', 'UC2'],
+          entity_ids: [],
+          limit: 5,
+          published_after: null,
+          source: undefined,
+        }),
     );
     assert.ok(result.ok);
     assert.equal(seen.length, 1);
@@ -60,9 +75,24 @@ describe('the v1 client', () => {
   });
 
   it('forwards an error body untouched', async () => {
-    const error = { type: 'permission_error', code: 'quota_exceeded', message: 'm', gate: 'rows', unlock: { tier: 'free', url: 'https://arcmira.com/sign-up?src=mcp-tool', offer: null }, doc_url: 'd', request_id: 'r' };
+    const error = {
+      type: 'permission_error',
+      code: 'quota_exceeded',
+      message: 'm',
+      gate: 'rows',
+      unlock: {
+        tier: 'free',
+        url: 'https://arcmira.com/sign-up?src=mcp-tool',
+        offer: null,
+      },
+      doc_url: 'd',
+      request_id: 'r',
+    };
     const client = createApiClient({}, 'k');
-    const result = await withFetch(() => Response.json({ error }, { status: 402 }), () => client.get('/v1/me'));
+    const result = await withFetch(
+      () => Response.json({ error }, { status: 402 }),
+      () => client.get('/v1/me'),
+    );
     assert.equal(result.ok, false);
     if (!result.ok) {
       assert.equal(result.status, 402);
@@ -72,7 +102,10 @@ describe('the v1 client', () => {
 
   it('a legacy string error becomes a typed not_found that keeps the message', async () => {
     const client = createApiClient({}, 'k');
-    const result = await withFetch(() => Response.json({ error: 'Transcription request not found.' }, { status: 404 }), () => client.get('/v1/transcriptions/x'));
+    const result = await withFetch(
+      () => Response.json({ error: 'Transcription request not found.' }, { status: 404 }),
+      () => client.get('/v1/transcriptions/x'),
+    );
     assert.equal(result.ok, false);
     if (!result.ok) {
       assert.equal(result.error.code, 'not_found');
@@ -84,17 +117,74 @@ describe('the v1 client', () => {
   it('remembers the RateLimit headers of the latest answer, and keeps the last seen when an answer has none', async () => {
     const client = createApiClient({}, 'k');
     assert.equal(client.rateLimit(), null);
-    await withFetch(() => Response.json({}, { headers: { 'RateLimit-Limit': '20', 'RateLimit-Remaining': '17', 'RateLimit-Reset': '1788819360' } }), () => client.get('/v1/me'));
-    assert.deepEqual(client.rateLimit(), { limit: 20, remaining: 17, reset: 1788819360 });
-    await withFetch(() => Response.json({ error: { type: 'rate_limit_error', code: 'rate_limited', message: 'm', doc_url: 'd', request_id: 'r' } }, { status: 429, headers: { 'RateLimit-Limit': '20', 'RateLimit-Remaining': '0', 'RateLimit-Reset': '1788819420' } }), () => client.get('/v1/me'));
-    assert.deepEqual(client.rateLimit(), { limit: 20, remaining: 0, reset: 1788819420 }, 'a refusal carries the headers too');
-    await withFetch(() => new Response('<html>challenge</html>', { status: 403 }), () => client.get('/v1/me'));
-    assert.deepEqual(client.rateLimit(), { limit: 20, remaining: 0, reset: 1788819420 }, 'an edge answer without the headers does not erase the last reading');
+    await withFetch(
+      () =>
+        Response.json(
+          {},
+          {
+            headers: {
+              'RateLimit-Limit': '20',
+              'RateLimit-Remaining': '17',
+              'RateLimit-Reset': '1788819360',
+            },
+          },
+        ),
+      () => client.get('/v1/me'),
+    );
+    assert.deepEqual(client.rateLimit(), {
+      limit: 20,
+      remaining: 17,
+      reset: 1788819360,
+    });
+    await withFetch(
+      () =>
+        Response.json(
+          {
+            error: {
+              type: 'rate_limit_error',
+              code: 'rate_limited',
+              message: 'm',
+              doc_url: 'd',
+              request_id: 'r',
+            },
+          },
+          {
+            status: 429,
+            headers: {
+              'RateLimit-Limit': '20',
+              'RateLimit-Remaining': '0',
+              'RateLimit-Reset': '1788819420',
+            },
+          },
+        ),
+      () => client.get('/v1/me'),
+    );
+    assert.deepEqual(
+      client.rateLimit(),
+      { limit: 20, remaining: 0, reset: 1788819420 },
+      'a refusal carries the headers too',
+    );
+    await withFetch(
+      () => new Response('<html>challenge</html>', { status: 403 }),
+      () => client.get('/v1/me'),
+    );
+    assert.deepEqual(
+      client.rateLimit(),
+      { limit: 20, remaining: 0, reset: 1788819420 },
+      'an edge answer without the headers does not erase the last reading',
+    );
   });
 
   it('a non-JSON upstream answer is a typed server error, never a throw', async () => {
     const client = createApiClient({}, 'k');
-    const result = await withFetch(() => new Response('<html>challenge</html>', { status: 403, headers: { 'x-request-id': 'req_edge' } }), () => client.get('/v1/me'));
+    const result = await withFetch(
+      () =>
+        new Response('<html>challenge</html>', {
+          status: 403,
+          headers: { 'x-request-id': 'req_edge' },
+        }),
+      () => client.get('/v1/me'),
+    );
     assert.equal(result.ok, false);
     if (!result.ok) {
       assert.equal(result.error.code, 'upstream_unreadable');
@@ -136,4 +226,29 @@ describe('the host and the build', () => {
     });
     assert.equal(client.upstreamBuild(), 'v-abc123');
   });
+});
+
+it('the authenticated client refuses redirect and never forwards a bearer to its target', async () => {
+  const original = globalThis.fetch;
+  const received: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    received.push(String(input));
+    if (init?.redirect !== 'manual') {
+      received.push('https://evil.invalid/steal');
+      throw new Error('redirect would leak');
+    }
+    return new Response(null, {
+      status: 307,
+      headers: { location: 'https://evil.invalid/steal' },
+    });
+  };
+  try {
+    const result = await createApiClient({}, 'arc_sk_secret').get('/v1/me');
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, 'redirect_refused');
+    assert.equal(received.length, 1);
+    assert.ok(received[0].startsWith('https://api.arcmira.com/'));
+  } finally {
+    globalThis.fetch = original;
+  }
 });

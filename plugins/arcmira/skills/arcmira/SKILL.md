@@ -5,7 +5,7 @@ description: "Answers what YouTube shows and podcasts said: transcripts, who was
 
 # Arcmira
 
-Arcmira indexes YouTube and podcast transcripts and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes two tools. `describe` returns the client reference. `execute` runs a JavaScript program against the `arcmira` client and returns what the program returns.
+Arcmira indexes YouTube and podcast transcripts and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes describe, execute and prepare_transcript. `describe` returns the client reference. `execute` runs a JavaScript program against the `arcmira` client and returns what the program returns.
 
 ## When to use
 
@@ -53,8 +53,10 @@ Every method is async and returns parsed JSON. The program runs as the body of a
 | `sponsors` | `arcmira.sponsors(channelId, { minAdReads?, status?, limit? })` | `{ channel{name, page}, sponsors[{entity{id, name, page}, ad_reads, videos, first_seen, last_seen, sponsor_status{status}}], meta{total} }` | Recurring sponsors of one show, ranked by ad_reads. status: active \| lapsed filters on sponsor_status.status. |
 | `recommendations` | `arcmira.recommendations(entityId, { kind?, channelId?, after?, before?, limit?, cursor? })` | `{ entity, data[{mention_class (ad_read = sponsored, endorsement = organic), verbatim_quote, promo_code, media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds}], has_more, next_cursor }` | Who recommends one entity on air. kind: sponsored \| organic \| all (default all), limit 1..50. Account access applies; a gate reports the required tier in unlock.tier. |
 | `episodes` | `arcmira.episodes(channelId, { limit?, after?, before? })` | `{ episodes[{video_id, title, published_at, duration_seconds, view_count, watch_url}], indexed_through, index_age_days }` | Newest indexed episodes of one show, limit 1..25; episodes[0] is the latest. Never count episodes to size a show: status({ channelId }).channel.searchable_videos is the count. |
-| `transcript` | `arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })` | `{ video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name}], quality, source, language, as_of }` | quality: captions (default) \| premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end in seconds bill only that window: pass them for "the first minute". |
+| `transcript` | `arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })` | `{ state: ready \| pending \| preparation_required; ready: video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name}], quality, source, language, as_of; pending: job; preparation_required: quote{rows, charge, eligible, max_on_demand_cents}, action }` | quality: captions (default) \| premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end select returned lines only. Captions are metered reads. Premium GET never buys. Read state before lines. PREMIUM PREPARATION. Read Premium with the Premium worked example, swapping in the video id. ready: answer from lines. pending after wait's 25 seconds: run it again. preparation_required: call the prepare_transcript tool with { video_id } (a Premium request authorizes included credits; do not ask again), then run the same program again. max_on_demand_cents is 0 unless the user approved a cents amount in this conversation; a quote above 0 means included credits do not cover it: state the amount and ask. The quote prices the whole video (75 rows per 15-minute quarter, four credits per row); start and end never lower it, and arcmira.quote(video) reads it for free. A Job in state failed or refunded carries error; status refund_pending is not a completed refund. Plans without Premium answer captions with an access gate: report it, never present captions as Premium. |
 | `occurrences` | `arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })` | `{ rows[{entity_id, name, type, channel_id, channel_name, count (episodes), occurrences (times said)}], shared[{entity_id, name, type, by_channel[{channel_id, channel_name, count}]}], as_of }` | Ranked catalog counts per entity per channel: what a show talks about, how many episodes mentioned an entity in a window, what one episode mentions (videoIds). Needs channelIds (up to 8), entityIds (up to 20) or videoIds (up to 20). types: person \| organization \| product \| topic \| channel. With two or more channelIds read shared, not rows, for what both shows mention. |
+| `quote` | `arcmira.quote(videoIdOrUrl)` | `{ video_id, duration_seconds, owned, eligible, quote{quarters, rows}, charge{unit, amount, from}, max_on_demand_cents }` | The free whole-video Premium quote. It never buys. |
+| `wait` | `arcmira.wait(jobOrId, { timeoutSeconds? })` | `the latest Job { id, video_id, state: pending \| ready \| failed \| refunded, status, stage, charge, next_poll_seconds, error?, status_url }` | Polls a preparation Job at its next_poll_seconds until state is not pending, for at most timeoutSeconds (default and maximum 25). Takes the Job prepare_transcript returned, a body that carries one as .job, or its id. Still pending at the timeout: call wait again in the next execute. |
 | `status` | `arcmira.status({ channelId? \| jobId? })` | `{ channel{youtube_channel_id, searchable_videos, indexed_through, search_indexed_through} } for a show; a transcription job for jobId; the key and plan with no argument` | searchable_videos counts searchable videos for this show. search_indexed_through is the newest publication date in its transcript search index; indexed_through describes overall indexed coverage. Neither date guarantees every earlier episode is present. |
 
 The arcmira CLI (npm package `arcmira`) has commands with the same names. `arcmira sponsors UC... --min-ad-reads 3` is the shell form of `arcmira.sponsors(id, { minAdReads: 3 })`.
@@ -118,13 +120,15 @@ const inB = new Map(b.sponsors.map(s => [s.entity.id, s.ad_reads]));
 return a.sponsors.filter(s => inB.has(s.entity.id)).map(s => ({ name: s.entity.name, id: s.entity.id, ad_reads: [s.ad_reads, inB.get(s.entity.id)] }));
 ```
 
-### Who speaks in the first minute (Premium)
+### A Premium transcript: who speaks in the first minute (run, prepare if asked, run again)
 
 ```javascript
-const ep = await arcmira.episodes("UC-DRzaGnL_vtBUpCFH5M0tg", { limit: 1 });
-const t = await arcmira.transcript(ep.episodes[0].video_id, { quality: "premium", start: 0, end: 60 });
-const name = new Map((t.speakers ?? []).map(s => [s.id, s.name]));
-return { video: ep.episodes[0].title, speakers: (t.speakers ?? []).map(s => s.name), opening: t.lines.slice(0, 8).map(l => `[${l.start}] ${name.get(l.speaker) ?? "?"}: ${l.text}`) };
+const read = () => arcmira.transcript("cdLeJU_1UH8", { quality: "premium", start: 0, end: 60 });
+let t = await read();
+if (t.state === "pending" && (await arcmira.wait(t.job)).state === "ready") t = await read();
+if (t.state !== "ready") return t;   // preparation_required: call prepare_transcript, then run this again
+const name = new Map(t.speakers.map(s => [s.id, s.name]));
+return t.lines.map(l => `[${l.start}] ${name.get(l.speaker)}: ${l.text}`);
 ```
 
 ### A month window (after and before are both counted); return the window so the answer states it
@@ -158,7 +162,7 @@ return out.sort((a, b) => (b.last30 ?? -1) - (a.last30 ?? -1));
 - Dates: arcmira.today() and arcmira.daysAgo(n) give ISO dates from the server clock; never guess today. after and before are both counted (August is after 2026-08-01, before 2026-08-31), in UTC. Coverage is partial; check channel coverage before making freshness claims.
 - Momentum, mentions and counts measure the shows Arcmira indexes, not the internet; say so when it matters. An empty result means this query returned no matches. Keep outside evidence separate from Arcmira results.
 - Before asserting a mention, read its description or the passage text and say which sense of the name it is (Mercury the bank, not the planet or the element). Drop rows about another sense.
-- When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not initiate a purchase. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.
+- When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not upgrade a plan. Requested Premium work may use included credits without another confirmation. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.
 - Search as_of is the newest publication date among the returned passages, not the date the whole index was updated. For channel freshness, call arcmira.status({ channelId }) and report channel.search_indexed_through for transcript search. A result date or an empty query does not establish missing recent episodes.
 - Results carry names beside ids and arcmira.com page links; link names to those pages and never invent an arcmira.com URL.
 
