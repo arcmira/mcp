@@ -154,6 +154,15 @@ describe('the sandbox client', () => {
     await assert.rejects(arcmira.resolve('Sam', { context: ['co-host'] }), (e: Error & { code: string }) => e.code === 'invalid_request');
   });
 
+  it('refuses an option name it does not know before any network call, naming the signature', async () => {
+    const { urls, fetch } = recording();
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch });
+    await assert.rejects(arcmira.search({ query: 'Anthropic pricing', publishedAfter: '2026-09-01' }), (e: Error & { code: string }) => e.code === 'invalid_request' && /publishedAfter/.test(e.message) && /after\?/.test(e.message));
+    await assert.rejects(arcmira.recommendations('ent_14', { since: '2026-09-01' }), (e: Error & { code: string }) => e.code === 'invalid_request');
+    await assert.rejects(arcmira.resolve({ name: 'Ramp', hint: 'fintech' }), (e: Error & { code: string }) => e.code === 'invalid_request');
+    assert.equal(urls.length, 0);
+  });
+
   it('turns a v1 error body into an ArcmiraError with the code and unlock, and keeps the rate limit', async () => {
     const error = { type: 'permission_error', code: 'filter_requires_paid', message: 'Pro+', unlock: { tier: 'pro_plus', url: 'https://arcmira.com/pricing' } };
     const { fetch } = recording({ error }, { status: 403, headers: { 'ratelimit-limit': '20', 'ratelimit-remaining': '3', 'ratelimit-reset': '99', 'x-arcmira-build': 'b1' } });

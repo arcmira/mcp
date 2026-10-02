@@ -79,11 +79,15 @@ function dayAfterInclusive(value, param) {
   return new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 }
 
+/** The options object of a call, refusing any key the signature does not name: a misspelled after or before would otherwise drop the window silently. */
 function needOptions(method, value, signature) {
   if (value === undefined) return {};
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new ArcmiraError(`arcmira.${method} takes one options object, got ${JSON.stringify(value)}. Call it as ${signature}.`, 'invalid_request');
   }
+  const allowed = new Set([...signature.matchAll(/\{([^}]*)\}/g)].flatMap((m) => m[1].split(',').map((k) => k.trim().replace(/\?$/, ''))));
+  const unknown = Object.keys(value).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) throw new ArcmiraError(`arcmira.${method} does not take ${unknown.join(', ')}. Call it as ${signature}.`, 'invalid_request');
   return value;
 }
 
@@ -107,9 +111,7 @@ function needMonitorId(value) {
 }
 
 function monitorFields(method, value, allowed) {
-  const fields = needOptions(method, value, `arcmira.${method}({ ${allowed.slice(0, 4).join(', ')}, ... })`);
-  const unknown = Object.keys(fields).filter((key) => !allowed.includes(key));
-  if (unknown.length > 0) throw new ArcmiraError(`arcmira.${method} does not take ${unknown.join(', ')}. It takes ${allowed.join(', ')}.`, 'invalid_request');
+  const fields = needOptions(method, value, `arcmira.${method}({ ${allowed.map((k) => `${k}?`).join(', ')} })`);
   if (fields.notifyFrequency !== undefined && !FREQUENCIES.has(fields.notifyFrequency)) {
     throw new ArcmiraError('notifyFrequency is realtime (as it happens), hourly (an hourly digest) or daily (a daily digest).', 'invalid_request');
   }
@@ -192,14 +194,17 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
     },
     async resolve(name, options) {
       // Agents often write resolve({ name, context }) by analogy with search; take that shape too.
-      const { name: q = name, type, context, limit = 8 } = typeof name === 'object' && name !== null ? name : (options ?? {});
+      const named = typeof name === 'object' && name !== null && !Array.isArray(name);
+      const { name: q = name, type, context, limit = 8 } = named
+        ? needOptions('resolve', name, 'arcmira.resolve({ name, type?, context?, limit? })')
+        : needOptions('resolve', options, 'arcmira.resolve(name, { type?, context?, limit? })');
       if (typeof q !== 'string' || q.trim().length < 2) throw new ArcmiraError('resolve takes a name of 2 or more characters: arcmira.resolve("Ramp", { context })', 'invalid_name');
       if (context !== undefined && typeof context !== 'string') throw new ArcmiraError('context takes the user\'s own words about the name, as one string', 'invalid_request');
       const body = await get('/v1/entities/resolve', { q, type, context, limit });
       return { query: body.query, context: body.context, confidence: body.confidence, best: body.best, suggested: body.suggested, ask: body.ask, candidates: body.candidates, note: body.note };
     },
     async search(options) {
-      const { query, channelIds, about, entityIds, speakerIds, kind, after, before, source, limit = 5 } = needOptions('search', options, 'arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, after?, before?, limit? })');
+      const { query, channelIds, about, entityIds, speakerIds, kind, after, before, source, limit = 5 } = needOptions('search', options, 'arcmira.search({ query, channelIds?, about?, entityIds?, speakerIds?, kind?, after?, before?, source?, limit? })');
       if (typeof query !== 'string' || query.length < 2) throw new ArcmiraError('search needs query, a topic or phrase of 2 or more characters', 'invalid_query');
       if (kind !== undefined && !SEARCH_KINDS.has(kind)) throw new ArcmiraError('kind is mention, recommendation_sponsored or recommendation_organic', 'invalid_kind');
       return get('/v1/transcripts/search', {
@@ -229,10 +234,12 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
     async momentum(entityId) {
       return get(`/v1/entities/${needEntityId(entityId, 'entityId')}/momentum`);
     },
-    async sponsors(channelId, { minAdReads, status, limit } = {}) {
+    async sponsors(channelId, options) {
+      const { minAdReads, status, limit } = needOptions('sponsors', options, 'arcmira.sponsors(channelId, { minAdReads?, status?, limit? })');
       return get(`/v1/channels/${needChannelId(channelId, 'channelId')}/sponsors`, { min_ad_reads: minAdReads, status, limit });
     },
-    async recommendations(entityId, { kind = 'all', channelId, after, before, limit = 10, cursor } = {}) {
+    async recommendations(entityId, options) {
+      const { kind = 'all', channelId, after, before, limit = 10, cursor } = needOptions('recommendations', options, 'arcmira.recommendations(entityId, { kind?, channelId?, after?, before?, limit?, cursor? })');
       if (!(kind in KINDS)) throw new ArcmiraError('kind is sponsored, organic or all', 'invalid_kind');
       return get(`/v1/entities/${needEntityId(entityId, 'entityId')}/recommendations`, {
         mention_class: KINDS[kind],
@@ -243,18 +250,20 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         cursor,
       });
     },
-    async episodes(channelId, { limit = 10, after, before } = {}) {
+    async episodes(channelId, options) {
+      const { limit = 10, after, before } = needOptions('episodes', options, 'arcmira.episodes(channelId, { limit?, after?, before? })');
       return get(`/v1/channels/${needChannelId(channelId, 'channelId')}/videos`, {
         limit,
         published_after: isoDay(after, 'after'),
         published_before: dayAfterInclusive(before, 'before'),
       });
     },
-    async transcript(video, { quality, language, timestamps, start, end } = {}) {
+    async transcript(video, options) {
+      const { quality, language, timestamps, start, end } = needOptions('transcript', options, 'arcmira.transcript(video, { quality?, language?, timestamps?, start?, end? })');
       return get(`/v1/transcripts/${videoIdOf(video)}`, { quality, language, timestamps: timestamps === false ? 'false' : undefined, start, end });
     },
     async occurrences(options) {
-      const { channelIds, entityIds, videoIds, types, mode, after, before, limit = 20 } = needOptions('occurrences', options, 'arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, after?, before?, limit? })');
+      const { channelIds, entityIds, videoIds, types, mode, after, before, limit = 20 } = needOptions('occurrences', options, 'arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })');
       const channel_ids = list(channelIds, needChannelId, 'channelIds', 8);
       const entity_ids = list(entityIds, needEntityId, 'entityIds', 20);
       const video_ids = list(videoIds, (v) => videoIdOf(v), 'videoIds', 20);
@@ -283,7 +292,8 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       const body = (await call('/v1/transcriptions', {}, { body: { video_id: id, max_rows: rows, max_on_demand_cents: cents } })).body;
       return body.job ?? body;
     },
-    async wait(jobOrId, { timeoutSeconds = MAX_WAIT_SECONDS } = {}) {
+    async wait(jobOrId, options) {
+      const { timeoutSeconds = MAX_WAIT_SECONDS } = needOptions('wait', options, 'arcmira.wait(job, { timeoutSeconds? })');
       const given = jobOrId?.job ?? jobOrId;
       const id = typeof given === 'string' ? given : given?.id;
       if (typeof id !== 'string' || id === '') throw new ArcmiraError('wait takes a Job from prepare_transcript, the body that carries one (.job), or its id.', 'invalid_request');
