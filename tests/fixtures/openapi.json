@@ -319,67 +319,11 @@
                 "type": "integer",
                 "description": "Present on rate gates. Mirrors the Retry-After header."
               },
-              "current_revision": {
-                "type": "string",
-                "description": "On revision_mismatch and anchor_mismatch, the transcript revision to re-read before re-anchoring the correction."
-              },
-              "expected_seq": {
-                "type": "integer",
-                "description": "On sequence_mismatch (HTTP 412), the seq the server expects next for this video. Rebase local counters onto it and resend under the same key."
-              },
               "details": {
                 "type": "object",
                 "properties": {
                   "quote": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/TranscriptQuote"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "charge": {
-                            "type": "object",
-                            "properties": {
-                              "unit": {
-                                "type": "string",
-                                "enum": [
-                                  "rows",
-                                  "credits"
-                                ]
-                              },
-                              "amount": {
-                                "type": "number"
-                              },
-                              "from": {
-                                "type": "string",
-                                "enum": [
-                                  "included",
-                                  "on_demand",
-                                  "mixed"
-                                ],
-                                "description": "Where the charge would come from at the current balance."
-                              }
-                            },
-                            "required": [
-                              "unit",
-                              "amount",
-                              "from"
-                            ],
-                            "description": "What the purchase would charge at the current balance. Absent when no current price could be read."
-                          },
-                          "max_on_demand_cents": {
-                            "type": "integer",
-                            "description": "The money ceiling the current quote needs, in whole cents. Send at least this as max_on_demand_cents with a new intent."
-                          }
-                        }
-                      }
-                    ],
-                    "description": "The refused price, on a priced refusal: quota_exceeded, max_rows_exceeded, max_charge_exceeded, spend_limit_exceeded, purchase_authority_changed and paid_plan_required."
-                  },
-                  "existing_request_id": {
-                    "type": "string",
-                    "description": "On max_charge_exceeded: the accepted purchase for this video that holds a higher money ceiling. Poll it at /v1/transcriptions/{id} instead of starting another."
+                    "$ref": "#/components/schemas/RefusedQuote"
                   },
                   "existing_id": {
                     "type": "string",
@@ -412,11 +356,6 @@
             "code": "alert_not_found",
             "type": "not_found",
             "description": "A referenced alert row does not exist or belongs to another account."
-          },
-          {
-            "code": "anchor_mismatch",
-            "type": "conflict_error",
-            "description": "The anchored lines no longer hash to anchor.contentHash. current_revision is the revision to re-read; send a re-anchored correction under a new key."
           },
           {
             "code": "api_not_enabled",
@@ -464,7 +403,7 @@
           {
             "code": "forbidden",
             "type": "permission_error",
-            "description": "The entity page list refused the request."
+            "description": "The caller may not perform this operation on this resource."
           },
           {
             "code": "freshness_requires_paid",
@@ -492,11 +431,6 @@
             "type": "permission_error",
             "gate": "key",
             "description": "The key lacks the scope this route needs."
-          },
-          {
-            "code": "internal_error",
-            "type": "server_error",
-            "description": "The entity page list failed. Retry with backoff."
           },
           {
             "code": "invalid_api_key",
@@ -551,26 +485,6 @@
             "description": "Transcription jobs belong to an account; sign up for a key."
           },
           {
-            "code": "list_unavailable",
-            "type": "server_error",
-            "description": "The entity page list failed with a status other than 400, 403, 404 or 500. Retry with backoff."
-          },
-          {
-            "code": "max_charge_exceeded",
-            "type": "conflict_error",
-            "description": "The whole-video price or on-demand charge exceeds the caller-approved ceiling. Missing max_on_demand_cents authorizes zero monetary overage."
-          },
-          {
-            "code": "max_rows_exceeded",
-            "type": "conflict_error",
-            "description": "The current whole-video quote exceeds the maximum authorized rows. Review the quote before submitting a new intent."
-          },
-          {
-            "code": "method_not_allowed",
-            "type": "invalid_request_error",
-            "description": "The route accepts another HTTP method."
-          },
-          {
             "code": "monitor_creation_unavailable",
             "type": "server_error",
             "description": "Monitor creation is temporarily unavailable. Retry the same request with the same key."
@@ -618,11 +532,6 @@
             "description": "Premium transcript text needs a plan with Premium transcripts."
           },
           {
-            "code": "purchase_authority_changed",
-            "type": "conflict_error",
-            "description": "The account billing authority (plan or on-demand controls) changed after the intent was accepted. Nothing was charged. Review the quote and send a new intent."
-          },
-          {
             "code": "quota_exceeded",
             "type": "quota_exceeded",
             "gate": "rows",
@@ -651,11 +560,6 @@
             "description": "The operation conflicts with existing resource state."
           },
           {
-            "code": "revision_mismatch",
-            "type": "conflict_error",
-            "description": "The transcript changed after the revision the correction echoed. current_revision is the revision to re-read; send a re-anchored correction under a new key."
-          },
-          {
             "code": "scope_too_broad",
             "type": "invalid_request_error",
             "description": "The requested exact video scope exceeds the search filename cap; narrow by channel or date."
@@ -664,11 +568,6 @@
             "code": "search_unavailable",
             "type": "server_error",
             "description": "Transcript search is unavailable (HTTP 503). Retry-After carries the wait."
-          },
-          {
-            "code": "sequence_mismatch",
-            "type": "conflict_error",
-            "description": "HTTP 412. The correction seq is not the next one for this video. expected_seq is the next seq; rebase and resend under the same key."
           },
           {
             "code": "server_error",
@@ -684,11 +583,6 @@
             "code": "signup_send_limited",
             "type": "rate_limit_error",
             "description": "Verification code sends hit a per-address, per-IP, or per-client cap. Retry-After carries the wait."
-          },
-          {
-            "code": "speaker_not_correctable",
-            "type": "conflict_error",
-            "description": "The speaker shares a voice track or was named in review, so a correction cannot land on their lines alone."
           },
           {
             "code": "spend_limit_exceeded",
@@ -1014,6 +908,53 @@
           }
         ],
         "description": "The value the boundary withheld, not the reason it refused. kind is a closed vocabulary and the fields beside it are fixed per kind; see https://arcmira.com/docs/errors#resource-kinds."
+      },
+      "RefusedQuote": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TranscriptQuote"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "charge": {
+                "type": "object",
+                "properties": {
+                  "unit": {
+                    "type": "string",
+                    "enum": [
+                      "rows",
+                      "credits"
+                    ]
+                  },
+                  "amount": {
+                    "type": "number"
+                  },
+                  "from": {
+                    "type": "string",
+                    "enum": [
+                      "included",
+                      "on_demand",
+                      "mixed"
+                    ],
+                    "description": "Where the charge would come from at the current balance."
+                  }
+                },
+                "required": [
+                  "unit",
+                  "amount",
+                  "from"
+                ],
+                "description": "What the purchase would charge at the current balance. Absent when no current price could be read."
+              },
+              "max_on_demand_cents": {
+                "type": "integer",
+                "description": "The on-demand money, in whole cents, this purchase needs beyond included credits at the current balance."
+              }
+            }
+          }
+        ],
+        "description": "The refused price, on a priced refusal: quota_exceeded, spend_limit_exceeded and paid_plan_required."
       },
       "TranscriptQuote": {
         "type": "object",
@@ -3115,67 +3056,11 @@
                 "type": "integer",
                 "description": "Present on rate gates. Mirrors the Retry-After header."
               },
-              "current_revision": {
-                "type": "string",
-                "description": "On revision_mismatch and anchor_mismatch, the transcript revision to re-read before re-anchoring the correction."
-              },
-              "expected_seq": {
-                "type": "integer",
-                "description": "On sequence_mismatch (HTTP 412), the seq the server expects next for this video. Rebase local counters onto it and resend under the same key."
-              },
               "details": {
                 "type": "object",
                 "properties": {
                   "quote": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/TranscriptQuote"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "charge": {
-                            "type": "object",
-                            "properties": {
-                              "unit": {
-                                "type": "string",
-                                "enum": [
-                                  "rows",
-                                  "credits"
-                                ]
-                              },
-                              "amount": {
-                                "type": "number"
-                              },
-                              "from": {
-                                "type": "string",
-                                "enum": [
-                                  "included",
-                                  "on_demand",
-                                  "mixed"
-                                ],
-                                "description": "Where the charge would come from at the current balance."
-                              }
-                            },
-                            "required": [
-                              "unit",
-                              "amount",
-                              "from"
-                            ],
-                            "description": "What the purchase would charge at the current balance. Absent when no current price could be read."
-                          },
-                          "max_on_demand_cents": {
-                            "type": "integer",
-                            "description": "The money ceiling the current quote needs, in whole cents. Send at least this as max_on_demand_cents with a new intent."
-                          }
-                        }
-                      }
-                    ],
-                    "description": "The refused price, on a priced refusal: quota_exceeded, max_rows_exceeded, max_charge_exceeded, spend_limit_exceeded, purchase_authority_changed and paid_plan_required."
-                  },
-                  "existing_request_id": {
-                    "type": "string",
-                    "description": "On max_charge_exceeded: the accepted purchase for this video that holds a higher money ceiling. Poll it at /v1/transcriptions/{id} instead of starting another."
+                    "$ref": "#/components/schemas/RefusedQuote"
                   },
                   "existing_id": {
                     "type": "string",
@@ -3514,67 +3399,11 @@
                 "type": "integer",
                 "description": "Present on rate gates. Mirrors the Retry-After header."
               },
-              "current_revision": {
-                "type": "string",
-                "description": "On revision_mismatch and anchor_mismatch, the transcript revision to re-read before re-anchoring the correction."
-              },
-              "expected_seq": {
-                "type": "integer",
-                "description": "On sequence_mismatch (HTTP 412), the seq the server expects next for this video. Rebase local counters onto it and resend under the same key."
-              },
               "details": {
                 "type": "object",
                 "properties": {
                   "quote": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/TranscriptQuote"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "charge": {
-                            "type": "object",
-                            "properties": {
-                              "unit": {
-                                "type": "string",
-                                "enum": [
-                                  "rows",
-                                  "credits"
-                                ]
-                              },
-                              "amount": {
-                                "type": "number"
-                              },
-                              "from": {
-                                "type": "string",
-                                "enum": [
-                                  "included",
-                                  "on_demand",
-                                  "mixed"
-                                ],
-                                "description": "Where the charge would come from at the current balance."
-                              }
-                            },
-                            "required": [
-                              "unit",
-                              "amount",
-                              "from"
-                            ],
-                            "description": "What the purchase would charge at the current balance. Absent when no current price could be read."
-                          },
-                          "max_on_demand_cents": {
-                            "type": "integer",
-                            "description": "The money ceiling the current quote needs, in whole cents. Send at least this as max_on_demand_cents with a new intent."
-                          }
-                        }
-                      }
-                    ],
-                    "description": "The refused price, on a priced refusal: quota_exceeded, max_rows_exceeded, max_charge_exceeded, spend_limit_exceeded, purchase_authority_changed and paid_plan_required."
-                  },
-                  "existing_request_id": {
-                    "type": "string",
-                    "description": "On max_charge_exceeded: the accepted purchase for this video that holds a higher money ceiling. Poll it at /v1/transcriptions/{id} instead of starting another."
+                    "$ref": "#/components/schemas/RefusedQuote"
                   },
                   "existing_id": {
                     "type": "string",
@@ -3674,7 +3503,7 @@
               "text": "Ramp has been on the show for a while now and the pitch is still the same, spend less time on expenses.",
               "start_seconds": 4787,
               "watch_url": "/watch?v=dQw4w9WgXcQ&t=4787",
-              "cite_line": "[TBPN | Tuesday, August 4](/watch?v=dQw4w9WgXcQ&t=4787) \u00b7 @1:19:47 \u00b7 TBPN \u00b7 Aug 4, 2026",
+              "cite_line": "[TBPN | Tuesday, August 4](/watch?v=dQw4w9WgXcQ&t=4787) · @1:19:47 · TBPN · Aug 4, 2026",
               "score": 0.71,
               "about": [
                 {
@@ -4076,67 +3905,11 @@
                 "type": "integer",
                 "description": "Present on rate gates. Mirrors the Retry-After header."
               },
-              "current_revision": {
-                "type": "string",
-                "description": "On revision_mismatch and anchor_mismatch, the transcript revision to re-read before re-anchoring the correction."
-              },
-              "expected_seq": {
-                "type": "integer",
-                "description": "On sequence_mismatch (HTTP 412), the seq the server expects next for this video. Rebase local counters onto it and resend under the same key."
-              },
               "details": {
                 "type": "object",
                 "properties": {
                   "quote": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/TranscriptQuote"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "charge": {
-                            "type": "object",
-                            "properties": {
-                              "unit": {
-                                "type": "string",
-                                "enum": [
-                                  "rows",
-                                  "credits"
-                                ]
-                              },
-                              "amount": {
-                                "type": "number"
-                              },
-                              "from": {
-                                "type": "string",
-                                "enum": [
-                                  "included",
-                                  "on_demand",
-                                  "mixed"
-                                ],
-                                "description": "Where the charge would come from at the current balance."
-                              }
-                            },
-                            "required": [
-                              "unit",
-                              "amount",
-                              "from"
-                            ],
-                            "description": "What the purchase would charge at the current balance. Absent when no current price could be read."
-                          },
-                          "max_on_demand_cents": {
-                            "type": "integer",
-                            "description": "The money ceiling the current quote needs, in whole cents. Send at least this as max_on_demand_cents with a new intent."
-                          }
-                        }
-                      }
-                    ],
-                    "description": "The refused price, on a priced refusal: quota_exceeded, max_rows_exceeded, max_charge_exceeded, spend_limit_exceeded, purchase_authority_changed and paid_plan_required."
-                  },
-                  "existing_request_id": {
-                    "type": "string",
-                    "description": "On max_charge_exceeded: the accepted purchase for this video that holds a higher money ceiling. Poll it at /v1/transcriptions/{id} instead of starting another."
+                    "$ref": "#/components/schemas/RefusedQuote"
                   },
                   "existing_id": {
                     "type": "string",
@@ -5537,7 +5310,7 @@
             "items": {
               "$ref": "#/components/schemas/MonitorEntityResult"
             },
-            "description": "One result per distinct requested entity id, in request order."
+            "description": "One result per distinct requested entity id, then one per distinct requested name, each in request order."
           }
         },
         "required": [
@@ -5550,7 +5323,22 @@
         "properties": {
           "entity_id": {
             "type": "string",
-            "description": "The entity id as requested."
+            "description": "The entity id as requested. Present on an entity_ids result."
+          },
+          "name": {
+            "type": "string",
+            "description": "The name as requested. Present on a names result."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "person",
+              "organization",
+              "product",
+              "topic",
+              "channel"
+            ],
+            "description": "The type as requested, org read as organization. Present on a names result."
           },
           "canonical_entity_id": {
             "type": "string",
@@ -5579,23 +5367,14 @@
               "tracker_limit_reached",
               "tracked_in_another_monitor"
             ],
-            "description": "Why attached is false. Values: entity_not_found (no entity has this id), entity_type_not_trackable (only person, organization, product, topic and channel entities can be tracked), tracker_limit_reached (the plan allows no more trackers; upgrade the plan for more), tracked_in_another_monitor (the account already follows this entity in current_monitor_id; it was left there, so move it with POST /v1/monitors/{id}/trackers if the user wants)."
+            "description": "Why attached is false. Values: entity_not_found (no entity has this id), entity_type_not_trackable (only person, organization, product, topic and channel entities can be tracked), tracker_limit_reached (the plan allows no more trackers; upgrade the plan for more), tracked_in_another_monitor (the account already follows this entity in current_monitor_id; it was left there, so move it with POST /v1/monitors/{id}/trackers if the user wants). A names result can only carry tracker_limit_reached or tracked_in_another_monitor."
           },
           "current_monitor_id": {
             "type": "string",
             "description": "With reason tracked_in_another_monitor: the monitor the tracker is in."
-          },
-          "name": {
-            "type": "string",
-            "description": "The name this result follows, for a names[] item."
-          },
-          "type": {
-            "type": "string",
-            "description": "The entity type of a names[] item."
           }
         },
         "required": [
-          "entity_id",
           "tracker_id",
           "created",
           "attached"
@@ -5900,7 +5679,7 @@
                 },
                 "index": {
                   "type": "integer",
-                  "description": "Line index, present on every Premium line. Echo it as anchor.segmentIndex when you correct the line."
+                  "description": "Line index, present on every Premium line. Stable within one revision."
                 }
               },
               "required": [
@@ -5974,7 +5753,7 @@
           },
           "revision": {
             "type": "string",
-            "description": "Premium reads only. Opaque id of the transcript you were served, the approved corrections on it, and who speaks each line. Echo it on every correction; a 409 means it changed underneath you, so read again."
+            "description": "Premium reads only. Opaque id of the transcript you were served, the approved corrections on it, and who speaks each line. It changes when any of those change."
           },
           "range": {
             "type": "object",
@@ -6110,67 +5889,11 @@
                 "type": "integer",
                 "description": "Present on rate gates. Mirrors the Retry-After header."
               },
-              "current_revision": {
-                "type": "string",
-                "description": "On revision_mismatch and anchor_mismatch, the transcript revision to re-read before re-anchoring the correction."
-              },
-              "expected_seq": {
-                "type": "integer",
-                "description": "On sequence_mismatch (HTTP 412), the seq the server expects next for this video. Rebase local counters onto it and resend under the same key."
-              },
               "details": {
                 "type": "object",
                 "properties": {
                   "quote": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/TranscriptQuote"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "charge": {
-                            "type": "object",
-                            "properties": {
-                              "unit": {
-                                "type": "string",
-                                "enum": [
-                                  "rows",
-                                  "credits"
-                                ]
-                              },
-                              "amount": {
-                                "type": "number"
-                              },
-                              "from": {
-                                "type": "string",
-                                "enum": [
-                                  "included",
-                                  "on_demand",
-                                  "mixed"
-                                ],
-                                "description": "Where the charge would come from at the current balance."
-                              }
-                            },
-                            "required": [
-                              "unit",
-                              "amount",
-                              "from"
-                            ],
-                            "description": "What the purchase would charge at the current balance. Absent when no current price could be read."
-                          },
-                          "max_on_demand_cents": {
-                            "type": "integer",
-                            "description": "The money ceiling the current quote needs, in whole cents. Send at least this as max_on_demand_cents with a new intent."
-                          }
-                        }
-                      }
-                    ],
-                    "description": "The refused price, on a priced refusal: quota_exceeded, max_rows_exceeded, max_charge_exceeded, spend_limit_exceeded, purchase_authority_changed and paid_plan_required."
-                  },
-                  "existing_request_id": {
-                    "type": "string",
-                    "description": "On max_charge_exceeded: the accepted purchase for this video that holds a higher money ceiling. Poll it at /v1/transcriptions/{id} instead of starting another."
+                    "$ref": "#/components/schemas/RefusedQuote"
                   },
                   "existing_id": {
                     "type": "string",
@@ -6467,11 +6190,11 @@
           },
           "error": {
             "type": "string",
-            "description": "Failure reason. Only present when state is failed or refunded."
+            "description": "Failure reason. Only present when state is failed or refunded, or status is refund_pending."
           },
           "refunded": {
             "type": "boolean",
-            "description": "True when the charge was returned. Only present when state is failed or refunded."
+            "description": "True when the charge was returned. Only present when state is failed or refunded, or status is refund_pending (false until the refund lands)."
           },
           "created_at": {
             "type": "string",
@@ -6483,7 +6206,7 @@
           },
           "status_url": {
             "type": "string",
-            "description": "Absolute URL of GET /v1/transcriptions/{id} for this job."
+            "description": "Absolute URL to read again for this job: GET /v1/transcripts/{video_id}?quality=premium, which answers 202 while it prepares, 200 ready once it is, and 200 failed if it failed."
           }
         },
         "required": [
@@ -6496,6 +6219,71 @@
           "status_url"
         ],
         "description": "Your open Premium purchase for this video, when captions were served while it prepares."
+      },
+      "TranscriptFailed": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "failed"
+            ]
+          },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "premium"
+            ]
+          },
+          "video_id": {
+            "type": "string"
+          },
+          "job": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionJob"
+              },
+              {
+                "description": "The last Premium purchase for this video. Its state is failed or refunded, or its status is refund_pending while the refund settles."
+              }
+            ]
+          },
+          "last_attempt": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "failed",
+                  "refund_pending",
+                  "refunded"
+                ],
+                "description": "How the last purchase ended: failed, refunded (the charge was returned), or refund_pending (the refund is still settling)."
+              },
+              "error": {
+                "type": "string",
+                "description": "Why it failed."
+              }
+            },
+            "required": [
+              "status",
+              "error"
+            ],
+            "description": "The failed purchase in brief: job.status and job.error."
+          },
+          "note": {
+            "type": "string",
+            "description": "What to do next: read again with retry=true to buy the video again, or wait while the refund settles."
+          }
+        },
+        "required": [
+          "state",
+          "quality",
+          "video_id",
+          "job",
+          "last_attempt",
+          "note"
+        ]
       },
       "TranscriptPending": {
         "type": "object",
@@ -6521,7 +6309,7 @@
                 "$ref": "#/components/schemas/TranscriptionJob"
               },
               {
-                "description": "The Premium purchase this read started or joined. Read this transcript again after Retry-After; job.status_url polls the same purchase."
+                "description": "The Premium purchase this read started or joined. Read this transcript again after Retry-After (job.status_url is that read); later reads join the same purchase."
               }
             ]
           }
@@ -7918,7 +7706,7 @@
                               "$ref": "#/components/schemas/FreeformSuggestedChange"
                             }
                           ],
-                          "description": "Your concrete proposed fix, shaped by issue_type: merge_suggestion \u2192 MergeSuggestionChange, wrong_entity/wrong_person \u2192 WrongEntityChange, wrong_entity_type \u2192 WrongEntityTypeChange, missing_result \u2192 MissingResultChange, wrong_classification \u2192 WrongClassificationChange, stale_metadata \u2192 StaleMetadataChange, bad_ranking \u2192 BadRankingChange, missed_alert \u2192 MissedAlertChange, delivery_issue \u2192 DeliveryIssueChange. Unknown keys are accepted and logged verbatim; only non-object values are rejected. Omit suggested_change entirely when you do not have a concrete fix."
+                          "description": "Your concrete proposed fix, shaped by issue_type: merge_suggestion → MergeSuggestionChange, wrong_entity/wrong_person → WrongEntityChange, wrong_entity_type → WrongEntityTypeChange, missing_result → MissingResultChange, wrong_classification → WrongClassificationChange, stale_metadata → StaleMetadataChange, bad_ranking → BadRankingChange, missed_alert → MissedAlertChange, delivery_issue → DeliveryIssueChange. Unknown keys are accepted and logged verbatim; only non-object values are rejected. Omit suggested_change entirely when you do not have a concrete fix."
                         },
                         "notes": {
                           "type": "string",
@@ -9770,7 +9558,7 @@
         ],
         "operationId": "list_monitor_alerts",
         "summary": "List recent monitor alerts",
-        "description": "The newest limit alert deliveries for the monitor (default 25, at most 100), as a single page. has_more is true when older alerts exist past limit; this endpoint does not paginate, so next_cursor is always null and a larger limit reads further. entity_id (\"ent_{n}\") and mention_id (\"men_{n}\") are public-ID forms that join directly against entity and mention rows; media_id and appearance_id are raw integer ids, matching the numeric ids used elsewhere in the API. Dispute a fired alert via POST /v1/feedback with type monitor_alert.",
+        "description": "The newest limit alert deliveries for the monitor (default 25, at most 100), as a single page. has_more is true when older alerts exist past limit; this endpoint does not paginate, so next_cursor is always null and a larger limit reads further. entity_id (\"ent_{n}\") and mention_id (\"men_{n}\") are the ids GET /v1/entities/{id} and GET /v1/mentions use, and video_id is the YouTube video id that GET /v1/transcripts/{video_id} reads. Dispute a fired alert via POST /v1/feedback with type monitor_alert.",
         "security": [
           {
             "bearerAuth": []
@@ -9855,8 +9643,8 @@
           "Monitors"
         ],
         "operationId": "add_monitor_entities",
-        "summary": "Follow entities in a monitor by id",
-        "description": "Follows each entity ({ entity_ids: [\"ent_...\"] }) in the monitor: the account's existing tracker for the entity is reused, else a tracker is created for the canonical entity (a merged id follows its redirect), then the trackers are attached. Attached trackers use the monitor's delivery settings. Supply 1 to 90 ids; duplicates count once. Each id gets one result in request order. An id that cannot be followed comes back with attached: false and a reason (entity_not_found, entity_type_not_trackable, tracker_limit_reached, tracked_in_another_monitor) while the rest still attach; a tracker already in another monitor is left there and named in current_monitor_id. Requires the monitors:write and trackers:write scopes.",
+        "summary": "Follow entities in a monitor by id or exact name",
+        "description": "Follows each entity ({ entity_ids: [\"ent_...\"] }) and each exact name ({ names: [{ name, type }] }) in the monitor: the monitor account's existing tracker for the entity or name (compared case-insensitively) is reused, else a tracker is created under the monitor's account (the team owner on a team monitor) for the canonical entity (a merged id follows its redirect) or the name as given, then the trackers are attached, all in one write. Use names for something not yet indexed; a channel is named by its YouTube channel id, and a channel name answers 400 id_required. Attached trackers use the monitor's delivery settings. Supply 1 to 90 ids and names together; duplicates count once. Each gets one result, ids first then names, in request order; a names result carries name and type in place of entity_id. An id that cannot be followed comes back with attached: false and a reason (entity_not_found, entity_type_not_trackable, tracker_limit_reached, tracked_in_another_monitor) while the rest still attach; a tracker already in another monitor is left there and named in current_monitor_id. Requires the monitors:write and trackers:write scopes.",
         "security": [
           {
             "bearerAuth": []
@@ -9896,30 +9684,17 @@
                       "type": "string",
                       "pattern": "^ent_[1-9][0-9]*$"
                     },
-                    "minItems": 1,
-                    "maxItems": 90,
-                    "description": "Entity ids (\"ent_...\") to follow in this monitor, from GET /v1/entities/resolve or search. 1 to 90; duplicates count once. A merged id follows its redirect to the canonical entity."
-                  },
-                  "person_match_mode": {
-                    "type": "string",
-                    "enum": [
-                      "mentions",
-                      "appearances",
-                      "both"
-                    ],
-                    "description": "For person trackers this request creates: mentions (default) matches others talking about the person; appearances matches the person present as a speaker, host or guest; both accepts either. Other types ignore it, and a tracker that already exists keeps its own setting (change it with PATCH /v1/trackers/{id})."
+                    "description": "Entity ids (\"ent_...\") to follow in this monitor, from GET /v1/entities/resolve or search. Duplicates count once. A merged id follows its redirect to the canonical entity."
                   },
                   "names": {
                     "type": "array",
-                    "minItems": 1,
-                    "maxItems": 90,
-                    "description": "Exact names to follow before they are indexed, created under the monitor's account (basedanarki/arcmira PR 678 follow-up; fixture until the document carries it).",
                     "items": {
                       "type": "object",
                       "properties": {
                         "name": {
                           "type": "string",
-                          "minLength": 1
+                          "minLength": 1,
+                          "description": "The exact name to watch, matched case-insensitively against analyzed media, so it can be followed before the entity is indexed. For a channel, the YouTube channel id (UC plus 22 characters); a channel name answers 400 id_required naming GET /v1/entities/resolve?q=...&type=channel."
                         },
                         "type": {
                           "type": "string",
@@ -9930,7 +9705,8 @@
                             "product",
                             "topic",
                             "channel"
-                          ]
+                          ],
+                          "description": "person, organization (org is accepted), product, topic or channel."
                         },
                         "person_match_mode": {
                           "type": "string",
@@ -9938,7 +9714,8 @@
                             "mentions",
                             "appearances",
                             "both"
-                          ]
+                          ],
+                          "description": "For a person tracker this request creates; defaults to the top-level person_match_mode. Other types ignore it."
                         }
                       },
                       "required": [
@@ -9946,10 +9723,19 @@
                         "type"
                       ],
                       "additionalProperties": false
-                    }
+                    },
+                    "description": "Exact names to follow in this monitor, for a name not yet indexed or one you have no id for. The tracker is created under the monitor's account (the team owner on a team monitor) and attached in the same call; the account's tracker for the same name (compared case-insensitively) and type is reused. Duplicates count once."
+                  },
+                  "person_match_mode": {
+                    "type": "string",
+                    "enum": [
+                      "mentions",
+                      "appearances",
+                      "both"
+                    ],
+                    "description": "For person trackers this request creates: mentions (default) matches others talking about the person; appearances matches the person present as a speaker, host or guest; both accepts either. Other types ignore it, and a tracker that already exists keeps its own setting (change it with PATCH /v1/trackers/{id})."
                   }
                 },
-                "required": [],
                 "additionalProperties": false
               }
             }
@@ -10181,13 +9967,14 @@
                   "entity_name": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "The exact name to watch, matched case-insensitively against analyzed media, so a tracker can exist before the entity is indexed. For a channel, the YouTube channel id (UC plus 22 characters), never a name: a channel name answers 400 id_required naming GET /v1/entities/resolve?q=...&type=channel and best.youtube_channel_id. Required on create. Creating a duplicate (same name + type) returns 409 tracker_already_exists with the existing tracker id in error.details.existing_id."
+                    "description": "The exact name to watch, matched case-insensitively against analyzed media, so a tracker can exist before the entity is indexed. For a channel, the YouTube channel id (UC plus 22 characters), never a name: a channel name answers 400 id_required naming GET /v1/entities/resolve?q=...&type=channel and best.youtube_channel_id. Required on create. Creating a duplicate (same name, compared case-insensitively, and type) returns 409 tracker_already_exists with the existing tracker id in error.details.existing_id."
                   },
                   "entity_type": {
                     "type": "string",
                     "enum": [
                       "person",
                       "organization",
+                      "org",
                       "product",
                       "topic",
                       "channel"
@@ -10619,7 +10406,7 @@
         ],
         "operationId": "list_tracker_alerts",
         "summary": "List recent tracker alerts",
-        "description": "The newest limit alert deliveries for the tracker (default 25, at most 100), as a single page. has_more is true when older alerts exist past limit; this endpoint does not paginate, so next_cursor is always null and a larger limit reads further. entity_id (\"ent_{n}\") and mention_id (\"men_{n}\") are public-ID forms that join directly against entity and mention rows; media_id and appearance_id are raw integer ids, matching the numeric ids used elsewhere in the API. Dispute a fired alert via POST /v1/feedback with type monitor_alert.",
+        "description": "The newest limit alert deliveries for the tracker (default 25, at most 100), as a single page. has_more is true when older alerts exist past limit; this endpoint does not paginate, so next_cursor is always null and a larger limit reads further. entity_id (\"ent_{n}\") and mention_id (\"men_{n}\") are the ids GET /v1/entities/{id} and GET /v1/mentions use, and video_id is the YouTube video id that GET /v1/transcripts/{video_id} reads. Dispute a fired alert via POST /v1/feedback with type monitor_alert.",
         "security": [
           {
             "bearerAuth": []
@@ -10705,7 +10492,7 @@
         ],
         "operationId": "get_transcript",
         "summary": "Get a video transcript",
-        "description": "Caption retrieval costs one row per started 15 minutes. quality=premium is one read: an owned transcript answers 200 ready at zero rows; otherwise this call buys the whole video within the account's plan and on-demand budget, included credits first and then on-demand money up to the account limit, and answers 202 pending with the job and Retry-After until the transcript is ready. Read again after Retry-After; repeated reads join the same purchase and never buy twice. When the plan or the budget blocks, 403 paid_plan_required (with unlock) or 402 quota_exceeded or spend_limit_exceeded carries the price in quote and nothing is charged. A default-premium account with nothing owned reads captions with a note. start/end only trim the returned content; language selects caption tracks, timestamps=false returns paragraphs. Premium responses retain revision and line indexes for corrections.",
+        "description": "Caption retrieval costs one row per started 15 minutes. quality=premium is one read: an owned transcript answers 200 ready at zero rows; otherwise this call buys the whole video within the account's plan and on-demand budget, included credits first and then on-demand money up to the account limit, and answers 202 pending with the job and Retry-After until the transcript is ready. Read again after Retry-After; repeated reads join the same purchase and never buy twice. When the last purchase for the video failed, the read answers 200 state failed with the job and last_attempt and buys nothing; retry=true buys it again. When the plan or the budget blocks, 403 paid_plan_required (with unlock) or 402 quota_exceeded or spend_limit_exceeded carries the price in quote and nothing is charged. A default-premium account with nothing owned reads captions with a note. start/end only trim the returned content; language selects caption tracks, timestamps=false returns paragraphs. Premium lines carry speaker and index, and the body carries speakers and revision.",
         "security": [
           {
             "bearerAuth": []
@@ -10729,10 +10516,10 @@
                 "captions",
                 "premium"
               ],
-              "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read: an owned transcript returns 200 state ready at zero rows; otherwise the read buys the whole video within the account's plan and on-demand budget (included credits first, then on-demand money up to the account limit) and returns 202 state pending with the job until it is ready. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings."
+              "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read: an owned transcript returns 200 state ready at zero rows; otherwise the read buys the whole video within the account's plan and on-demand budget (included credits first, then on-demand money up to the account limit) and returns 202 state pending with the job until it is ready. When the last purchase for the video failed it answers 200 state failed and buys again only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings."
             },
             "required": false,
-            "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read: an owned transcript returns 200 state ready at zero rows; otherwise the read buys the whole video within the account's plan and on-demand budget (included credits first, then on-demand money up to the account limit) and returns 202 state pending with the job until it is ready. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings.",
+            "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read: an owned transcript returns 200 state ready at zero rows; otherwise the read buys the whole video within the account's plan and on-demand budget (included credits first, then on-demand money up to the account limit) and returns 202 state pending with the job until it is ready. When the last purchase for the video failed it answers 200 state failed and buys again only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings.",
             "name": "quality",
             "in": "query"
           },
@@ -10787,6 +10574,16 @@
           {
             "schema": {
               "type": "boolean",
+              "description": "Premium only; captions with retry=true returns invalid_query. When the last Premium purchase for this video failed, a read answers 200 state failed with the job and last_attempt and buys nothing; retry=true buys it again under the same quote, budget and one-purchase rules as the first read. While that refund is still settling (job.status refund_pending) even retry=true answers state failed. Without a failed purchase it changes nothing."
+            },
+            "required": false,
+            "description": "Premium only; captions with retry=true returns invalid_query. When the last Premium purchase for this video failed, a read answers 200 state failed with the job and last_attempt and buys nothing; retry=true buys it again under the same quote, budget and one-purchase rules as the first read. While that refund is still settling (job.status refund_pending) even retry=true answers state failed. Without a failed purchase it changes nothing.",
+            "name": "retry",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "boolean",
               "description": "Captions only; Premium with refresh=true returns invalid_query. Refetch the caption track from YouTube instead of serving the stored copy. Available only for videos outside our index; a pipeline-owned video refuses it with invalid_query."
             },
             "required": false,
@@ -10806,24 +10603,11 @@
             "description": "The surface making this call. The Arcmira MCP server sends mcp-tool so every unlock link in a gate attributes to the directory install. Omit from your own client.",
             "name": "src",
             "in": "query"
-          },
-          {
-            "name": "retry",
-            "in": "query",
-            "required": false,
-            "description": "true buys a Premium transcript again after a failed or refunded purchase (fixture until the document carries it).",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "true",
-                "false"
-              ]
-            }
           }
         ],
         "responses": {
           "200": {
-            "description": "state ready: the transcript (video, quality, source, language, languages, lines or paragraphs, speakers and revision on Premium, rows_billed, as_of, note).",
+            "description": "state ready: the transcript (video, quality, source, language, languages, lines or paragraphs, speakers and revision on Premium, rows_billed, as_of, note). state failed (Premium only): the last purchase for this video failed; job and last_attempt say why, nothing was bought, and retry=true buys again.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -10844,7 +10628,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TranscriptResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/TranscriptResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TranscriptFailed"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "state",
+                    "mapping": {
+                      "ready": "#/components/schemas/TranscriptResponse",
+                      "failed": "#/components/schemas/TranscriptFailed"
+                    }
+                  }
                 }
               }
             }
@@ -11032,7 +10830,7 @@
         ],
         "operationId": "list_transcriptions",
         "summary": "List your transcription requests",
-        "description": "Your transcription requests in descending creation time and id order. limit defaults to 20 and accepts 1\u2013100. Follow next_cursor with the same video_id, limit and credential; has_more is false and next_cursor is null on the last page. A traversal excludes requests inserted after its first page. Each entry has the same shape as the status poll plus a `title` field (the video title, null when unknown). The scheduled reconciler advances requests; reading this list never dispatches work or changes billing. In-flight entries carry `eta_seconds` and `next_poll_seconds`.",
+        "description": "Your transcription requests in descending creation time and id order. limit defaults to 20 and accepts 1–100. Follow next_cursor with the same video_id, limit and credential; has_more is false and next_cursor is null on the last page. A traversal excludes requests inserted after its first page. Each entry has the same shape as the status poll plus a `title` field (the video title, null when unknown). The scheduled reconciler advances requests; reading this list never dispatches work or changes billing. In-flight entries carry `eta_seconds` and `next_poll_seconds`.",
         "security": [
           {
             "bearerAuth": []
