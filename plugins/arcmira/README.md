@@ -41,6 +41,10 @@ Skills only, for any agent that reads `.agents/skills`:
 npx skills add arcmira/mcp
 ```
 
+## Portable package
+
+This folder contains an [Agent Plugins 1.0.0](https://agent-plugins.org/) manifest, Streamable HTTP configuration in `mcp.json`, and six skills. The host-specific manifests use `.mcp.json` for their HTTP configuration. Kiro installation and OAuth have not yet been tested, and this package is not listed in the Kiro Powers catalog.
+
 ## Keep it updated
 
 Arcmira ships changes weekly. The MCP server is remote and always current; the skills in this plugin are files on your machine, so turn auto-update on.

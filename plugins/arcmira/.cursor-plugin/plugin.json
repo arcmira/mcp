@@ -21,6 +21,6 @@
     "mcp"
   ],
   "skills": "./skills/",
-  "mcpServers": "./mcp.json",
+  "mcpServers": "./.mcp.json",
   "logo": "./assets/icon.png"
 }
