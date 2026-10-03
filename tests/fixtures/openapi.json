@@ -1249,32 +1249,6 @@
                   "on_demand"
                 ],
                 "description": "The month in credits (1 credit is $0.001; a row is 4 credits). Present only when the credits ledger decides access."
-              },
-              "hits": {
-                "type": "object",
-                "properties": {
-                  "used": {
-                    "type": "integer",
-                    "description": "Monitor alerts delivered this month."
-                  },
-                  "allowance": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "description": "Monitor alerts the plan delivers a month. Null when the plan has no limit."
-                  },
-                  "resets_at": {
-                    "type": "string",
-                    "description": "YYYY-MM-DD, the first day of next month (UTC), when the count resets."
-                  }
-                },
-                "required": [
-                  "used",
-                  "allowance",
-                  "resets_at"
-                ],
-                "description": "Monitor alerts this month. Alerts cost no credits; once the allowance is used, monitors keep matching but deliver nothing until the reset. Present only when the credits ledger decides access."
               }
             },
             "required": [
