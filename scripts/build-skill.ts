@@ -70,7 +70,7 @@ Anything else (one video's transcript, a topic across shows, who recommends a pr
 6. Return only the fields the answer needs, not whole responses.
 7. ${COVERAGE_GUIDANCE} Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`. When the user names no window, use the last 30 days; a week of the index is often thin.
 8. Link each name in the answer to the \`page\` field the result carries. Do not build arcmira.com URLs by hand.
-9. Premium: \`arcmira.transcript(video, { quality: "premium" })\` returns the lines, buying the transcript within the account's budget when it is not transcribed yet. A Premium request is the go-ahead; do not ask. Still pending: read again in the next program.
+9. Premium: \`arcmira.transcript(video, { quality: "premium" })\` returns the lines, buying the transcript within the account's budget when it is not transcribed yet. A Premium request is the go-ahead; do not ask. Still pending: tell the user the \`eta_seconds\` it returns, then read again once it has passed.
 10. ${BUDGET_RULE}
 
 ## Monitors

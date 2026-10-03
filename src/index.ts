@@ -52,8 +52,8 @@ function refused(base: URL, access: Access, method: string, path: string, messag
           (writable
             ? `${method} ${path} changes the account; run it in arcmira_execute_write.`
             : access === 'write'
-              ? `The sandbox reaches only GET ${base.origin}/v1/*, POST /v1/transcriptions, and POST or PATCH under /v1/monitors and /v1/trackers. Use the arcmira client methods; there is no other network.`
-              : `The sandbox reaches only GET ${base.origin}/v1/* and POST /v1/transcriptions. Use the arcmira client methods; there is no other network.`),
+              ? `The sandbox reaches only GET ${base.origin}/v1/*, and POST or PATCH under /v1/monitors and /v1/trackers. Use the arcmira client methods; there is no other network.`
+              : `The sandbox reaches only GET ${base.origin}/v1/*. Use the arcmira client methods; there is no other network.`),
         doc_url: 'https://arcmira.com/docs/mcp-server',
         request_id: `mcp_${crypto.randomUUID()}`,
       },

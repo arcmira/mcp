@@ -59,7 +59,7 @@ const [s0, s1, e0, e1, occ, sp0, sp1] = await Promise.all([
 ]);
 const inOther = new Map(sp1.sponsors.map(x => [x.entity.id, x.ad_reads]));
 return {
-  window: { after, through: arcmira.today() },
+  window: occ.window,
   shows: ids.map((id, i) => ({ name: names[i], channel_id: id, assumed: Boolean(assumed[i]), why: assumed[i], videos_indexed: [s0, s1][i].channel.searchable_videos, indexed_through: [s0, s1][i].channel.indexed_through, latest: [e0, e1][i].episodes[0]?.title ?? null,
     top: occ.rows.filter(x => x.channel_id === id).slice(0, 5).map(x => [x.name, x.count]) })),
   both_discussed: occ.shared.slice(0, 5).map(x => ({ name: x.name, id: x.entity_id, episodes_by_show: x.by_channel.map(c => [c.channel_name, c.count]) })),

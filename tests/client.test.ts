@@ -43,7 +43,7 @@ describe('the sandbox client', () => {
   });
 
   it('maps every method to its v1 route with the CLI flag names as query keys', async () => {
-    const { urls, fetch } = recording({ data: [], chunks: [], rows: [], sponsors: [], episodes: [] });
+    const { urls, fetch } = recording({ mentions: [], recommendations: [], chunks: [], rows: [], sponsors: [], episodes: [] });
     const { arcmira, meter } = mod.createArcmira({ base: 'https://api.arcmira.com/', fetch });
     await arcmira.resolve('Ramp', { type: 'organization' });
     await arcmira.search({ query: 'cards', channelIds: [TBPN], after: '2026-08-01', limit: 3 });
@@ -51,6 +51,8 @@ describe('the sandbox client', () => {
     await arcmira.momentum('ent_14');
     await arcmira.sponsors(TBPN, { minAdReads: 3 });
     await arcmira.recommendations('ent_14', { kind: 'organic' });
+    await arcmira.recommendations('ent_14');
+    await arcmira.search({ query: 'cards', kind: ['sponsored', 'organic'], before: '2026-09-01' });
     await arcmira.episodes(TBPN, { limit: 1 });
     await arcmira.transcript('https://www.youtube.com/watch?v=dQw4w9WgXcQ', { quality: 'premium', start: 0, end: 60, timestamps: false });
     await arcmira.occurrences({ videoIds: ['dQw4w9WgXcQ'], types: ['organization', 'product'], before: '2026-08-31' });
@@ -60,19 +62,21 @@ describe('the sandbox client', () => {
     const seen = urls.map((u) => `${u.pathname}?${u.searchParams}`);
     assert.deepEqual(seen, [
       '/v1/entities/resolve?q=Ramp&type=organization&limit=8',
-      `/v1/transcripts/search?q=cards&channel_ids=${TBPN}&published_after=2026-08-01&limit=3`,
-      `/v1/mentions?entity_id=ent_14&channel_id=${TBPN}&date_to=2026-09-01&limit=10`,
+      `/v1/search?q=cards&channel_ids=${TBPN}&after=2026-08-01&limit=3`,
+      `/v1/mentions?entity_id=ent_14&channel_id=${TBPN}&before=2026-09-01T00%3A00%3A00Z&limit=10`,
       '/v1/entities/ent_14/momentum?',
       `/v1/channels/${TBPN}/sponsors?min_ad_reads=3`,
-      '/v1/entities/ent_14/recommendations?mention_class=endorsement&limit=10',
+      '/v1/recommendations?entity_id=ent_14&class=organic&limit=10',
+      '/v1/recommendations?entity_id=ent_14&limit=10',
+      '/v1/search?q=cards&kind=sponsored%2Corganic&before=2026-09-01&limit=5',
       `/v1/channels/${TBPN}/videos?limit=1`,
       '/v1/transcripts/dQw4w9WgXcQ?quality=premium&timestamps=false&start=0&end=60',
-      '/v1/mentions/counts?video_ids=dQw4w9WgXcQ&entity_types=organization%2Cproduct&published_before=2026-09-01&limit=20',
+      '/v1/mentions/counts?video_ids=dQw4w9WgXcQ&entity_types=organization%2Cproduct&before=2026-08-31&limit=20',
       `/v1/channels/${TBPN}/coverage?`,
       '/v1/me?',
       '/v1/transcripts/dQw4w9WgXcQ/quote?',
     ]);
-    assert.equal(meter.calls, 12);
+    assert.equal(meter.calls, 14);
   });
 
   it('monitor methods: reads in either access, writes only with access write, each write a JSON body with its own Idempotency-Key', async () => {
@@ -86,25 +90,35 @@ describe('the sandbox client', () => {
     await read.monitors.list();
     await read.monitors.trackers('mon_1');
     await (read as unknown as { integrations: { slack(): Promise<unknown> } }).integrations.slack();
-    for (const call of [() => read.monitors.create({ name: 'A', notifyFrequency: 'daily' }), () => read.monitors.update('mon_1', { isPaused: true }), () => read.monitors.addEntities('mon_1', ['ent_14']), () => read.monitors.attachTrackers('mon_1', ['trk_1'])])
+    for (const call of [() => read.monitors.create({ name: 'A', notify_frequency: 'daily' }), () => read.monitors.update('mon_1', { paused: true }), () => read.monitors.addEntities('mon_1', ['ent_14']), () => read.monitors.addName('mon_1', [{ name: 'Acme', type: 'org' }]), () => read.monitors.attachTrackers('mon_1', ['trk_1'])])
       await assert.rejects(call(), (e: Error & { code: string }) => e.code === 'write_tool_required' && /arcmira_execute_write/.test(e.message));
     assert.deepEqual(sent.map((c) => `${c.method} ${c.path}`), ['GET /v1/monitors', 'GET /v1/monitors/mon_1/trackers', 'GET /v1/integrations/slack']);
     const write = mod.createArcmira({ base: 'https://api.arcmira.com', fetch, access: 'write', idempotencyKey: () => `k${++n}` }).arcmira as unknown as typeof read;
-    await write.monitors.create({ name: 'Competitors', notifyFrequency: 'daily', notifySlack: undefined });
-    await write.monitors.update('mon_9', { isPaused: true });
+    await write.monitors.create({ name: 'Competitors', notify_frequency: 'daily', notify_slack: undefined });
+    await write.monitors.update('mon_9', { paused: true });
     await write.monitors.addEntities('mon_9', ['ent_14', 'ent_14', 'ent_99'], { personMatchMode: 'both' });
     await write.monitors.attachTrackers('mon_9', ['trk_1', 'trk_1']);
+    await write.monitors.addName('mon_9', [{ name: ' Acme Robotics ', type: 'org' }, { name: 'Jensen Huang', type: 'person', personMatchMode: 'appearances' }, { name: TBPN, type: 'channel' }]);
+    await write.monitors.addName('mon_9', { name: 'Ramp', type: 'organization' });
     assert.deepEqual(sent.slice(3), [
-      { method: 'POST', path: '/v1/monitors', body: { name: 'Competitors', notifyFrequency: 'daily' }, key: 'k1' },
-      { method: 'PATCH', path: '/v1/monitors/mon_9', body: { isPaused: true }, key: 'k2' },
+      { method: 'POST', path: '/v1/monitors', body: { name: 'Competitors', notify_frequency: 'daily' }, key: 'k1' },
+      { method: 'PATCH', path: '/v1/monitors/mon_9', body: { paused: true }, key: 'k2' },
       { method: 'POST', path: '/v1/monitors/mon_9/entities', body: { entity_ids: ['ent_14', 'ent_99'], person_match_mode: 'both' }, key: 'k3' },
-      { method: 'POST', path: '/v1/monitors/mon_9/trackers', body: { trackerIds: ['trk_1'] }, key: 'k4' },
+      { method: 'POST', path: '/v1/monitors/mon_9/trackers', body: { tracker_ids: ['trk_1'] }, key: 'k4' },
+      { method: 'POST', path: '/v1/monitors/mon_9/entities', body: { names: [{ name: 'Acme Robotics', type: 'organization' }, { name: 'Jensen Huang', type: 'person', person_match_mode: 'appearances' }, { name: TBPN, type: 'channel' }] }, key: 'k5' },
+      { method: 'POST', path: '/v1/monitors/mon_9/entities', body: { names: [{ name: 'Ramp', type: 'organization' }] }, key: 'k6' },
     ]);
     for (const [call, code] of [
       [() => write.monitors.create({ name: 'A' }), 'invalid_request'],
-      [() => write.monitors.create({ name: 'A', notifyFrequency: 'weekly' }), 'invalid_request'],
-      [() => write.monitors.create({ name: 'A', notifyFrequency: 'daily', color: 'red' }), 'invalid_request'],
-      [() => write.monitors.update('Competitors monitor name that is far too long'.repeat(5), { isPaused: true }), 'id_required'],
+      [() => write.monitors.create({ name: 'A', notify_frequency: 'weekly' }), 'invalid_request'],
+      [() => write.monitors.create({ name: 'A', notify_frequency: 'daily', color: 'red' }), 'invalid_request'],
+      [() => write.monitors.create({ name: 'A', notifyFrequency: 'daily' }), 'invalid_request'],
+      [() => write.monitors.update('Competitors monitor name that is far too long'.repeat(5), { paused: true }), 'id_required'],
+      [() => write.monitors.update('mon_9', { isPaused: true }), 'invalid_request'],
+      [() => write.monitors.addName('mon_9', [{ name: 'TBPN', type: 'channel' }]), 'id_required'],
+      [() => write.monitors.addName('mon_9', [{ name: 'Acme', type: 'company' }]), 'invalid_request'],
+      [() => write.monitors.addName('mon_9', [{ name: 'Acme', type: 'org', personMatchMode: 'both' }]), 'invalid_request'],
+      [() => write.monitors.addName('mon_9', []), 'too_many'],
       [() => write.monitors.update('mon_9', {}), 'invalid_request'],
       [() => write.monitors.addEntities('mon_9', ['Linear']), 'id_required'],
       [() => write.monitors.addEntities('mon_9', []), 'too_many'],
@@ -112,7 +126,7 @@ describe('the sandbox client', () => {
       [() => write.monitors.attachTrackers('mon_9', ['ent_14']), 'id_required'],
     ] as const)
       await assert.rejects(call(), (e: Error & { code: string }) => e.code === code);
-    assert.equal(sent.length, 7);
+    assert.equal(sent.length, 9);
   });
 
   it('resolve sends context and returns the server answer verbatim', async () => {
@@ -174,26 +188,25 @@ describe('the sandbox client', () => {
     await assert.rejects(arcmira.episodes(TBPN, { after: 'last week' }), (e: Error & { code: string }) => e.code === 'invalid_date');
   });
 
-  it('a gate error names the client option, not the /v1 query key', async () => {
-    const gate = (param: string, message: string) => async () =>
-      Response.json({ error: { code: 'freshness_requires_paid', param, message } }, { status: 402 });
-    const cases: Array<[string, string, string]> = [
-      ['date_from', 'Media published after 2026-09-01 requires Hobby. Open unlock.url to try Hobby for free, or set date_from to 2026-09-01 or earlier.', 'after'],
-      ['published_after', 'set published_after to 2026-09-01 or earlier.', 'after'],
-      ['date_to', 'set date_to to 2026-09-01 or earlier.', 'before'],
-      ['published_before', 'set published_before to 2026-09-01 or earlier.', 'before'],
-    ];
-    for (const [param, message, option] of cases) {
-      const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: gate(param, message) });
-      await assert.rejects(arcmira.mentions({ entityId: 'ent_14', after: '2026-09-25' }), (e: Error & { code: string; param: string }) => {
-        assert.equal(e.code, 'freshness_requires_paid');
-        assert.equal(e.param, option);
-        assert.equal(e.message, message.replace(param, option));
-        return true;
-      });
-    }
-    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: gate('limit', 'limit takes 1 to 100.') });
-    await assert.rejects(arcmira.mentions({ entityId: 'ent_14' }), (e: Error & { param: string }) => e.param === 'limit' && e.message === 'limit takes 1 to 100.');
+  it('an error names the /v1 parameter, which is the client option for every date bound', async () => {
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: async () => Response.json({ error: { code: 'freshness_requires_paid', param: 'after', message: 'set after to 2026-09-01 or earlier.' } }, { status: 402 }) });
+    await assert.rejects(arcmira.mentions({ entityId: 'ent_14', after: '2026-09-25' }), (e: Error & { code: string; param: string }) => e.code === 'freshness_requires_paid' && e.param === 'after' && e.message === 'set after to 2026-09-01 or earlier.');
+  });
+
+  it('after and before go out as written, a date or a datetime with offset, half-open on the API', async () => {
+    const { urls, fetch } = recording({ episodes: [] });
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch });
+    await arcmira.episodes(TBPN, { after: '2026-08-01', before: '2026-09-01' });
+    await arcmira.episodes(TBPN, { after: '2026-08-01T12:00:00+02:00' });
+    assert.deepEqual(urls.map((u) => [u.searchParams.get('after'), u.searchParams.get('before')]), [['2026-08-01', '2026-09-01'], ['2026-08-01T12:00:00+02:00', null]]);
+    await assert.rejects(arcmira.episodes(TBPN, { before: '2026-09-01 noon' }), (e: Error & { code: string }) => e.code === 'invalid_date');
+  });
+
+  it('status no longer reads a job: a pending Premium read returns its own job', async () => {
+    const { urls, fetch } = recording();
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch });
+    await assert.rejects(arcmira.status({ jobId: 'j' }), (e: Error & { code: string }) => e.code === 'invalid_request' && /status\(\{ channelId\? \}\)/.test(e.message));
+    assert.equal(urls.length, 0);
   });
 });
 
@@ -221,7 +234,7 @@ describe('Premium reads in the sandbox client', () => {
       },
       fetch: async (input: string, init?: RequestInit) => {
         const url = new URL(input);
-        const route = `${init?.method ?? 'GET'} ${url.pathname}${url.pathname.endsWith('/quote') || url.pathname.startsWith('/v1/transcriptions') ? '' : `?${url.searchParams.get('quality') ?? 'captions'}`}`;
+        const route = `${init?.method ?? 'GET'} ${url.pathname}?${url.searchParams.get('quality') ?? 'captions'}`;
         sent.push({ route, body: typeof init?.body === 'string' ? JSON.parse(init.body) : null, key: new Headers(init?.headers).get('idempotency-key') });
         const queue = routes[route];
         if (!queue) throw new Error(`unexpected ${route}`);
@@ -231,67 +244,81 @@ describe('Premium reads in the sandbox client', () => {
     });
     return { arcmira, slept, sent };
   }
-  const job = responses.get_transcription_pending.body;
+  const job = responses.get_transcript_pending.body.job;
   const PREMIUM = 'GET /v1/transcripts/dQw4w9WgXcQ?premium';
-  const QUOTE = 'GET /v1/transcripts/dQw4w9WgXcQ/quote';
-  const BUY = 'POST /v1/transcriptions';
-  const POLL = `GET /v1/transcriptions/${job.id}`;
 
-  it('a Premium read of a video not transcribed yet buys its quote, waits, and returns the lines', async () => {
-    for (const [charge, cents, expected] of [
-      [{ from: 'included' }, 99, 0],
-      [{ from: 'mixed' }, 12.2, 13],
-      [{ from: 'on_demand' }, 240, 240],
-    ] as const) {
-      const { arcmira, sent, slept } = api({
-        [PREMIUM]: [responses.get_transcript_preparation_required, responses.get_transcript_ready],
-        [QUOTE]: [{ status: 200, body: { ...responses.quote_transcription.body, charge, max_on_demand_cents: cents } }],
-        [BUY]: [responses.submit_transcription_pending],
-        [POLL]: [{ status: 200, body: { ...job, next_poll_seconds: 10 } }, responses.get_transcription_ready],
-      });
-      assert.deepEqual(await arcmira.transcript('https://www.youtube.com/watch?v=dQw4w9WgXcQ', { quality: 'premium' }), responses.get_transcript_ready.body);
-      assert.deepEqual(sent.map((c) => c.route), [PREMIUM, QUOTE, BUY, POLL, POLL, PREMIUM]);
-      assert.deepEqual(sent[2].body, { video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: expected });
-      assert.ok(sent[2].key);
-      assert.deepEqual(slept, [10]);
-    }
+  it('a Premium read of a video not transcribed yet is one read: 202 with the job, then the lines at Retry-After', async () => {
+    const { arcmira, sent, slept } = api({ [PREMIUM]: [responses.get_transcript_pending, responses.get_transcript_premium_ready] });
+    assert.deepEqual(await arcmira.transcript('https://www.youtube.com/watch?v=dQw4w9WgXcQ', { quality: 'premium' }), responses.get_transcript_premium_ready.body);
+    assert.deepEqual(sent.map((c) => c.route), [PREMIUM, PREMIUM]);
+    assert.ok(sent.every((c) => c.body === null && c.key === null));
+    assert.deepEqual(slept, [22]);
   });
 
-  it('a Premium read already pending waits on its job without buying', async () => {
-    const { arcmira, sent } = api({
-      [PREMIUM]: [responses.get_transcript_pending, responses.get_transcript_ready],
-      [POLL]: [responses.get_transcription_ready],
-    });
-    assert.deepEqual(await arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' }), responses.get_transcript_ready.body);
-    assert.deepEqual(sent.map((c) => c.route), [PREMIUM, POLL, PREMIUM]);
-  });
-
-  it('still pending after 25 seconds, it returns the job and says to read again; it honors Retry-After', async () => {
-    const { next_poll_seconds: _drop, ...bare } = job;
-    const { arcmira, slept } = api({
-      [PREMIUM]: [responses.get_transcript_pending],
-      [POLL]: [{ status: 200, body: bare, headers: { 'retry-after': '12' } }],
-    });
+  it('still pending near 22 seconds into the program, it returns the job with eta_seconds and says to read again; it honors Retry-After', async () => {
+    const { arcmira, slept, sent } = api({ [PREMIUM]: [{ ...responses.get_transcript_pending, headers: { 'retry-after': '12' } }] });
     const t = await arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' });
     assert.equal(t.state, 'pending');
     assert.equal(t.job.id, job.id);
-    assert.match(t.note, /never buys twice/);
-    assert.deepEqual(slept, [12, 12, 1]);
+    assert.equal(t.eta_seconds, 172);
+    assert.match(t.note, /about 3 min left.*never buys twice/);
+    assert.deepEqual(slept, [12, 10]);
+    assert.equal(sent.length, 3);
   });
 
-  it('a captions read and a ready Premium read make one call and buy nothing', async () => {
-    const { arcmira, sent } = api({ 'GET /v1/transcripts/dQw4w9WgXcQ?captions': [responses.get_transcript_ready], [PREMIUM]: [responses.get_transcript_ready] });
+  it('every Premium read in one program shares the wait, so a second pending video returns at once', async () => {
+    const { arcmira, slept, sent } = api({ [PREMIUM]: [{ ...responses.get_transcript_pending, headers: { 'retry-after': '12' } }] });
+    await arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' });
+    const second = await arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' });
+    assert.equal(second.state, 'pending');
+    assert.deepEqual(slept, [12, 10]);
+    assert.equal(sent.length, 4);
+  });
+
+  it('a failed purchase is terminal and never bought again unless the read sends retry, once', async () => {
+    for (const failed of [responses.get_transcript_failed, responses.get_transcript_pending_failed_job]) {
+      const { arcmira, sent, slept } = api({ [PREMIUM]: [failed] });
+      const t = await arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' });
+      assert.ok(t.state === 'failed' || t.state === 'refunded');
+      assert.match(t.note, /never substitute captions.*retry: true/);
+      assert.equal(sent.length, 1);
+      assert.deepEqual(slept, []);
+    }
+    const urls: URL[] = [];
+    let n = 0;
+    const { arcmira } = mod.createArcmira({
+      base: 'https://api.arcmira.com',
+      sleep: async () => {},
+      fetch: async (input: string) => {
+        urls.push(new URL(input));
+        const answer = n++ === 0 ? responses.get_transcript_pending : responses.get_transcript_premium_ready;
+        return Response.json(answer.body, { status: answer.status, headers: { 'retry-after': '1' } });
+      },
+    });
+    assert.equal((await arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium', retry: true })).state, 'ready');
+    assert.deepEqual(urls.map((u) => u.searchParams.get('retry')), ['true', null]);
+  });
+
+  it('a captions read and a ready Premium read make one call each', async () => {
+    const { arcmira, sent } = api({ 'GET /v1/transcripts/dQw4w9WgXcQ?captions': [responses.get_transcript_ready], [PREMIUM]: [responses.get_transcript_premium_ready] });
     await arcmira.transcript('dQw4w9WgXcQ');
     await arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' });
     assert.equal(sent.length, 2);
   });
 
-  it('a quote without rows buys nothing, and prepare and wait name the Premium read', async () => {
-    const { arcmira, sent } = api({ [PREMIUM]: [responses.get_transcript_preparation_required], [QUOTE]: [{ status: 200, body: { quote: {} } }] });
-    await assert.rejects(arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' }), (e: Error & { code: string }) => e.code === 'quote_unreadable');
-    assert.ok(!sent.some((c) => c.route === BUY));
-    for (const retired of [arcmira.prepare('dQw4w9WgXcQ'), arcmira.wait(job)]) {
-      await assert.rejects(retired, (e: Error & { code: string }) => e.code === 'method_retired' && /quality: "premium"/.test(e.message));
+  it('a refused Premium read throws with the quote from error.details, and prepare and wait name the read', async () => {
+    for (const refusal of [responses.get_transcript_spend_limit_exceeded, responses.get_transcript_paid_plan_required]) {
+      const { arcmira, sent } = api({ [PREMIUM]: [refusal] });
+      await assert.rejects(arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' }), (e: Error & { code: string; quote: unknown; unlock: unknown }) => {
+        assert.equal(e.code, refusal.body.error.code);
+        assert.deepEqual(e.quote, refusal.body.error.details.quote);
+        assert.deepEqual(e.unlock, refusal.body.error.unlock);
+        return true;
+      });
+      assert.equal(sent.length, 1);
+      for (const retired of [arcmira.prepare('dQw4w9WgXcQ'), arcmira.wait(job)]) {
+        await assert.rejects(retired, (e: Error & { code: string }) => e.code === 'method_retired' && /quality: "premium"/.test(e.message));
+      }
     }
   });
 });

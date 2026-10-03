@@ -8,11 +8,11 @@
  * a write from the read tool). With no key the transport must answer 401 with the OAuth
  * challenge, and the script stops there. Prints one line per call and never prints the key. Exit 1
  * when any call is not what the manifest promises. Most probes make one or two API reads. The
- * budget probe makes 40. The purchase probes read a free quote with arcmira.quote, then POST
- * /v1/transcriptions from the read sandbox with max_rows 0, which the API refuses before it claims
- * anything (max_rows_exceeded below the quote, or paid_plan_required on a free plan). The key's
- * usage is read before and after each to show neither spent anything. The write tool only lists
- * monitors; the smoke never changes the account.
+ * budget probe makes 40. The purchase probes read a free quote with arcmira.quote, then send a raw
+ * POST /v1/transcriptions from the read sandbox, which the outbound refuses before any request (a
+ * Premium purchase happens only inside the transcript GET). The key's usage is read before and after
+ * each to show neither spent anything. The write tool only lists monitors; the smoke never changes
+ * the account.
  */
 import { Client } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
@@ -22,7 +22,7 @@ import { METHODS } from '../src/reference.ts';
 const url = new URL(process.argv[2] ?? 'https://mcp.arcmira.com/mcp');
 const key = process.env.ARCMIRA_KEY ?? '';
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
-/** A video the smoke key has not prepared, so a zero row ceiling is below its quote. */
+/** A video the smoke key does not own, so its quote is positive. */
 const UNOWNED_VIDEO = 'cdLeJU_1UH8';
 
 interface Probe {
@@ -44,12 +44,12 @@ const PROBES: Probe[] = [
   { label: 'status channel', tool: 'arcmira_execute_read', args: { code: `const s = await arcmira.status({ channelId: "${TBPN}" }); return { indexed: s.channel.searchable_videos, through: s.channel.indexed_through };` }, expect: 'ok', contains: 'indexed' },
   { label: 'status me', tool: 'arcmira_execute_read', args: { code: 'const me = await arcmira.status(); return Object.keys(me);' }, expect: 'ok' },
   { label: 'episodes', tool: 'arcmira_execute_read', args: { code: `const e = await arcmira.episodes("${TBPN}", { limit: 2 }); return e.episodes.map(x => x.video_id);` }, expect: 'ok', contains: '"value":["' },
-  { label: 'mentions', tool: 'arcmira_execute_read', args: { code: `const m = await arcmira.mentions({ entityId: "ent_14", channelId: "${TBPN}", limit: 3 }); return { n: m.data.length, first: m.data[0]?.media?.title };` }, expect: 'ok' },
+  { label: 'mentions', tool: 'arcmira_execute_read', args: { code: `const m = await arcmira.mentions({ entityId: "ent_14", channelId: "${TBPN}", limit: 3 }); return { n: m.mentions.length, first: m.mentions[0]?.media?.title, window: m.window };` }, expect: 'ok', contains: 'window' },
   { label: 'momentum', tool: 'arcmira_execute_read', args: { code: 'const m = await arcmira.momentum("ent_14"); return { verdict: m.verdict, d30: m.volume.mentions_30d };' }, expect: 'ok', contains: 'verdict' },
   { label: 'occurrences', tool: 'arcmira_execute_read', args: { code: `const o = await arcmira.occurrences({ channelIds: ["${TBPN}"], types: ["organization"], limit: 3 }); return o.rows.map(r => [r.name, r.count]);` }, expect: 'ok' },
   { label: 'sponsors', tool: 'arcmira_execute_read', args: { code: `const s = await arcmira.sponsors("${TBPN}", { limit: 3 }); return s.sponsors.map(x => [x.entity.name, x.ad_reads]);` }, expect: 'either' },
-  { label: 'recommendations', tool: 'arcmira_execute_read', args: { code: 'const r = await arcmira.recommendations("ent_14", { kind: "organic", limit: 3 }); return r.data.length;' }, expect: 'either' },
-  { label: 'search', tool: 'arcmira_execute_read', args: { code: `const s = await arcmira.search({ query: "corporate cards", channelIds: ["${TBPN}"], limit: 2 }); return s.chunks.map(c => c.watchUrl);` }, expect: 'either' },
+  { label: 'recommendations', tool: 'arcmira_execute_read', args: { code: 'const r = await arcmira.recommendations("ent_14", { kind: "organic", limit: 3 }); return r.recommendations.map(x => x.class);' }, expect: 'either' },
+  { label: 'search', tool: 'arcmira_execute_read', args: { code: `const s = await arcmira.search({ query: "corporate cards", channelIds: ["${TBPN}"], limit: 2 }); return s.chunks.map(c => c.watch_url);` }, expect: 'either' },
   { label: 'transcript window', tool: 'arcmira_execute_read', args: { code: 'const t = await arcmira.transcript("cdLeJU_1UH8", { start: 0, end: 30 }); return { lines: (t.lines ?? t.paragraphs ?? []).length };' }, expect: 'either' },
   { label: 'two calls in parallel', tool: 'arcmira_execute_read', args: { code: 'const [a, b] = await Promise.all([arcmira.momentum("ent_14"), arcmira.momentum("ent_323")]); return [a.verdict, b.verdict];' }, expect: 'ok' },
   { label: 'id_required', tool: 'arcmira_execute_read', args: { code: 'return await arcmira.momentum("Ramp");' }, expect: { code: 'id_required' }, contains: 'arcmira.resolve' },
@@ -59,7 +59,7 @@ const PROBES: Probe[] = [
   { label: 'no network', tool: 'arcmira_execute_read', args: { code: 'const r = await fetch("https://example.com/"); return { status: r.status, body: await r.text() };' }, expect: 'ok', contains: 'outbound_refused' },
   { label: 'call budget', tool: 'arcmira_execute_read', args: { code: 'for (let i = 0; i < 50; i++) await arcmira.momentum("ent_14");' }, expect: { code: 'call_budget' } },
   { label: 'monitors list', tool: 'arcmira_execute_read', args: { code: 'const m = await arcmira.monitors.list(); return { monitors: m.monitors.length };' }, expect: 'ok', contains: 'monitors' },
-  { label: 'write method in read', tool: 'arcmira_execute_read', args: { code: 'return await arcmira.monitors.update("mon_x", { isPaused: true });' }, expect: { code: 'write_tool_required' } },
+  { label: 'write method in read', tool: 'arcmira_execute_read', args: { code: 'return await arcmira.monitors.update("mon_x", { paused: true });' }, expect: { code: 'write_tool_required' } },
   { label: 'raw write in read', tool: 'arcmira_execute_read', args: { code: 'const r = await fetch("https://api.arcmira.com/v1/monitors", { method: "POST", body: "{}" }); return { status: r.status, body: await r.text() };' }, expect: 'ok', contains: 'arcmira_execute_write' },
   { label: 'delete in write', tool: 'arcmira_execute_write', args: { code: 'const r = await fetch("https://api.arcmira.com/v1/monitors/mon_x", { method: "DELETE" }); return { status: r.status, body: await r.text() };' }, expect: 'ok', contains: 'outbound_refused' },
   { label: 'write tool reads', tool: 'arcmira_execute_write', args: { code: 'const m = await arcmira.monitors.list(); return { monitors: m.monitors.length };' }, expect: 'ok', contains: 'monitors' },
@@ -146,19 +146,16 @@ const quoteOk = afterQuote === beforeQuote && quoted !== null && !quoted.owned &
 if (!quoteOk) failed = true;
 console.log(`${(quoteOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'quote free, unowned'.padEnd(22)} execute  spend ${beforeQuote} -> ${afterQuote}  ${quoteText.replace(/\s+/g, ' ').slice(0, 90)}`);
 
-/** Only below a positive quote on an unowned video does max_rows 0 refuse before any claim. */
-if (quoteOk) {
-  const prepared = await client.callTool({
-    name: 'arcmira_execute_read',
-    arguments: { code: `const r = await fetch("https://api.arcmira.com/v1/transcriptions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ video_id: "${UNOWNED_VIDEO}", max_rows: 0, max_on_demand_cents: 0 }) }); return { status: r.status, body: await r.json() };` },
-  });
-  const preparedText = textOf(prepared);
-  const afterPrepare = await spend();
-  const refusedCode = /"code":"([a-z_]+)"/.exec(preparedText)?.[1];
-  const prepareOk = (refusedCode === 'max_rows_exceeded' || refusedCode === 'paid_plan_required') && afterPrepare === afterQuote;
-  if (!prepareOk) failed = true;
-  console.log(`${(prepareOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'prepare max_rows 0'.padEnd(22)} prepare  spend ${afterQuote} -> ${afterPrepare}  ${refusedCode ?? preparedText.replace(/\s+/g, ' ').slice(0, 90)}`);
-} else console.log(`skipped    ${'prepare max_rows 0'.padEnd(22)} prepare  ${UNOWNED_VIDEO} is owned or unquoted for this key; pick another UNOWNED_VIDEO`);
+const raw = await client.callTool({
+  name: 'arcmira_execute_read',
+  arguments: { code: `const r = await fetch("https://api.arcmira.com/v1/transcriptions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ video_id: "${UNOWNED_VIDEO}" }) }); return { status: r.status, body: await r.json() };` },
+});
+const rawText = textOf(raw);
+const afterRaw = await spend();
+const refusedCode = /"code":"([a-z_]+)"/.exec(rawText)?.[1];
+const rawOk = refusedCode === 'outbound_refused' && afterRaw === afterQuote;
+if (!rawOk) failed = true;
+console.log(`${(rawOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'raw purchase POST'.padEnd(22)} execute  spend ${afterQuote} -> ${afterRaw}  ${refusedCode ?? rawText.replace(/\s+/g, ' ').slice(0, 90)}`);
 
 for (const [name, args, replacement] of [
   ['resolve_entities', { q: 'Ramp' }, 'arcmira_describe'],

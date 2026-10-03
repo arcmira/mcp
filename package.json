@@ -1,6 +1,6 @@
 {
   "name": "@arcmira/mcp",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations.",
   "keywords": [
     "mcp",
@@ -37,6 +37,7 @@
     "test": "node --test --experimental-strip-types --import ./tests/register.mjs tests/*.test.ts",
     "manifest:check": "node --experimental-strip-types scripts/check-manifest.ts",
     "examples:check": "node --experimental-strip-types scripts/check-examples.ts",
+    "examples:spec": "node --experimental-strip-types scripts/check-examples.ts --spec tests/fixtures/openapi.json",
     "identity:check": "bash scripts/check-commit-identity.sh",
     "skill:build": "node --experimental-strip-types scripts/build-skill.ts",
     "skill:check": "node --experimental-strip-types scripts/build-skill.ts --check",
