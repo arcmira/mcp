@@ -2459,7 +2459,7 @@
     "id": "get_transcript",
     "name": "arcmira_get_transcript",
     "title": "Get a video transcript",
-    "description": "Retrieve the requested transcript source for a YouTube video. A Premium request can start whole-video transcription and spend included credits or on-demand budget. Pending and failed responses contain no finished transcript. Never substitute captions for requested Premium. A retry can purchase again after failure.",
+    "description": "Retrieve the explicitly requested transcript source for a YouTube video. Premium can start whole-video transcription using existing credits only, with no new on-demand charge. Pending and failed responses contain no finished transcript. Never substitute captions for requested Premium. An explicit retry after failure can spend existing credits again.",
     "method": "GET",
     "path": "/v1/transcripts/{video_id}",
     "parameters": [
@@ -2515,7 +2515,7 @@
             "captions",
             "premium"
           ],
-          "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read: an owned transcript returns 200 state ready at zero rows; otherwise the read buys the whole video within the account's plan and on-demand budget (included credits first, then on-demand money up to the account limit) and returns 202 state pending with the job until it is ready. When the last purchase for the video failed it answers 200 state failed and buys again only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings."
+          "description": "Select the source the user requested. Premium reads owned transcripts or starts whole-video transcription using existing credits only; no new on-demand charge is allowed. Captions and Premium are distinct. Insufficient credits return an error without changing the source."
         },
         "language": {
           "type": "string",
@@ -2531,7 +2531,7 @@
             "null"
           ],
           "minimum": 0,
-          "description": "Window start in seconds from the beginning of the video. Send start and end together. On captions the window bills only its own started 15-minute blocks; on Premium it trims the returned content. An explicit Premium read can purchase the whole video within the account plan and budget; a window does not reduce that purchase price."
+          "description": "Window start in seconds. Send start and end together. Captions bill only their returned window; Premium transcribes the whole video using existing credits even when a smaller window is returned."
         },
         "end": {
           "type": [
@@ -2543,7 +2543,7 @@
         },
         "retry": {
           "type": "boolean",
-          "description": "Premium only; captions with retry=true returns invalid_query. When the last Premium purchase for this video failed, a read answers 200 state failed with the job and last_attempt and buys nothing; retry=true buys it again under the same quote, budget and one-purchase rules as the first read. While that refund is still settling (job.status refund_pending) even retry=true answers state failed. Without a failed purchase it changes nothing."
+          "description": "Premium only. Set true only for an explicit retry of a failed transcription; it can spend existing credits again. A pending job needs another read, not a retry."
         },
         "refresh": {
           "type": "boolean",
@@ -2551,7 +2551,8 @@
         }
       },
       "required": [
-        "video_id"
+        "video_id",
+        "quality"
       ],
       "additionalProperties": false
     },

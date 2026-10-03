@@ -11,7 +11,7 @@ export const OPERATION_DEFINITIONS = [
   ['get_channel_coverage', 'Check channel coverage', 'Read how much of a channel is indexed before interpreting missing results.', 'read'],
   ['list_channel_videos', 'List channel videos', 'List the indexed videos of a channel within a publication window.', 'read'],
   ['count_mentions', 'Count mentions', 'Rank entity mentions within specified channels, videos or entities. Counts describe indexed coverage.', 'read'],
-  ['get_transcript', 'Get a video transcript', 'Retrieve the requested transcript source for a YouTube video. A Premium request can start whole-video transcription and spend included credits or on-demand budget. Pending and failed responses contain no finished transcript. Never substitute captions for requested Premium. A retry can purchase again after failure.', 'purchase'],
+  ['get_transcript', 'Get a video transcript', 'Retrieve the explicitly requested transcript source for a YouTube video. Premium can start whole-video transcription using existing credits only, with no new on-demand charge. Pending and failed responses contain no finished transcript. Never substitute captions for requested Premium. An explicit retry after failure can spend existing credits again.', 'purchase'],
   ['quote_transcription', 'Quote Premium transcription', 'Preview the whole-video Premium transcription price without buying or starting transcription.', 'readOpen'],
   ['list_monitors', 'List saved monitors', 'List the connected account’s saved research monitors before changing one.', 'read'],
   ['list_monitor_trackers', 'List monitor trackers', 'Read the trackers attached to a saved monitor.', 'read'],

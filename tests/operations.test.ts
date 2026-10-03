@@ -27,7 +27,7 @@ const readCases = [
   ['get_channel_coverage', { channel_id: 'UC-DRzaGnL_vtBUpCFH5M0tg' }, '/v1/channels/UC-DRzaGnL_vtBUpCFH5M0tg/coverage', {}],
   ['list_channel_videos', { channel_id: 'UC-DRzaGnL_vtBUpCFH5M0tg', after: '2026-09-01' }, '/v1/channels/UC-DRzaGnL_vtBUpCFH5M0tg/videos', { after: '2026-09-01' }],
   ['count_mentions', { entity_ids: 'ent_14' }, '/v1/mentions/counts', { entity_ids: 'ent_14' }],
-  ['get_transcript', { video_id: 'dQw4w9WgXcQ', quality: 'premium', timestamps: false, retry: false }, '/v1/transcripts/dQw4w9WgXcQ', { quality: 'premium', timestamps: 'false', retry: 'false' }],
+  ['get_transcript', { video_id: 'dQw4w9WgXcQ', quality: 'premium', timestamps: false, retry: false }, '/v1/transcripts/dQw4w9WgXcQ', { quality: 'premium', timestamps: 'false', retry: 'false', spending: 'existing_credits' }],
   ['quote_transcription', { video_id: 'dQw4w9WgXcQ' }, '/v1/transcripts/dQw4w9WgXcQ/quote', {}],
   ['list_monitors', {}, '/v1/monitors', {}],
   ['list_monitor_trackers', { id: 'mon/one' }, '/v1/monitors/mon%2Fone/trackers', {}],
@@ -117,6 +117,7 @@ describe('explicit operation MCP candidate', () => {
       t.mock.method(globalThis, 'fetch', async (url: string | URL) => {
         calls++;
         assert.equal(new URL(url).searchParams.get('quality'), 'premium');
+        assert.equal(new URL(url).searchParams.get('spending'), 'existing_credits');
         return Response.json(body, { status: state === 'pending' ? 202 : 200 });
       });
       await connect(async (client) => {
@@ -141,11 +142,37 @@ describe('explicit operation MCP candidate', () => {
     assert.equal(calls, 1);
   });
 
+  it('keeps explicit Premium retries on existing credits and leaves captions outside that mode', async (t) => {
+    const requests: URL[] = [];
+    t.mock.method(globalThis, 'fetch', async (url: string | URL) => {
+      requests.push(new URL(url));
+      return Response.json({ state: 'ready', lines: [] });
+    });
+    await connect(async (client) => {
+      const premium = await client.callTool({ name: 'arcmira_get_transcript', arguments: {
+        video_id: 'dQw4w9WgXcQ', quality: 'premium', retry: true,
+      } });
+      assert.notEqual(premium.isError, true);
+      const captions = await client.callTool({ name: 'arcmira_get_transcript', arguments: {
+        video_id: 'dQw4w9WgXcQ', quality: 'captions', refresh: true,
+      } });
+      assert.notEqual(captions.isError, true);
+    });
+    assert.equal(requests.length, 2);
+    assert.equal(requests[0].searchParams.get('spending'), 'existing_credits');
+    assert.equal(requests[0].searchParams.get('retry'), 'true');
+    assert.equal(requests[1].searchParams.get('quality'), 'captions');
+    assert.equal(requests[1].searchParams.has('spending'), false);
+    assert.equal(requests[1].searchParams.get('refresh'), 'true');
+  });
+
   it('rejects invalid filters, executor fields and writes without bodies or retry keys before fetching', async (t) => {
     const fetch = t.mock.method(globalThis, 'fetch', async () => { throw new Error('Must not send invalid input'); });
     await connect(async (client) => {
       for (const [name, args] of [
         ['arcmira_search', { q: 'x' }],
+        ['arcmira_get_transcript', { video_id: 'dQw4w9WgXcQ' }],
+        ['arcmira_get_transcript', { video_id: 'dQw4w9WgXcQ', quality: 'premium', spending: 'account_budget' }],
         ['arcmira_search', { q: 'energy', limit: 999 }],
         ['arcmira_search', { q: 'energy', code: 'return fetch("https://evil.test")' }],
         ['arcmira_create_monitor', { body: { name: 'News' } }],
@@ -270,7 +297,7 @@ describe('reviewed operation responses', () => {
   it('rejects an object smuggled into transcript text without exposing its contents', async (t) => {
     t.mock.method(globalThis, 'fetch', async () => Response.json({ state: 'ready', lines: [{ start: 0, end: 1, text: { secret: 'private_data' } }] }));
     await connect(async (client) => {
-      const result = await client.callTool({ name: 'arcmira_get_transcript', arguments: { video_id: 'dQw4w9WgXcQ' } });
+      const result = await client.callTool({ name: 'arcmira_get_transcript', arguments: { video_id: 'dQw4w9WgXcQ', quality: 'captions' } });
       assert.equal(result.isError, true);
       assert.match(JSON.stringify(result), /unexpected_response/);
       assert.doesNotMatch(JSON.stringify(result), /private_data/);

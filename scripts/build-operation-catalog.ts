@@ -75,10 +75,22 @@ const catalog = OPERATION_DEFINITIONS.map(([id, title, description, effect]) => 
   const [{ path, method, operation: spec }] = matches;
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
-  const parameters = spec.parameters.filter((p) => p.in !== 'header' && p.name !== 'src');
+  const parameters = spec.parameters.filter((p) => p.in !== 'header' && p.name !== 'src'
+    && !(id === 'get_transcript' && p.name === 'spending'));
   for (const parameter of parameters) {
     properties[parameter.name] = resolve(parameter.schema);
     if (parameter.required) required.push(parameter.name);
+  }
+  if (id === 'get_transcript') {
+    required.push('quality');
+    const descriptions = {
+      quality: 'Select the source the user requested. Premium reads owned transcripts or starts whole-video transcription using existing credits only; no new on-demand charge is allowed. Captions and Premium are distinct. Insufficient credits return an error without changing the source.',
+      retry: 'Premium only. Set true only for an explicit retry of a failed transcription; it can spend existing credits again. A pending job needs another read, not a retry.',
+      start: 'Window start in seconds. Send start and end together. Captions bill only their returned window; Premium transcribes the whole video using existing credits even when a smaller window is returned.',
+    };
+    for (const [name, description] of Object.entries(descriptions)) {
+      properties[name] = { ...object.parse(properties[name]), description };
+    }
   }
   if (spec.requestBody) {
     properties.body = resolve(spec.requestBody.content['application/json'].schema);

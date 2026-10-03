@@ -15,6 +15,7 @@ const errorContract = responseFieldsSchema.parse(errorFields);
 /**
  * Review candidate, deliberately not wired to the public Worker yet. Authentication routing,
  * entitlement enforcement, result minimization and telemetry controls must pass before release.
+ * Run operations:release:check against the deployed API before adding a public route.
  */
 export function createOperationServer(api: ApiClient | null): McpServer {
   const server = new McpServer({ name: 'arcmira', version: pkg.version }, {
@@ -40,6 +41,7 @@ export function createOperationServer(api: ApiClient | null): McpServer {
           path = path.replace(`{${parameter.name}}`, encodeURIComponent(z.string().min(1).parse(value)));
         } else if (value !== undefined) query[parameter.name] = queryValue.parse(value);
       }
+      if (operation.id === 'get_transcript' && query.quality === 'premium') query.spending = 'existing_credits';
       const answer = verb === 'GET'
         ? await api.get(path, query)
         : await api[verb === 'POST' ? 'post' : 'patch'](path, record.parse(input.body), { idempotencyKey: z.string().parse(input.idempotency_key), query });
