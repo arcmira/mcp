@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.10.0
+
+The client follows the cleaned-up v1 API (basedanarki/arcmira PR 678). Ship it right after that backend deploy: the 0.9 reference and skills read response fields the API no longer sends.
+
+- A Premium transcript is one `GET /v1/transcripts/{video_id}?quality=premium`. The API buys inside the read and answers `202` with the job and `Retry-After`; the client reads again at `Retry-After` until 22 seconds into the program, one budget for every Premium read in it, and skips the last read when under 5 seconds remain. It no longer sends `POST /v1/transcriptions` or polls `GET /v1/transcriptions/{id}`, and `arcmira_execute_read` no longer reaches `POST /v1/transcriptions`. Still pending after the wait, the result carries `eta_seconds` and a note with the minutes left. A failed purchase is terminal: `state` `failed` or `refunded` with `job.error` or `last_attempt`, and `{ retry: true }` buys again on the user's ask. A plan without Premium throws `paid_plan_required`. A refusal's quote comes from `error.details.quote`.
+- `arcmira.search` calls `GET /v1/search`, and `arcmira.recommendations` calls `GET /v1/recommendations?entity_id=`.
+- `after` and `before` go to the API as written, a date or a datetime with offset. `before` is now the first day left out, as on the API (it was the last day counted). Every dated result echoes `window: { after, before }`.
+- Response fields are the API's: `mentions().mentions` and `recommendations().recommendations` (was `data`), a recommendation's `class` `sponsored | organic | mention` (was `mention_class`), and snake_case search chunks (`video_id`, `video_title`, `published_at`, `start_seconds`, `watch_url`, `cite_line`).
+- Search `kind` is `sponsored`, `organic` or `mention`, or an array of them.
+- Monitor fields are snake_case both ways: `create({ name, notify_frequency, ... })`, `update(id, { paused })`, and `monitors.list()` returns `paused`, `notify_frequency`, `tracker_count`. `attachTrackers` sends `tracker_ids`.
+- `arcmira.monitors.addName(monitorId, [{ name, type, personMatchMode? }])` follows exact names before they are indexed (`org` for organization; a show by its UC id) through `POST /v1/monitors/{id}/entities` with `names`, one result per name.
+- `arcmira.status({ jobId })` is gone; a pending Premium read returns its own job.
+- `pnpm manifest:check <file>` checks the client against an OpenAPI file, and `pnpm examples:spec` runs every worked program against the committed document with no key.
+
 ## 0.9.1
 
 A Premium transcript is one read. `arcmira.transcript(video, { quality: "premium" })` returns the lines; when the video is not transcribed yet, the same call buys it at its quote (included credits, then on-demand within the account's budget), waits up to 25 seconds and reads again. Still pending after that: run the same read again, which never buys twice. `arcmira.prepare` and `arcmira.wait` are gone and throw `method_retired` naming the read; `prepare_transcript` now points at it too. `arcmira.quote` still reads the price for free.

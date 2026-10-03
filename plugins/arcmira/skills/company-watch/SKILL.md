@@ -41,10 +41,10 @@ For this task:
 2. Find what to follow and the monitors that could hold it: the second program, in `arcmira_execute_read`. Reuse ids the research already found instead of resolving again.
 3. A monitor fits when its name or its trackers match the subject. Suggest it by name ("Add Linear to your Dev tools monitor?") and wait for a yes.
 4. None fits: ask how the user wants updates, one question at a time, each with a default they can accept with "yes". First where: email to the account address (default) or Slack. Then when: as it happens, an hourly digest, or a daily digest (default daily). Then the name (default: the subject, like "Data center discourse").
-5. Slack: the first program lists the connected workspaces (`slack`). With one, deliver there: `notifySlack: true`, its id as `slackIntegrationId` and its `default_channel_id` as `slackChannelId`; with several, ask which. With none, link https://arcmira.com/dashboard/integrations to connect one, and save with email for now, saying so; switch it later with `arcmira.monitors.update`.
-6. Save with the third program, in `arcmira_execute_write`: create the monitor only when none fits (or set Slack on the one that fits), then `addEntities` with every id in one call.
+5. Slack: the first program lists the connected workspaces (`slack`). With one, deliver there: `notify_slack: true`, its id as `slack_integration_id` and its `default_channel_id` as `slack_channel_id`; with several, ask which. With none, link https://arcmira.com/dashboard/integrations to connect one, and save with email for now, saying so; switch it later with `arcmira.monitors.update`.
+6. Save with the third program, in `arcmira_execute_write`: create the monitor only when none fits (or set Slack on the one that fits), then `addEntities` with every id in one call. A name resolve found nothing for can still be followed by its exact name with `addName` (a show by its UC id), which catches it once a show says it.
 7. Tell the user plainly about every id that did not attach. `entity_not_found`: Arcmira has no such entity; offer another spelling. `entity_type_not_trackable`: that kind of entity cannot be followed. `tracker_limit_reached`: the plan's tracker limit is full; pausing or removing trackers in the dashboard, or a higher plan, makes room. `tracked_in_another_monitor`: say which monitor already follows it (`current_monitor_name`) and ask before moving it; on a yes, `arcmira.monitors.attachTrackers(monitorId, [tracker_id])` in `arcmira_execute_write` moves it. When a result carries `canonical_entity_id`, the id was merged into that one; name the canonical entity.
-8. Close with what arrives, where and when, and that `arcmira.monitors.update(id, { isPaused: true })` pauses it; nothing is deleted.
+8. Close with what arrives, where and when, and that `arcmira.monitors.update(id, { paused: true })` pauses it; nothing is deleted.
 
 ## Worked program
 
@@ -70,12 +70,12 @@ const quotesTagged = quotes.chunks.length > 0;   // false: the fallback matched 
 if (!quotesTagged) quotes = await arcmira.search({ query: m.entity.name, after, limit: 5 });
 return {
   entity: { id, name: m.entity.name, type: m.entity.type, page: m.entity.page, assumed, why },
-  window: { after, through: arcmira.today() },
+  window: occ.window,
   momentum: { verdict: m.verdict, last_7d: m.volume.mentions_7d, last_30d: m.volume.mentions_30d, prior_30d: m.volume.mentions_prior_30d, as_of: m.as_of },
   shows: occ.rows.map(x => ({ show: x.channel_name, channel_id: x.channel_id, episodes: x.count, times_said: x.occurrences })),
-  context: notes.data.map(x => ({ show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at, note: x.description })),
+  context: notes.mentions.map(x => ({ show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at, note: x.description })),
   quotes_tagged_to_entity: quotesTagged,
-  quotes: quotes.chunks.map(c => ({ said: c.text.slice(0, 300), show: c.channelName, episode: c.videoTitle, date: c.publishedAt, url: c.watchUrl })),
+  quotes: quotes.chunks.map(c => ({ said: c.text.slice(0, 300), show: c.channel_name, episode: c.video_title, date: c.published_at, url: c.watch_url })),
 };
 ```
 
@@ -97,10 +97,10 @@ for (const t of TOPICS) {
 }
 const [{ monitors }, { integrations }] = await Promise.all([arcmira.monitors.list(), arcmira.integrations.slack()]);
 const existing = await Promise.all(monitors.slice(0, 10).map(async m => ({
-  id: m.id, name: m.name, paused: m.isPaused, frequency: m.notifyFrequency, slack: Boolean(m.notifySlack),
-  follows: (await arcmira.monitors.trackers(m.id)).trackers.map(t => t.displayName ?? t.entityName),
+  id: m.id, name: m.name, paused: m.paused, frequency: m.notify_frequency, slack: Boolean(m.notify_slack),
+  follows: (await arcmira.monitors.trackers(m.id)).trackers.map(t => t.display_name ?? t.entity_name),
 })));
-const slack = integrations.map(i => ({ slackIntegrationId: i.id, workspace: i.team_name, slackChannelId: i.default_channel_id, channel: i.channels.find(c => c.id === i.default_channel_id)?.name ?? null }));
+const slack = integrations.map(i => ({ slack_integration_id: i.id, workspace: i.team_name, slack_channel_id: i.default_channel_id, channel: i.channels.find(c => c.id === i.default_channel_id)?.name ?? null }));
 return { follow, unresolved, monitors: existing, more_monitors: Math.max(0, monitors.length - 10), slack };
 ```
 
@@ -109,24 +109,31 @@ return { follow, unresolved, monitors: existing, more_monitors: Math.max(0, moni
 ```javascript
 const MONITOR_ID = null;   // a fitting monitor's id from the first program, or null to create one
 const IDS = ["ent_279443"];   // every id the user agreed to follow
-const DELIVERY = { name: "Linear", notifyFrequency: "daily" };   // the user's answers, for a new monitor
-const SLACK = null;   // the user chose Slack: { slackIntegrationId, slackChannelId } from the first program's slack
-const slack = SLACK ? { notifySlack: true, slackIntegrationId: SLACK.slackIntegrationId, ...(SLACK.slackChannelId ? { slackChannelId: SLACK.slackChannelId } : {}) } : {};
+const NAMES = [];   // names resolve found nothing for that the user still wants followed: [{ name: "Acme Robotics", type: "organization" }]
+const DELIVERY = { name: "Linear", notify_frequency: "daily" };   // the user's answers, for a new monitor
+const SLACK = null;   // the user chose Slack: { slack_integration_id, slack_channel_id } from the first program's slack
+const slack = SLACK ? { notify_slack: true, slack_integration_id: SLACK.slack_integration_id, ...(SLACK.slack_channel_id ? { slack_channel_id: SLACK.slack_channel_id } : {}) } : {};
 const monitor = MONITOR_ID
   ? (SLACK ? (await arcmira.monitors.update(MONITOR_ID, slack)).monitor : { id: MONITOR_ID })
   : (await arcmira.monitors.create({ ...DELIVERY, ...slack })).monitor;
-const { results } = await arcmira.monitors.addEntities(monitor.id, IDS);
+const { results } = IDS.length ? await arcmira.monitors.addEntities(monitor.id, IDS) : { results: [] };
+const byName = [];
+for (const n of NAMES) {
+  try { byName.push(...(await arcmira.monitors.addName(monitor.id, [n])).results); }
+  catch (err) { byName.push({ name: n.name, code: err.code, message: err.message }); }
+}
 const others = results.some(r => r.reason === "tracked_in_another_monitor") ? (await arcmira.monitors.list()).monitors : [];
 return {
   monitor: { id: monitor.id, name: monitor.name ?? null, created: !MONITOR_ID, slack: Boolean(SLACK) },
   attached: results.filter(r => r.attached).map(r => ({ entity_id: r.canonical_entity_id ?? r.entity_id, merged_from: r.canonical_entity_id ? r.entity_id : null, new_tracker: r.created })),
   not_attached: results.filter(r => !r.attached).map(r => ({ entity_id: r.entity_id, reason: r.reason, tracker_id: r.tracker_id ?? null, current_monitor_id: r.current_monitor_id ?? null, current_monitor_name: others.find(m => m.id === r.current_monitor_id)?.name ?? null })),
+  by_name: byName,
 };
 ```
 
 ## A good answer
 
-- For what was said: opens with the entity (name, type, id), gives the verdict with the 7-day and 30-day counts and `as_of`, the shows with episode counts for the stated window, and two or three quotes in the speakers' words, each with show, date and `watchUrl`.
+- For what was said: opens with the entity (name, type, id), gives the verdict with the 7-day and 30-day counts and `as_of`, the shows with episode counts for the stated window, and two or three quotes in the speakers' words, each with show, date and `watch_url`.
 - Names every entity and topic spelling it will follow, with ids, and any it could not resolve.
 - Suggests an existing monitor only after reading the user's monitors, and says which entities it already follows.
 - Asks the delivery questions one at a time with a default each; for Slack, uses the connected workspace, or links the connection page and says the monitor uses email until then.

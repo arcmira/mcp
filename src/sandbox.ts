@@ -135,15 +135,13 @@ export type Access = 'read' | 'write';
 const under = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
 
 /**
- * The routes a sandbox program may call, by tool. Read: any GET under /v1, and POST
- * /v1/transcriptions (a Premium read buys within the budget, ruling 2026-10-02). Write adds POST and PATCH
- * under /v1/monitors and /v1/trackers, never DELETE, and never the webhook secret rotation, which
- * breaks the user's existing webhook verification.
+ * The routes a sandbox program may call, by tool. Read: any GET under /v1 (a Premium read buys inside
+ * GET /v1/transcripts/{video_id}). Write adds POST and PATCH under /v1/monitors and /v1/trackers, never
+ * DELETE, and never the webhook secret rotation, which breaks the user's existing webhook verification.
  */
 export function outboundAllowed(access: Access, method: string, path: string): boolean {
   if (/%2f|%5c/i.test(path) || !under(path, '/v1')) return false;
   if (method === 'GET') return true;
-  if (method === 'POST' && path === '/v1/transcriptions') return true;
   if (access !== 'write' || (method !== 'POST' && method !== 'PATCH')) return false;
   if (path.includes('/webhook-secret')) return false;
   return under(path, '/v1/monitors') || under(path, '/v1/trackers');

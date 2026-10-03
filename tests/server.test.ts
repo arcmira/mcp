@@ -254,58 +254,38 @@ describe('bounded outcomes and Premium reads over MCP', () => {
     assert.equal(result.truncated, true);
     assert.equal(result.calls, 1);
   });
-  it('a Premium read of a video not transcribed yet buys exactly the quote: rows, on-demand cents and an Idempotency-Key', async () => {
-    for (const [charge, cents, sentCents] of [
-      [{ unit: 'credits', amount: 1200, from: 'included' }, 0, 0],
-      [{ unit: 'credits', amount: 1200, from: 'mixed' }, 37, 37],
-      [{ unit: 'credits', amount: 1200, from: 'on_demand' }, 240, 240],
-    ] as const) {
-      const posts: Array<{ body: unknown; key: string | null }> = [];
-      let reads = 0;
-      const reply = await callTool(
-        'arcmira_execute_read',
-        { code: 'const t = await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" }); return { state: t.state, lines: t.lines.length };' },
-        (url, init) => {
-          if (url.pathname === '/v1/transcripts/dQw4w9WgXcQ/quote') return Response.json({ ...responses.quote_transcription.body, charge, max_on_demand_cents: cents });
-          if (url.pathname === '/v1/transcripts/dQw4w9WgXcQ') return Response.json(reads++ === 0 ? responses.get_transcript_preparation_required.body : responses.get_transcript_ready.body);
-          if (url.pathname.startsWith('/v1/transcriptions/')) return Response.json(responses.get_transcription_ready.body);
-          assert.equal(url.pathname, '/v1/transcriptions');
-          assert.equal(init?.method, 'POST');
-          const body = JSON.parse(String(init?.body));
-          const schema = openapi.paths['/v1/transcriptions'].post.requestBody.content['application/json'].schema;
-          for (const key of Object.keys(body)) assert.ok(key in schema.properties, `Unknown request field ${key}`);
-          posts.push({ body, key: new Headers(init?.headers).get('idempotency-key') });
-          return Response.json(responses.submit_transcription_pending.body, { status: 202 });
-        },
-        { LOADER: fakeLoader() },
-      );
-      assert.equal(reply.result.isError, undefined, textOf(reply));
-      assert.deepEqual(JSON.parse(textOf(reply)).value, { state: 'ready', lines: responses.get_transcript_ready.body.lines.length });
-      assert.equal(posts.length, 1);
-      assert.deepEqual(posts[0].body, { video_id: 'dQw4w9WgXcQ', max_rows: 300, max_on_demand_cents: sentCents });
-      assert.match(posts[0].key ?? '', /^[\x21-\x7e]{1,255}$/);
-    }
+  it('a Premium read of a video not transcribed yet is GETs only: no POST, no purchase ceilings, and the lines when ready', async () => {
+    const seen: string[] = [];
+    let reads = 0;
+    const reply = await callTool(
+      'arcmira_execute_read',
+      { code: 'const t = await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" }); return { state: t.state, lines: t.lines.length, speaker: t.speakers[0].entity_id };' },
+      (url, init) => {
+        seen.push(`${init?.method ?? 'GET'} ${url.pathname}?quality=${url.searchParams.get('quality')}`);
+        const answer = reads++ === 0 ? responses.get_transcript_pending : responses.get_transcript_premium_ready;
+        return Response.json(answer.body, { status: answer.status, headers: { 'retry-after': '0' } });
+      },
+      { LOADER: fakeLoader() },
+    );
+    assert.equal(reply.result.isError, undefined, textOf(reply));
+    assert.deepEqual(JSON.parse(textOf(reply)).value, { state: 'ready', lines: responses.get_transcript_premium_ready.body.lines.length, speaker: 'ent_99' });
+    assert.deepEqual(seen, ['GET /v1/transcripts/dQw4w9WgXcQ?quality=premium', 'GET /v1/transcripts/dQw4w9WgXcQ?quality=premium']);
+    assert.equal(openapi.paths['/v1/transcripts/{video_id}'].get.responses['202'] !== undefined, true);
   });
 
   it('a budget refusal reaches the program as an ArcmiraError with its unlock, and the result carries the feedback line', async () => {
+    const refusal = responses.get_transcript_spend_limit_exceeded;
     const reply = await callTool(
       'arcmira_execute_read',
       { code: 'return await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" });' },
-      (url) =>
-        url.pathname === '/v1/transcripts/dQw4w9WgXcQ'
-          ? Response.json(responses.get_transcript_preparation_required.body)
-          : url.pathname.endsWith('/quote')
-          ? Response.json({ ...responses.quote_transcription.body, charge: { unit: 'credits', amount: 1200, from: 'on_demand' }, max_on_demand_cents: 240 })
-          : Response.json(
-              { error: { type: 'quota_exceeded', code: 'spend_limit_exceeded', message: 'Over the on-demand limit.', unlock: { tier: 'pro', url: 'https://arcmira.com/dashboard/spending' }, doc_url: 'd', request_id: 'req_1' } },
-              { status: 402 },
-            ),
+      () => Response.json(refusal.body, { status: refusal.status }),
       { LOADER: fakeLoader() },
     );
     assert.equal(reply.result.isError, true);
     const body = JSON.parse(textOf(reply));
     assert.equal(body.error.code, 'spend_limit_exceeded');
     assert.equal(body.error.unlock.url, 'https://arcmira.com/dashboard/spending');
+    assert.deepEqual(body.error.quote, refusal.body.error.details.quote);
     assert.match(body.feedback, /^If this was wrong, slow, or missing for the user, send one arcmira_feedback with call_id mcpc_[0-9a-f]{32}\.$/);
   });
 
@@ -372,14 +352,14 @@ describe('bounded outcomes and Premium reads over MCP', () => {
   });
 });
 
-it('a pending Premium read stays data under a heavy payload', async () => {
+it('a pending read stays data under a heavy payload', async () => {
   const pending = responses.get_transcript_pending.body;
   const reply = await callTool(
     'arcmira_execute_read',
     {
-      code: 'return await arcmira.transcript("dQw4w9WgXcQ",{quality:"premium"});',
+      code: 'return await arcmira.transcript("dQw4w9WgXcQ",{quality:"captions"});',
     },
-    (url) => (url.pathname.startsWith('/v1/transcriptions/') ? Response.json(responses.get_transcription_ready.body) : Response.json({ data: 'x'.repeat(20001), ...pending }, { status: 202 })),
+    () => Response.json({ data: 'x'.repeat(20001), ...pending }, { status: 202 }),
     { LOADER: fakeLoader() },
   );
   const rendered = JSON.parse(textOf(reply));
@@ -387,18 +367,13 @@ it('a pending Premium read stays data under a heavy payload', async () => {
   assert.deepEqual(rendered.value.job, pending.job);
 });
 
-it('a Premium purchase refusal keeps its quote for the program', async () => {
-  const refusal = responses.submit_transcription_max_rows_exceeded;
+it('a Premium refusal keeps its quote from error.details for the program', async () => {
+  const refusal = responses.get_transcript_paid_plan_required;
   const reply = await callTool(
     'arcmira_execute_read',
     { code: 'try { return await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" }); } catch (e) { return { code: e.code, quote: e.quote }; }' },
-    (url) =>
-      url.pathname === '/v1/transcripts/dQw4w9WgXcQ'
-        ? Response.json(responses.get_transcript_preparation_required.body)
-        : url.pathname.endsWith('/quote')
-          ? Response.json(responses.quote_transcription.body)
-          : Response.json(refusal.body, { status: refusal.status }),
+    () => Response.json(refusal.body, { status: refusal.status }),
     { LOADER: fakeLoader() },
   );
-  assert.deepEqual(JSON.parse(textOf(reply)).value, { code: 'max_rows_exceeded', quote: refusal.body.quote });
+  assert.deepEqual(JSON.parse(textOf(reply)).value, { code: 'paid_plan_required', quote: refusal.body.error.details.quote });
 });

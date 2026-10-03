@@ -87,11 +87,12 @@ return {
         code: `${pick('Mercury')}
 const after = arcmira.daysAgo(90);
 const reads = [];
-let cursor, entity;
+let cursor, entity, window;
 do {
   const page = await arcmira.recommendations(id, { kind: "sponsored", after, limit: 50, cursor });
   entity = page.entity;
-  reads.push(...page.data);
+  window = page.window;
+  reads.push(...page.recommendations);
   cursor = page.has_more ? page.next_cursor : undefined;
 } while (cursor && reads.length < 500);
 const shows = new Map();
@@ -104,7 +105,7 @@ for (const x of reads) {
   shows.set(name, row);
 }
 return {
-  brand: { id, name: entity?.name ?? e?.name ?? null, type: entity?.type ?? e?.type ?? null, assumed, why }, window: { after, through: arcmira.today() }, ad_reads_total: reads.length,
+  brand: { id, name: entity?.name ?? e?.name ?? null, type: entity?.type ?? e?.type ?? null, assumed, why }, window, ad_reads_total: reads.length,
   shows: [...shows.values()].sort((a, b) => b.ad_reads - a.ad_reads).slice(0, 10).map(s => ({ ...s, episodes: s.episodes.size })),
   sample_read: reads[0] ? { said: reads[0].verbatim_quote, show: reads[0].media.source_channel?.name ?? null, date: reads[0].media.published_at, promo_code: reads[0].promo_code } : null,
 };`,
@@ -145,10 +146,10 @@ return {
       'Find what to follow and the monitors that could hold it: the second program, in `arcmira_execute_read`. Reuse ids the research already found instead of resolving again.',
       'A monitor fits when its name or its trackers match the subject. Suggest it by name ("Add Linear to your Dev tools monitor?") and wait for a yes.',
       'None fits: ask how the user wants updates, one question at a time, each with a default they can accept with "yes". First where: email to the account address (default) or Slack. Then when: as it happens, an hourly digest, or a daily digest (default daily). Then the name (default: the subject, like "Data center discourse").',
-      `Slack: the first program lists the connected workspaces (\`slack\`). With one, deliver there: \`notifySlack: true\`, its id as \`slackIntegrationId\` and its \`default_channel_id\` as \`slackChannelId\`; with several, ask which. With none, link ${LINKS.integrations} to connect one, and save with email for now, saying so; switch it later with \`arcmira.monitors.update\`.`,
-      'Save with the third program, in `arcmira_execute_write`: create the monitor only when none fits (or set Slack on the one that fits), then `addEntities` with every id in one call.',
+      `Slack: the first program lists the connected workspaces (\`slack\`). With one, deliver there: \`notify_slack: true\`, its id as \`slack_integration_id\` and its \`default_channel_id\` as \`slack_channel_id\`; with several, ask which. With none, link ${LINKS.integrations} to connect one, and save with email for now, saying so; switch it later with \`arcmira.monitors.update\`.`,
+      'Save with the third program, in `arcmira_execute_write`: create the monitor only when none fits (or set Slack on the one that fits), then `addEntities` with every id in one call. A name resolve found nothing for can still be followed by its exact name with `addName` (a show by its UC id), which catches it once a show says it.',
       'Tell the user plainly about every id that did not attach. `entity_not_found`: Arcmira has no such entity; offer another spelling. `entity_type_not_trackable`: that kind of entity cannot be followed. `tracker_limit_reached`: the plan\'s tracker limit is full; pausing or removing trackers in the dashboard, or a higher plan, makes room. `tracked_in_another_monitor`: say which monitor already follows it (`current_monitor_name`) and ask before moving it; on a yes, `arcmira.monitors.attachTrackers(monitorId, [tracker_id])` in `arcmira_execute_write` moves it. When a result carries `canonical_entity_id`, the id was merged into that one; name the canonical entity.',
-      'Close with what arrives, where and when, and that `arcmira.monitors.update(id, { isPaused: true })` pauses it; nothing is deleted.',
+      'Close with what arrives, where and when, and that `arcmira.monitors.update(id, { paused: true })` pauses it; nothing is deleted.',
     ],
     programs: [
       {
@@ -165,12 +166,12 @@ const quotesTagged = quotes.chunks.length > 0;   // false: the fallback matched 
 if (!quotesTagged) quotes = await arcmira.search({ query: m.entity.name, after, limit: 5 });
 return {
   entity: { id, name: m.entity.name, type: m.entity.type, page: m.entity.page, assumed, why },
-  window: { after, through: arcmira.today() },
+  window: occ.window,
   momentum: { verdict: m.verdict, last_7d: m.volume.mentions_7d, last_30d: m.volume.mentions_30d, prior_30d: m.volume.mentions_prior_30d, as_of: m.as_of },
   shows: occ.rows.map(x => ({ show: x.channel_name, channel_id: x.channel_id, episodes: x.count, times_said: x.occurrences })),
-  context: notes.data.map(x => ({ show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at, note: x.description })),
+  context: notes.mentions.map(x => ({ show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at, note: x.description })),
   quotes_tagged_to_entity: quotesTagged,
-  quotes: quotes.chunks.map(c => ({ said: c.text.slice(0, 300), show: c.channelName, episode: c.videoTitle, date: c.publishedAt, url: c.watchUrl })),
+  quotes: quotes.chunks.map(c => ({ said: c.text.slice(0, 300), show: c.channel_name, episode: c.video_title, date: c.published_at, url: c.watch_url })),
 };`,
       },
       {
@@ -190,10 +191,10 @@ for (const t of TOPICS) {
 }
 const [{ monitors }, { integrations }] = await Promise.all([arcmira.monitors.list(), arcmira.integrations.slack()]);
 const existing = await Promise.all(monitors.slice(0, 10).map(async m => ({
-  id: m.id, name: m.name, paused: m.isPaused, frequency: m.notifyFrequency, slack: Boolean(m.notifySlack),
-  follows: (await arcmira.monitors.trackers(m.id)).trackers.map(t => t.displayName ?? t.entityName),
+  id: m.id, name: m.name, paused: m.paused, frequency: m.notify_frequency, slack: Boolean(m.notify_slack),
+  follows: (await arcmira.monitors.trackers(m.id)).trackers.map(t => t.display_name ?? t.entity_name),
 })));
-const slack = integrations.map(i => ({ slackIntegrationId: i.id, workspace: i.team_name, slackChannelId: i.default_channel_id, channel: i.channels.find(c => c.id === i.default_channel_id)?.name ?? null }));
+const slack = integrations.map(i => ({ slack_integration_id: i.id, workspace: i.team_name, slack_channel_id: i.default_channel_id, channel: i.channels.find(c => c.id === i.default_channel_id)?.name ?? null }));
 return { follow, unresolved, monitors: existing, more_monitors: Math.max(0, monitors.length - 10), slack };`,
       },
       {
@@ -201,23 +202,30 @@ return { follow, unresolved, monitors: existing, more_monitors: Math.max(0, moni
         tool: 'write',
         code: `const MONITOR_ID = null;   // a fitting monitor's id from the first program, or null to create one
 const IDS = ["ent_279443"];   // every id the user agreed to follow
-const DELIVERY = { name: "Linear", notifyFrequency: "daily" };   // the user's answers, for a new monitor
-const SLACK = null;   // the user chose Slack: { slackIntegrationId, slackChannelId } from the first program's slack
-const slack = SLACK ? { notifySlack: true, slackIntegrationId: SLACK.slackIntegrationId, ...(SLACK.slackChannelId ? { slackChannelId: SLACK.slackChannelId } : {}) } : {};
+const NAMES = [];   // names resolve found nothing for that the user still wants followed: [{ name: "Acme Robotics", type: "organization" }]
+const DELIVERY = { name: "Linear", notify_frequency: "daily" };   // the user's answers, for a new monitor
+const SLACK = null;   // the user chose Slack: { slack_integration_id, slack_channel_id } from the first program's slack
+const slack = SLACK ? { notify_slack: true, slack_integration_id: SLACK.slack_integration_id, ...(SLACK.slack_channel_id ? { slack_channel_id: SLACK.slack_channel_id } : {}) } : {};
 const monitor = MONITOR_ID
   ? (SLACK ? (await arcmira.monitors.update(MONITOR_ID, slack)).monitor : { id: MONITOR_ID })
   : (await arcmira.monitors.create({ ...DELIVERY, ...slack })).monitor;
-const { results } = await arcmira.monitors.addEntities(monitor.id, IDS);
+const { results } = IDS.length ? await arcmira.monitors.addEntities(monitor.id, IDS) : { results: [] };
+const byName = [];
+for (const n of NAMES) {
+  try { byName.push(...(await arcmira.monitors.addName(monitor.id, [n])).results); }
+  catch (err) { byName.push({ name: n.name, code: err.code, message: err.message }); }
+}
 const others = results.some(r => r.reason === "tracked_in_another_monitor") ? (await arcmira.monitors.list()).monitors : [];
 return {
   monitor: { id: monitor.id, name: monitor.name ?? null, created: !MONITOR_ID, slack: Boolean(SLACK) },
   attached: results.filter(r => r.attached).map(r => ({ entity_id: r.canonical_entity_id ?? r.entity_id, merged_from: r.canonical_entity_id ? r.entity_id : null, new_tracker: r.created })),
   not_attached: results.filter(r => !r.attached).map(r => ({ entity_id: r.entity_id, reason: r.reason, tracker_id: r.tracker_id ?? null, current_monitor_id: r.current_monitor_id ?? null, current_monitor_name: others.find(m => m.id === r.current_monitor_id)?.name ?? null })),
+  by_name: byName,
 };`,
       },
     ],
     good: [
-      'For what was said: opens with the entity (name, type, id), gives the verdict with the 7-day and 30-day counts and `as_of`, the shows with episode counts for the stated window, and two or three quotes in the speakers\' words, each with show, date and `watchUrl`.',
+      'For what was said: opens with the entity (name, type, id), gives the verdict with the 7-day and 30-day counts and `as_of`, the shows with episode counts for the stated window, and two or three quotes in the speakers\' words, each with show, date and `watch_url`.',
       'Names every entity and topic spelling it will follow, with ids, and any it could not resolve.',
       'Suggests an existing monitor only after reading the user\'s monitors, and says which entities it already follows.',
       'Asks the delivery questions one at a time with a default each; for Slack, uses the connected workspace, or links the connection page and says the monitor uses email until then.',
@@ -253,13 +261,13 @@ return {
 const hits = await arcmira.search({ query: "Anthropic IPO", speakerIds: [id], limit: 5 });
 const moments = [];
 for (const c of hits.chunks.slice(0, 2)) {
-  const moment = { episode: c.videoTitle, show: c.channelName, date: c.publishedAt, url: c.watchUrl, speakers: c.speakers_by.map(s => s.name) };
+  const moment = { episode: c.video_title, show: c.channel_name, date: c.published_at, url: c.watch_url, speakers: c.speakers_by.map(s => s.name) };
   try {
-    const t = await arcmira.transcript(c.videoId, { start: Math.max(0, c.startSeconds - 10), end: c.startSeconds + 50 });
-    moment.clip = { start: t.lines[0]?.start ?? c.startSeconds, end: t.lines.at(-1)?.end ?? c.startSeconds + 60 };
+    const t = await arcmira.transcript(c.video_id, { start: Math.max(0, c.start_seconds - 10), end: c.start_seconds + 50 });
+    moment.clip = { start: t.lines[0]?.start ?? c.start_seconds, end: t.lines.at(-1)?.end ?? c.start_seconds + 60 };
     moment.lines = t.lines.map(l => \`[\${Math.round(l.start)}s] \${l.text}\`);
   } catch (err) {
-    moment.clip = { start: c.startSeconds, end: c.startSeconds + 60 };
+    moment.clip = { start: c.start_seconds, end: c.start_seconds + 60 };
     moment.passage = c.text;
     moment.transcript = err.code;
   }
@@ -271,7 +279,7 @@ return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of
     good: [
       'Names the speaker or show it searched, with the id, and quotes the words exactly as the transcript lines give them, trimmed to whole sentences, never paraphrased inside quotation marks.',
       'Gives the show, the episode title, the date, and the speaker when the chunk or a premium transcript names one.',
-      'Links the `watchUrl`, which starts at the moment, and gives a clip start and end in seconds from the transcript lines.',
+      'Links the `watch_url`, which starts at the moment, and gives a clip start and end in seconds from the transcript lines.',
       'Says so when nothing matched, with `as_of`, instead of offering a quote from memory.',
     ],
     traps: [
@@ -303,9 +311,9 @@ const [m, rows, own] = await Promise.all([
 ]);
 const about = await arcmira.search({ query: m.entity.name, about: [id], after: arcmira.daysAgo(30), limit: 3 });
 const appeared = new Map();
-for (const x of rows.data) if (x.is_appearance) appeared.set(x.media.video_id, { show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at });
+for (const x of rows.mentions) if (x.is_appearance) appeared.set(x.media.video_id, { show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at });
 let fromAppearance = null;   // no speaker-tagged chunks: read their newest appearance instead
-const ep = own.chunks.length === 0 ? rows.data.find(x => x.is_appearance) : undefined;
+const ep = own.chunks.length === 0 ? rows.mentions.find(x => x.is_appearance) : undefined;
 if (ep) {
   try {
     const t = await arcmira.transcript(ep.media.video_id, { start: Math.max(0, ep.start_seconds - 5), end: ep.start_seconds + 90 });
@@ -320,9 +328,9 @@ return {
   attention: { verdict: m.verdict, last_30d: m.volume.mentions_30d, prior_30d: m.volume.mentions_prior_30d, as_of: m.as_of, top_shows: m.top_shows.map(s => [s.channel_name, s.mentions]) },
   appeared_on: [...appeared.values()].slice(0, 8),
   appeared_on_partial: rows.has_more,   // true: only the newest 40 mention rows were read
-  in_their_words: own.chunks.map(c => ({ said: c.text.slice(0, 300), episode: c.videoTitle, show: c.channelName, date: c.publishedAt, url: c.watchUrl })),
+  in_their_words: own.chunks.map(c => ({ said: c.text.slice(0, 300), episode: c.video_title, show: c.channel_name, date: c.published_at, url: c.watch_url })),
   from_their_appearance: fromAppearance,
-  said_about_them: about.chunks.map(c => ({ said: c.text.slice(0, 200), show: c.channelName, date: c.publishedAt, url: c.watchUrl })),
+  said_about_them: about.chunks.map(c => ({ said: c.text.slice(0, 200), show: c.channel_name, date: c.published_at, url: c.watch_url })),
 };`,
       },
     ],
@@ -373,7 +381,7 @@ const [s0, s1, e0, e1, occ, sp0, sp1] = await Promise.all([
 ]);
 const inOther = new Map(sp1.sponsors.map(x => [x.entity.id, x.ad_reads]));
 return {
-  window: { after, through: arcmira.today() },
+  window: occ.window,
   shows: ids.map((id, i) => ({ name: names[i], channel_id: id, assumed: Boolean(assumed[i]), why: assumed[i], videos_indexed: [s0, s1][i].channel.searchable_videos, indexed_through: [s0, s1][i].channel.indexed_through, latest: [e0, e1][i].episodes[0]?.title ?? null,
     top: occ.rows.filter(x => x.channel_id === id).slice(0, 5).map(x => [x.name, x.count]) })),
   both_discussed: occ.shared.slice(0, 5).map(x => ({ name: x.name, id: x.entity_id, episodes_by_show: x.by_channel.map(c => [c.channel_name, c.count]) })),

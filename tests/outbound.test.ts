@@ -32,11 +32,11 @@ const post = (path: string, body = "{}", method = "POST") =>
   new Request(`https://api.arcmira.com${path}`, { method, body, headers: { "content-type": "application/json", "idempotency-key": "key-1" } });
 
 describe("the sandbox outbound allowlists", () => {
-  it("read allows any GET under /v1 and POST /v1/transcriptions, nothing else", () => {
+  it("read allows any GET under /v1, nothing else: a Premium read buys inside the GET", () => {
     for (const [method, path, allowed] of [
       ["GET", "/v1/monitors", true],
       ["GET", "/v1/transcripts/dQw4w9WgXcQ", true],
-      ["POST", "/v1/transcriptions", true],
+      ["POST", "/v1/transcriptions", false],
       ["POST", "/v1/monitors", false],
       ["PATCH", "/v1/monitors/mon_1", false],
       ["POST", "/v1/monitors/mon_1/entities", false],
@@ -52,7 +52,7 @@ describe("the sandbox outbound allowlists", () => {
   it("write adds POST and PATCH under /v1/monitors and /v1/trackers, never DELETE or the webhook secret", () => {
     for (const [method, path, allowed] of [
       ["GET", "/v1/me", true],
-      ["POST", "/v1/transcriptions", true],
+      ["POST", "/v1/transcriptions", false],
       ["POST", "/v1/monitors", true],
       ["PATCH", "/v1/monitors/mon_1", true],
       ["POST", "/v1/monitors/mon_1/entities", true],
@@ -100,9 +100,9 @@ describe("the sandbox outbound allowlists", () => {
     assert.equal(sent[0].headers.get("content-type"), "application/json");
     assert.equal(sent[0].headers.get("authorization"), "Bearer arc_sk_secret");
     assert.equal(sent[0].url.searchParams.get("src"), "mcp-tool");
-    const read = await through("read", post("/v1/transcriptions", '{"video_id":"dQw4w9WgXcQ","max_rows":300,"max_on_demand_cents":0}'));
-    assert.equal(read.sent[0]?.method, "POST");
-    assert.equal(read.sent[0]?.url.pathname, "/v1/transcriptions");
+    const read = await through("read", post("/v1/transcriptions", '{"video_id":"dQw4w9WgXcQ"}'));
+    assert.equal(read.response.status, 403);
+    assert.equal(read.sent.length, 0);
   });
 
   it("refuses a body over the cap, and an authenticated redirect", async () => {

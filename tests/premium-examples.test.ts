@@ -5,39 +5,26 @@ import { runProgram } from "../src/sandbox.ts";
 import { fakeLoader, fakeOutbound } from "./fake-loader.ts";
 import responses from "./fixtures/transcription-responses.json" with { type: "json" };
 
-it("every Premium worked example reads lines only when ready, buys and waits through the read, and hands back quota", async () => {
+it("every Premium worked example reads lines only when ready, reads again after a pending read, stops on a failed purchase, and hands back refusals", async () => {
   const examples = EXAMPLES.filter((example) =>
     example.code.includes('quality: "premium"'),
   );
   assert.ok(examples.length > 0);
   const variants = [
-    {
-      status: 200,
-      body: {
-        ...responses.get_transcript_ready.body,
-        quality: "premium",
-        speakers: [],
-      },
-    },
+    responses.get_transcript_premium_ready,
     responses.get_transcript_pending,
-    responses.get_transcript_preparation_required,
-    {
-      status: 402,
-      body: {
-        error: {
-          code: "quota_exceeded",
-          message: "No rows available",
-          request_id: "req-quota",
-        },
-      },
-    },
+    responses.get_transcript_failed,
+    responses.get_transcript_spend_limit_exceeded,
+    responses.get_transcript_paid_plan_required,
   ];
   for (const example of examples)
     for (const variant of variants) {
+      let reads = 0;
       const outbound = fakeOutbound({
-        "/v1/transcriptions": () => Response.json(responses.get_transcription_ready.body),
-        "/v1/transcripts": () =>
-          Response.json(variant.body, { status: variant.status }),
+        "/v1/transcripts": () => {
+          const answer = reads++ === 0 ? variant : responses.get_transcript_premium_ready;
+          return Response.json(answer.body, { status: answer.status, headers: { "retry-after": "0" } });
+        },
       });
       const execution = await runProgram(
         { loader: fakeLoader(), outbound, apiBase: "https://api.arcmira.com", access: "read" },
@@ -45,15 +32,19 @@ it("every Premium worked example reads lines only when ready, buys and waits thr
       );
       if (variant.status >= 400) {
         assert.equal(execution.ok, false, example.title);
-        if (!execution.ok) assert.equal(execution.error.code, "quota_exceeded");
+        if (!execution.ok) assert.equal(execution.error.code, (variant.body as { error: { code: string } }).error.code);
+        assert.equal(outbound.urls.length, 1);
         continue;
       }
       assert.equal(execution.ok, true, example.title);
       if (!execution.ok) continue;
-      const result = JSON.parse(JSON.stringify(execution.value));
-      const state = "state" in variant.body ? variant.body.state : null;
-      if (state !== "ready") assert.deepEqual(result, variant.body);
-      // pending: read, poll, read. preparation_required: read, quote, buy, read.
-      assert.equal(outbound.urls.length, state === "pending" ? 3 : state === "preparation_required" ? 4 : 1);
+      if (variant === responses.get_transcript_failed) {
+        assert.equal((execution.value as { state: string }).state, "failed", example.title);
+        assert.equal(outbound.urls.length, 1);
+        continue;
+      }
+      assert.ok(Array.isArray(execution.value), example.title);
+      assert.equal(outbound.urls.length, variant.status === 202 ? 2 : 1);
+      assert.ok(outbound.urls.every((url) => url.pathname === "/v1/transcripts/cdLeJU_1UH8"));
     }
 });
