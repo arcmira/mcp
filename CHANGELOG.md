@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Correct the portable Agent Plugins MCP configuration to declare its schema and use `streamable-http`. Cursor continues using the existing host-specific `.mcp.json`; the remote server and other host configurations are unchanged. Kiro client validation and catalog submission remain pending.
+
 ## 0.10.1
 
 - Tool annotations now describe effects across every operation a tool can execute. Only reference lookup is read-only. Both program tools can start Premium work and spend account budget; the write tool can also overwrite monitor settings and pause monitors. Both carry destructive and open-world hints. Feedback is an additive, non-idempotent write. Clients may ask for confirmation based on these corrected hints.
