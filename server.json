@@ -1,13 +1,13 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.arcmira/arcmira",
-  "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations.",
+  "description": "Search YouTube transcripts for timestamps, speaker appearances, sponsors and recommendations.",
   "repository": {
     "url": "https://github.com/arcmira/mcp",
     "source": "github"
   },
-  "version": "0.10.0",
-  "websiteUrl": "https://arcmira.com/docs/mcp-server",
+  "version": "0.10.1",
+  "websiteUrl": "https://arcmira.com/docs",
   "remotes": [
     {
       "type": "streamable-http",

@@ -7,7 +7,7 @@
     {
       "name": "arcmira",
       "source": "./plugins/arcmira",
-      "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations."
+      "description": "Search YouTube transcripts for timestamps, speaker appearances, sponsors and recommendations."
     }
   ]
 }

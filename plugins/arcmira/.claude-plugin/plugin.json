@@ -1,12 +1,12 @@
 {
   "name": "arcmira",
-  "version": "0.10.0",
-  "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations.",
+  "version": "0.10.1",
+  "description": "Search YouTube transcripts for timestamps, speaker appearances, sponsors and recommendations.",
   "author": {
     "name": "Arcmira",
     "url": "https://arcmira.com"
   },
-  "homepage": "https://arcmira.com/docs/mcp-server",
+  "homepage": "https://arcmira.com/docs",
   "repository": "https://github.com/arcmira/mcp",
   "license": "Apache-2.0",
   "keywords": [
@@ -24,6 +24,6 @@
   "icon": "./assets/icon.png",
   "privacyPolicyUrl": "https://arcmira.com/privacy",
   "supportUrl": "https://arcmira.com/contact",
-  "documentationUrl": "https://arcmira.com/docs/mcp-server",
+  "documentationUrl": "https://arcmira.com/docs",
   "termsOfServiceUrl": "https://arcmira.com/terms"
 }

@@ -1,7 +1,7 @@
 {
   "name": "@arcmira/mcp",
-  "version": "0.10.0",
-  "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations.",
+  "version": "0.10.1",
+  "description": "Search YouTube transcripts for timestamps, speaker appearances, sponsors and recommendations.",
   "keywords": [
     "mcp",
     "mcp-server",
@@ -20,7 +20,7 @@
   "mcpName": "io.github.arcmira/arcmira",
   "license": "UNLICENSED",
   "author": "Arcmira",
-  "homepage": "https://arcmira.com/docs/mcp-server",
+  "homepage": "https://arcmira.com/docs",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/arcmira/mcp.git"

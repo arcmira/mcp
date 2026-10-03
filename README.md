@@ -2,6 +2,8 @@
 
 Give your AI the ability to find who said what with timestamps, discover what’s being discussed across videos and livestreams, and distinguish organic recommendations from sponsored ad reads.
 
+[API documentation](https://arcmira.com/docs) · [OpenAPI schema](https://api.arcmira.com/v1/openapi.json) · [MCP setup](https://arcmira.com/docs/mcp-server)
+
 ## Connect your AI
 
 Copy this into your coding agent:
@@ -76,7 +78,7 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 
 Every tool also takes an optional `intent`, at most 300 characters: the user's request in a few words. A host that omits it loses nothing. See [What we log](#what-we-log).
 
-`arcmira_describe`, `arcmira_execute_read` and `arcmira_feedback` are read-only: they change nothing on the account. Every read is metered, Premium included. `arcmira_execute_write` is not read-only and not destructive: it creates and changes monitors and trackers, and pauses instead of deleting.
+Only `arcmira_describe` is annotated read-only. Both program tools can start Premium transcription and spend credits or account budget, so they carry write and destructive annotations. The write tool can also overwrite monitor settings and pause monitors. Both can request arbitrary public videos and carry open-world annotations. Feedback adds a stored record and is an additive write. These labels describe possible effects; the `execute_read` name identifies the client access level, not a guarantee of no side effects.
 
 On-demand spend extends the plan. The account's on-demand budget is the approval, so an agent never asks the user for a cents amount. When a budget or plan blocks a purchase (`spend_limit_exceeded`, `quota_exceeded`, a plan gate), the agent tells the user to raise the on-demand budget at https://arcmira.com/dashboard/spending or upgrade the plan at https://arcmira.com/pricing, and links the refusal's `unlock.url`.
 

@@ -50,7 +50,7 @@ describe('the server card', () => {
     for (const tool of card.tools) {
       assert.ok(tool.title.length > 0, `${tool.name} has no title`);
       assert.equal(tool.inputSchema.type, 'object');
-      assert.equal(tool.annotations.readOnlyHint, tool.name !== 'arcmira_execute_write');
+      assert.equal(tool.annotations.readOnlyHint, tool.name === 'arcmira_describe');
     }
     assert.deepEqual(
       card.tools.map((tool) => tool.name),

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.1
+
+- Tool annotations now describe effects across every operation a tool can execute. Only reference lookup is read-only. Both program tools can start Premium work and spend account budget; the write tool can also overwrite monitor settings and pause monitors. Both carry destructive and open-world hints. Feedback is an additive, non-idempotent write. Clients may ask for confirmation based on these corrected hints.
+- Every tool must declare all four effect hints. The server card, MCP tools/list, manifest checks and smoke checks use these declarations.
+- API documentation and OpenAPI links appear near the top of both READMEs. Package homepages and the registry website point to API docs. Codex metadata declares both Read and Write.
+- These corrections do not establish OpenAI Directory compatibility. Separate operation tools, entitlement handling and telemetry review remain required before submission.
+
 ## 0.10.0
 
 The client follows the cleaned-up v1 API (basedanarki/arcmira PR 678). Ship it right after that backend deploy: the 0.9 reference and skills read response fields the API no longer sends.

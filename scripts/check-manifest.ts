@@ -13,7 +13,7 @@ import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { SRC } from '../src/api.ts';
 import { METHODS, referenceText } from '../src/reference.ts';
-import { FEEDBACK_CATEGORIES, READ_ONLY, SERVER_INSTRUCTIONS, TOOLS, feedbackBody } from '../src/tools.ts';
+import { FEEDBACK_CATEGORIES, SERVER_INSTRUCTIONS, TOOLS, feedbackBody } from '../src/tools.ts';
 import server from '../server.json' with { type: 'json' };
 
 const arg = process.argv[2] ?? 'https://api.arcmira.com/v1/openapi.json';
@@ -131,11 +131,15 @@ for (const tool of TOOLS) {
     if (!property.description) fail(`${label}: input ${name} has no description`);
   }
   for (const hint of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const) {
-    if ((tool.annotations ?? READ_ONLY)[hint] === undefined) fail(`${label}: annotation ${hint} missing`);
+    if (typeof tool.annotations[hint] !== 'boolean') fail(`${label}: annotation ${hint} must be a boolean`);
   }
-  const hints = tool.annotations ?? READ_ONLY;
-  if (hints.readOnlyHint !== (tool.name !== 'arcmira_execute_write')) fail(`${label}: readOnlyHint must be ${tool.name !== 'arcmira_execute_write'} (owner ruling 2026-10-02)`);
-  if (hints.destructiveHint !== false) fail(`${label}: destructiveHint must be false; 0.9 deletes nothing`);
+  const hints = tool.annotations;
+  const referenceOnly = tool.name === 'arcmira_describe';
+  const executesProgram = tool.name === 'arcmira_execute_read' || tool.name === 'arcmira_execute_write';
+  if (hints.readOnlyHint !== referenceOnly) fail(`${label}: only reference lookup is guaranteed not to persist data or start paid work`);
+  if (hints.destructiveHint !== executesProgram) fail(`${label}: programs can purchase Premium work or change existing monitors`);
+  if (hints.openWorldHint !== executesProgram) fail(`${label}: programs can request arbitrary public videos`);
+  if (hints.idempotentHint !== referenceOnly) fail(`${label}: only reference lookup is guaranteed safe to repeat unchanged`);
   if (!tool.name.startsWith('arcmira_')) fail(`${label}: tool names carry the arcmira_ prefix`);
 }
 if (/approved a cents amount|state the amount and ask/i.test(SERVER_INSTRUCTIONS + referenceText())) fail('instructions or reference ask the user for a cents amount');
