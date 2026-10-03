@@ -6206,7 +6206,7 @@
           },
           "status_url": {
             "type": "string",
-            "description": "Absolute URL to read again for this job: GET /v1/transcripts/{video_id}?quality=premium, which answers 202 while it prepares, 200 ready once it is, and 200 failed if it failed."
+            "description": "Absolute URL to read again for this job: GET /v1/transcripts/{video_id}?quality=premium, which answers 202 while it transcribes, 200 ready once it is done, and 200 failed if it failed."
           }
         },
         "required": [
@@ -6218,7 +6218,7 @@
           "created_at",
           "status_url"
         ],
-        "description": "Your open Premium purchase for this video, when captions were served while it prepares."
+        "description": "Your open Premium purchase for this video, when captions were served while it transcribes."
       },
       "TranscriptFailed": {
         "type": "object",
