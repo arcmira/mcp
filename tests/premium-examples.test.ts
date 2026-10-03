@@ -5,7 +5,7 @@ import { runProgram } from "../src/sandbox.ts";
 import { fakeLoader, fakeOutbound } from "./fake-loader.ts";
 import responses from "./fixtures/transcription-responses.json" with { type: "json" };
 
-it("every Premium worked example reads lines only when ready, reads again after a pending read, and hands back refusals", async () => {
+it("every Premium worked example reads lines only when ready, reads again after a pending read, stops on a failed purchase, and hands back refusals", async () => {
   const examples = EXAMPLES.filter((example) =>
     example.code.includes('quality: "premium"'),
   );
@@ -13,6 +13,7 @@ it("every Premium worked example reads lines only when ready, reads again after 
   const variants = [
     responses.get_transcript_premium_ready,
     responses.get_transcript_pending,
+    responses.get_transcript_failed,
     responses.get_transcript_spend_limit_exceeded,
     responses.get_transcript_paid_plan_required,
   ];
@@ -37,6 +38,11 @@ it("every Premium worked example reads lines only when ready, reads again after 
       }
       assert.equal(execution.ok, true, example.title);
       if (!execution.ok) continue;
+      if (variant === responses.get_transcript_failed) {
+        assert.equal((execution.value as { state: string }).state, "failed", example.title);
+        assert.equal(outbound.urls.length, 1);
+        continue;
+      }
       assert.ok(Array.isArray(execution.value), example.title);
       assert.equal(outbound.urls.length, variant.status === 202 ? 2 : 1);
       assert.ok(outbound.urls.every((url) => url.pathname === "/v1/transcripts/cdLeJU_1UH8"));

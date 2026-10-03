@@ -26,7 +26,6 @@ const openapiUrl = /^(https?|file):/.test(arg) ? arg : pathToFileURL(arg).href;
 const NO_SRC = new Set([
   'get_me',
   'quote_transcription',
-  'create_tracker',
   'list_monitors',
   'list_monitor_trackers',
   'create_monitor',
@@ -84,7 +83,6 @@ for (const [path, method] of [
   ['/v1/transcripts/{video_id}/quote', 'get'],
   ['/v1/search', 'get'],
   ['/v1/recommendations', 'get'],
-  ['/v1/trackers', 'post'],
   ['/v1/monitors', 'get'],
   ['/v1/monitors', 'post'],
   ['/v1/monitors/{id}', 'patch'],
@@ -213,7 +211,7 @@ const SAMPLE_CALLS: Record<string, (a: Arcmira) => Promise<unknown>> = {
   status_channel: (a) => a.status({ channelId: MTS }),
   status_me: (a) => a.status({}),
   quote: (a) => a.quote('https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
-  transcript_premium: (a) => a.transcript('dQw4w9WgXcQ', { quality: 'premium' }),
+  transcript_premium: (a) => a.transcript('dQw4w9WgXcQ', { quality: 'premium', retry: true }),
   monitors_list: (a) => (a.monitors as unknown as Arcmira).list(),
   monitors_trackers: (a) => (a.monitors as unknown as Arcmira).trackers('mon_1'),
   monitors_create: (a) =>
@@ -230,9 +228,12 @@ const SAMPLE_CALLS: Record<string, (a: Arcmira) => Promise<unknown>> = {
       digest_time: '09:00',
     }),
   monitors_update: (a) => (a.monitors as unknown as Arcmira).update('mon_1', { paused: true, notify_frequency: 'hourly' }),
-  monitors_addName: (a) => (a.monitors as unknown as Arcmira).addName('mon_1', { name: 'Acme Robotics', type: 'org' }),
-  monitors_addName_person: (a) => (a.monitors as unknown as Arcmira).addName('mon_1', { name: 'Jensen Huang', type: 'person', personMatchMode: 'both' }),
-  monitors_addName_channel: (a) => (a.monitors as unknown as Arcmira).addName('mon_1', { name: TBPN, type: 'channel' }),
+  monitors_addName: (a) =>
+    (a.monitors as unknown as Arcmira).addName('mon_1', [
+      { name: 'Acme Robotics', type: 'org' },
+      { name: 'Jensen Huang', type: 'person', personMatchMode: 'both' },
+      { name: TBPN, type: 'channel' },
+    ]),
   monitors_attachTrackers: (a) => (a.monitors as unknown as Arcmira).attachTrackers('mon_1', ['trk_1']),
   integrations_slack: (a) => (a.integrations as unknown as Arcmira).slack(),
   monitors_addEntities: (a) => (a.monitors as unknown as Arcmira).addEntities('mon_1', ['ent_14', 'ent_99'], { personMatchMode: 'both' }),

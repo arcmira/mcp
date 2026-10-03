@@ -118,7 +118,10 @@ const monitor = MONITOR_ID
   : (await arcmira.monitors.create({ ...DELIVERY, ...slack })).monitor;
 const { results } = IDS.length ? await arcmira.monitors.addEntities(monitor.id, IDS) : { results: [] };
 const byName = [];
-for (const n of NAMES) byName.push(await arcmira.monitors.addName(monitor.id, n));
+for (const n of NAMES) {
+  try { byName.push(...(await arcmira.monitors.addName(monitor.id, [n])).results); }
+  catch (err) { byName.push({ name: n.name, code: err.code, message: err.message }); }
+}
 const others = results.some(r => r.reason === "tracked_in_another_monitor") ? (await arcmira.monitors.list()).monitors : [];
 return {
   monitor: { id: monitor.id, name: monitor.name ?? null, created: !MONITOR_ID, slack: Boolean(SLACK) },

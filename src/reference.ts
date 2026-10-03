@@ -26,7 +26,7 @@ export const LINKS = {
 export const BUDGET_RULE = `On-demand spend extends the plan: the account's on-demand budget is the approval, so never ask the user for a cents amount. When a budget or plan blocks a purchase (spend_limit_exceeded, quota_exceeded, a plan gate), tell the user to raise the on-demand budget at ${LINKS.spending} or upgrade the plan at ${LINKS.pricing} (not on Ultra or Enterprise), and link unlock.url when the refusal carries one.`;
 
 /** Rule 5: monitors are the user's, so the agent reads them before it suggests or creates one. */
-export const MONITOR_RULE = `MONITORS. Never assume a monitor exists ("Competitors" may not). To follow entities the research found: list the user's monitors with arcmira.monitors.list() and suggest any whose name or trackers fit. If none fits, ask how they want updates, one question at a time, each with a default: email (default) or Slack, then as it happens, an hourly digest or a daily digest (default daily). For Slack, read arcmira.integrations.slack(): with a workspace, set notify_slack: true, its id as slack_integration_id and its default_channel_id as slack_channel_id; with none, link ${LINKS.integrations} to connect one and use email for now, saying so. For a topic, resolve its spelling variants ("data centers", "datacenters", "data centre") and follow every one that is its own topic id. Then in arcmira_execute_write: arcmira.monitors.create when there is no fit, and arcmira.monitors.addEntities with every id in one call. A name that resolves to nothing can still be followed by its exact name with arcmira.monitors.addName(monitorId, { name, type }); a show by its UC id. Tell the user about every result with attached: false: entity_not_found, entity_type_not_trackable, tracker_limit_reached, or tracked_in_another_monitor (name the monitor at current_monitor_id and ask before moving it with arcmira.monitors.attachTrackers). Pause with arcmira.monitors.update(id, { paused: true }); there is no delete.`;
+export const MONITOR_RULE = `MONITORS. Never assume a monitor exists ("Competitors" may not). To follow entities the research found: list the user's monitors with arcmira.monitors.list() and suggest any whose name or trackers fit. If none fits, ask how they want updates, one question at a time, each with a default: email (default) or Slack, then as it happens, an hourly digest or a daily digest (default daily). For Slack, read arcmira.integrations.slack(): with a workspace, set notify_slack: true, its id as slack_integration_id and its default_channel_id as slack_channel_id; with none, link ${LINKS.integrations} to connect one and use email for now, saying so. For a topic, resolve its spelling variants ("data centers", "datacenters", "data centre") and follow every one that is its own topic id. Then in arcmira_execute_write: arcmira.monitors.create when there is no fit, and arcmira.monitors.addEntities with every id in one call. A name that resolves to nothing can still be followed by its exact name with arcmira.monitors.addName(monitorId, [{ name, type }]); a show by its UC id. Tell the user about every result with attached: false: entity_not_found, entity_type_not_trackable, tracker_limit_reached, or tracked_in_another_monitor (name the monitor at current_monitor_id and ask before moving it with arcmira.monitors.attachTrackers). Pause with arcmira.monitors.update(id, { paused: true }); there is no delete.`;
 
 /** Rule 6b: the closing line of every skill. */
 export const FEEDBACK_LINE = 'If anything was wrong, slow, or missing for the user, send one arcmira_feedback.';
@@ -38,7 +38,7 @@ export function feedbackNudge(callId: string): string {
 
 export const ACCESS_GUIDANCE = 'When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not upgrade a plan. Requested Premium work uses included credits, then on-demand within the account\'s budget, without another confirmation. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.';
 
-const PREMIUM = `PREMIUM. A Premium read returns the lines. When the video is not transcribed yet, the same read buys it at its quote (included credits, then on-demand within the account's budget) and the client reads again for up to 25 seconds; a Premium request is the go-ahead, so do not ask. Still state pending: tell the user about how long (eta_seconds), then run the same read in a later program; it never buys twice. ${BUDGET_RULE} The price covers the whole video (75 rows per 15-minute quarter, four credits per row); start and end never lower it, and arcmira.quote(video) reads it for free. A plan without Premium throws paid_plan_required with unlock: report it, and never present captions as Premium.`;
+const PREMIUM = `PREMIUM. A Premium read returns the lines. When the video is not transcribed yet, the same read buys it at its quote (included credits, then on-demand within the account's budget) and the client reads again for about 20 seconds; a Premium request is the go-ahead, so do not ask. Still state pending: tell the user about how long (eta_seconds), then run the same read in a later program; it never buys twice. State failed or refunded: report job.error or last_attempt.error and never substitute captions; buy again with retry: true only when the user asks. ${BUDGET_RULE} The price covers the whole video (75 rows per 15-minute quarter, four credits per row); start and end never lower it, and arcmira.quote(video) reads it for free. A plan without Premium throws paid_plan_required with unlock: report it, and never present captions as Premium.`;
 
 export const COVERAGE_GUIDANCE = 'Search as_of is the newest publication date among the returned passages, not the date the whole index was updated. For channel freshness, call arcmira.status({ channelId }) and report channel.search_indexed_through for transcript search. A result date or an empty query does not establish missing recent episodes.';
 
@@ -94,7 +94,7 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'recommendations',
     signature: 'arcmira.recommendations(entityId, { kind?, channelId?, after?, before?, limit?, cursor? })',
-    returns: '{ entity, recommendations[{class: sponsored | organic, verbatim_quote, promo_code, media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds}], window{after, before}, has_more, next_cursor }',
+    returns: '{ entity, recommendations[{class: sponsored | organic | mention, verbatim_quote, promo_code, media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds}], window{after, before}, has_more, next_cursor }',
     notes: ['Who recommends one entity on air. kind: sponsored | organic | all (default all), limit 1..50. Account access applies; a gate reports the required tier in unlock.tier.'],
   },
   {
@@ -105,8 +105,8 @@ export const METHODS: readonly MethodDoc[] = [
   },
   {
     name: 'transcript',
-    signature: 'arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })',
-    returns: '{ state: ready | pending; ready: video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name, entity_id}], quality, source, language, as_of; pending: eta_seconds, job{id, state, status, charge, eta_seconds}, note }',
+    signature: 'arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end?, retry? })',
+    returns: '{ state: ready | pending | failed | refunded; ready: video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name, entity_id}], quality, source, language, as_of; pending: eta_seconds, job{id, state, status, charge, eta_seconds}, note; failed | refunded: job{error}? or last_attempt{status, error}, note }',
     notes: ['quality: captions (default) | premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end select returned lines only. Every read is metered. Read state before lines.', PREMIUM],
   },
   {
@@ -164,9 +164,9 @@ export const METHODS: readonly MethodDoc[] = [
   },
   {
     name: 'monitors.addName',
-    signature: 'arcmira.monitors.addName(monitorId, { name, type, personMatchMode? })',
-    returns: '{ tracker_id, entity_name, entity_type, created, attached, reason? }',
-    notes: ['Follows one exact name, matched case-insensitively in newly analyzed media, so it works before the name is in the index. Use it only when resolve finds nothing for a name the user wants followed; an id from resolve goes to addEntities. type: person | organization (org) | product | topic | channel; a channel is followed by its UC id, never its name. A name the account already tracks answers created: false, attached: false, reason tracker_exists with its tracker_id: read arcmira.monitors.trackers to see where it is, and move it with attachTrackers only on a yes.'],
+    signature: 'arcmira.monitors.addName(monitorId, [{ name, type, personMatchMode? }])',
+    returns: '{ monitor_id, results[{name, type, tracker_id, created, attached, reason?, current_monitor_id?}] }',
+    notes: ['Follows up to 90 exact names in one call, matched case-insensitively in newly analyzed media, so it works before a name is in the index. Use it only for names resolve finds nothing for; an id from resolve goes to addEntities. type: person | organization (org) | product | topic | channel; a channel is followed by its UC id, never its name. Results read like addEntities: attached: false with reason tracker_limit_reached or tracked_in_another_monitor (ask before moving it with attachTrackers).'],
     access: 'write',
   },
   {

@@ -82,8 +82,12 @@ function needOptions(method, value, signature) {
   return value;
 }
 
-/** A Premium read stops waiting here so its last poll still fits inside the 30-second execute limit. */
-const MAX_WAIT_SECONDS = 25;
+/** Premium reads stop waiting this long after the program starts, so the last read still fits inside the 30-second execute limit. */
+const MAX_WAIT_SECONDS = 22;
+/** With less left than this, a pending Premium read returns instead of sleeping for one more read. */
+const MIN_LAST_WAIT_MS = 5_000;
+const TERMINAL = new Set(['failed', 'refunded']);
+const FAILED_NOTE = 'The Premium transcript was not produced; job.error or last_attempt.error says why. Report it, and never substitute captions. Buy again only when the user asks: arcmira.transcript(video, { quality: "premium", retry: true }).';
 const RETIRED_PREMIUM = 'arcmira.prepare and arcmira.wait are gone: arcmira.transcript(video, { quality: "premium" }) returns the lines, buying the transcript within the account\'s on-demand budget when it is not transcribed yet.';
 
 /** recommendations kind to /v1 class; all sends no class. */
@@ -93,7 +97,7 @@ const PERSON_MATCH_MODES = new Set(['mentions', 'appearances', 'both']);
 /** The monitor fields POST /v1/monitors takes, by their /v1 names; PATCH also takes paused. */
 const MONITOR_FIELDS = ['name', 'notify_frequency', 'notify_emails', 'notify_slack', 'slack_integration_id', 'slack_channel_id', 'notify_webhook', 'webhook_url', 'digest_day', 'digest_time'];
 const MONITOR_UPDATE_FIELDS = [...MONITOR_FIELDS, 'paused'];
-/** The entity types POST /v1/trackers follows by exact name; org is accepted for organization. */
+/** The entity types a monitor follows by exact name; org is accepted for organization. */
 const TRACKER_TYPES = new Set(['person', 'organization', 'org', 'product', 'topic', 'channel']);
 /** POST /v1/monitors/{id}/entities takes at most this many ids per call. */
 const MAX_ENTITY_IDS = 90;
@@ -119,6 +123,7 @@ const SEARCH_KINDS = new Set(['sponsored', 'organic', 'mention']);
  */
 export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCalls = 40, now = () => new Date(), sleep = (ms) => new Promise((done) => setTimeout(done, ms)), onCall, access = 'read', idempotencyKey = () => crypto.randomUUID() }) {
   const root = base.replace(/\/$/, '');
+  const waitUntil = now().getTime() + MAX_WAIT_SECONDS * 1000;
   const meter = { calls: 0, rate_limit: null, api_build: null };
 
   /**
@@ -163,7 +168,6 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       doc_url: err.doc_url,
       request_id: err.request_id,
       quote: err.details?.quote,
-      existing_id: err.details?.existing_id,
     });
   }
 
@@ -262,18 +266,24 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
     /**
      * One video's transcript. A Premium read of a video not yet transcribed buys it (included credits, then
      * on-demand within the account's budget, which is the approval) and answers 202 with the job; the read
-     * repeats at Retry-After for at most MAX_WAIT_SECONDS. Repeated reads never buy twice.
+     * repeats at Retry-After until MAX_WAIT_SECONDS into the program. Repeated reads never buy twice. A failed
+     * purchase is terminal (state failed or refunded, or that job.state on a 202) until a read sends retry.
      */
     async transcript(video, options) {
-      const { quality, language, timestamps, start, end } = needOptions('transcript', options, 'arcmira.transcript(video, { quality?, language?, timestamps?, start?, end? })');
+      const { quality, language, timestamps, start, end, retry } = needOptions('transcript', options, 'arcmira.transcript(video, { quality?, language?, timestamps?, start?, end?, retry? })');
       const id = videoIdOf(video);
-      const read = () => call(`/v1/transcripts/${id}`, { quality, language, timestamps: timestamps === false ? 'false' : undefined, start, end });
-      const deadline = now().getTime() + MAX_WAIT_SECONDS * 1000;
+      const query = { quality, language, timestamps: timestamps === false ? 'false' : undefined, start, end };
+      // retry buys again after a failed purchase; only the first read sends it, so a job that fails mid-wait is not bought twice.
+      let retrying = retry === true;
       for (;;) {
-        const { body, headers } = await read();
-        if (quality !== 'premium' || body.state !== 'pending') return body;
-        const remaining = deadline - now().getTime();
-        if (remaining <= 0) {
+        const { body, headers } = await call(`/v1/transcripts/${id}`, retrying ? { ...query, retry: 'true' } : query);
+        retrying = false;
+        if (quality !== 'premium') return body;
+        const failed = TERMINAL.has(body.state) ? body.state : TERMINAL.has(body.job?.state) ? body.job.state : null;
+        if (failed) return { ...body, state: failed, note: FAILED_NOTE };
+        if (body.state !== 'pending') return body;
+        const remaining = waitUntil - now().getTime();
+        if (remaining < MIN_LAST_WAIT_MS) {
           const eta = Number.isFinite(body.job?.eta_seconds) ? body.job.eta_seconds : undefined;
           const left = eta === undefined ? '' : `, about ${Math.max(1, Math.round(eta / 60))} min left`;
           return { ...body, eta_seconds: eta, note: `Still transcribing${left}. Tell the user, then run the same read again later; it never buys twice.` };
@@ -354,26 +364,22 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         return write('monitors.addEntities', path, body);
       },
       /**
-       * Follows one exact name, which may not be indexed yet: creates the account's tracker for it and attaches
-       * it to the monitor. A tracker the account already has is not moved; the result names it instead.
+       * Follows exact names, which may not be indexed yet, in one POST /v1/monitors/{id}/entities: the API
+       * creates or reuses each tracker under the monitor's account and attaches it, one result per name.
        */
-      async addName(monitorId, options) {
-        const path = `/v1/monitors/${needMonitorId(monitorId)}/trackers`;
-        const { name, type, personMatchMode } = needOptions('monitors.addName', options, 'arcmira.monitors.addName(monitorId, { name, type, personMatchMode? })');
-        if (typeof name !== 'string' || name.trim() === '') throw new ArcmiraError('arcmira.monitors.addName needs name, the exact name to follow.', 'invalid_request');
-        if (!TRACKER_TYPES.has(type)) throw new ArcmiraError('type is person, organization (or org), product, topic or channel.', 'invalid_request');
-        if (type === 'channel') needChannelId(name, 'name');
-        if (personMatchMode !== undefined && (type !== 'person' || !PERSON_MATCH_MODES.has(personMatchMode))) throw new ArcmiraError('personMatchMode is mentions, appearances or both, for a person only.', 'invalid_request');
-        const body = { entity_name: name.trim(), entity_type: type === 'org' ? 'organization' : type, ...(personMatchMode ? { person_match_mode: personMatchMode } : {}) };
-        let tracker;
-        try {
-          tracker = (await write('monitors.addName', '/v1/trackers', body)).tracker;
-        } catch (error) {
-          if (error.code !== 'tracker_already_exists') throw error;
-          return { tracker_id: error.existing_id ?? null, entity_name: body.entity_name, created: false, attached: false, reason: 'tracker_exists' };
-        }
-        await write('monitors.addName', path, { tracker_ids: [tracker.id] });
-        return { tracker_id: tracker.id, entity_name: tracker.entity_name, entity_type: tracker.entity_type, created: true, attached: true };
+      async addName(monitorId, names) {
+        const path = `/v1/monitors/${needMonitorId(monitorId)}/entities`;
+        const list = Array.isArray(names) ? names : [names];
+        if (list.length === 0 || list.length > MAX_ENTITY_IDS) throw new ArcmiraError(`arcmira.monitors.addName takes 1 to ${MAX_ENTITY_IDS} names; split the call.`, 'too_many');
+        const body = list.map((item) => {
+          const { name, type, personMatchMode } = needOptions('monitors.addName', item, 'arcmira.monitors.addName(monitorId, { name, type, personMatchMode? }) or an array of them');
+          if (typeof name !== 'string' || name.trim() === '') throw new ArcmiraError('arcmira.monitors.addName needs name, the exact name to follow.', 'invalid_request');
+          if (!TRACKER_TYPES.has(type)) throw new ArcmiraError('type is person, organization (or org), product, topic or channel.', 'invalid_request');
+          if (type === 'channel') needChannelId(name, 'name');
+          if (personMatchMode !== undefined && (type !== 'person' || !PERSON_MATCH_MODES.has(personMatchMode))) throw new ArcmiraError('personMatchMode is mentions, appearances or both, for a person only.', 'invalid_request');
+          return { name: name.trim(), type: type === 'org' ? 'organization' : type, ...(personMatchMode ? { person_match_mode: personMatchMode } : {}) };
+        });
+        return write('monitors.addName', path, { names: body });
       },
     },
   };

@@ -87,7 +87,7 @@ const t = await arcmira.transcript("cdLeJU_1UH8", { quality: "premium" });
 return t.state === "ready" ? t.lines : { state: t.state, eta_seconds: t.eta_seconds, note: t.note };
 ```
 
-When the video is not transcribed yet, `GET /v1/transcripts/{video_id}?quality=premium` buys it within the account's plan (included credits, then the on-demand budget) and answers `202` with the job and `Retry-After`. The client reads again at `Retry-After` for up to 25 seconds. Repeated reads never buy twice. Still `pending` after that: the result carries `eta_seconds`, and the same read in a later program returns the lines. A plan without Premium throws `paid_plan_required`; a budget that blocks the purchase throws `spend_limit_exceeded` or `quota_exceeded`, and the quote rides on the error as `quote`. The price covers the whole video at 75 rows per 15-minute quarter and four credits per row, and `start` and `end` never lower it; `arcmira.quote(video)` reads it for free.
+When the video is not transcribed yet, `GET /v1/transcripts/{video_id}?quality=premium` buys it within the account's plan (included credits, then the on-demand budget) and answers `202` with the job and `Retry-After`. The client reads again at `Retry-After` until 22 seconds into the program, a budget all Premium reads in one program share. Repeated reads never buy twice. Still `pending` after that: the result carries `eta_seconds`, and the same read in a later program returns the lines. A failed purchase comes back as `state` `failed` or `refunded` with the reason, and the read does not buy again unless it passes `retry: true`, which an agent sends only when the user asks. A plan without Premium throws `paid_plan_required`; a budget that blocks the purchase throws `spend_limit_exceeded` or `quota_exceeded`, and the quote rides on the error as `quote`. The price covers the whole video at 75 rows per 15-minute quarter and four credits per row, and `start` and `end` never lower it; `arcmira.quote(video)` reads it for free.
 
 Results that are empty, an error, truncated or a resolve `ask` end with one line, `feedback`, which names the call: `If this was wrong, slow, or missing for the user, send one arcmira_feedback with call_id mcpc_...`.
 
@@ -111,7 +111,7 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 | `arcmira.monitors.create({ name, notify_frequency, notify_emails?, notify_slack?, ... })` | `POST /v1/monitors` | A new monitor. Write tool only |
 | `arcmira.monitors.update(monitorId, { ..., paused? })` | `PATCH /v1/monitors/{id}` | Delivery changes, or a pause. Write tool only |
 | `arcmira.monitors.addEntities(monitorId, entityIds, { personMatchMode? })` | `POST /v1/monitors/{id}/entities` | Follows up to 90 entity ids in one call: reuses or creates each tracker by id and attaches it. An id that cannot attach says why (`entity_not_found`, `entity_type_not_trackable`, `tracker_limit_reached`, `tracked_in_another_monitor`). Write tool only |
-| `arcmira.monitors.addName(monitorId, { name, type, personMatchMode? })` | `POST /v1/trackers`, then `POST /v1/monitors/{id}/trackers` | Follows one exact name before it is indexed (a show by its `UC` id). A name the account already tracks is not moved; the result says `tracker_exists`. Write tool only |
+| `arcmira.monitors.addName(monitorId, [{ name, type, personMatchMode? }])` | `POST /v1/monitors/{id}/entities` with `names` | Follows up to 90 exact names before they are indexed (a show by its `UC` id), with one result per name as `addEntities` gives. Write tool only |
 | `arcmira.monitors.attachTrackers(monitorId, trackerIds)` | `POST /v1/monitors/{id}/trackers` | Moves trackers another monitor holds, after the user agrees. Write tool only |
 | `arcmira.integrations.slack()` | `GET /v1/integrations/slack` | The connected Slack workspaces, with the id and default channel a monitor delivers to |
 
@@ -180,7 +180,8 @@ Before the record is stored, the API replaces anything that looks like a credent
 - `before` is the first day left out on every method (it was the last day counted). Every dated result echoes `window`.
 - Monitor fields are snake_case in both directions: `create({ name, notify_frequency })`, `update(id, { paused: true })`, and `monitors.list()` returns `paused`, `notify_frequency`, `tracker_count`.
 - `arcmira.status({ jobId })` is gone: a pending Premium read returns its job and `eta_seconds`, and the same read returns the lines once they are ready.
-- New: `arcmira.monitors.addName(monitorId, { name, type })` follows an exact name before it is indexed.
+- New: `arcmira.monitors.addName(monitorId, [{ name, type }])` follows exact names before they are indexed.
+- A failed Premium purchase is terminal: `state` `failed` or `refunded` with `job.error` or `last_attempt`. `arcmira.transcript(video, { quality: "premium", retry: true })` buys again, only when the user asks.
 
 ## Upgrading from 0.8
 

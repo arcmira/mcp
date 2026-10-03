@@ -3674,7 +3674,7 @@
               "text": "Ramp has been on the show for a while now and the pitch is still the same, spend less time on expenses.",
               "start_seconds": 4787,
               "watch_url": "/watch?v=dQw4w9WgXcQ&t=4787",
-              "cite_line": "[TBPN | Tuesday, August 4](/watch?v=dQw4w9WgXcQ&t=4787) · @1:19:47 · TBPN · Aug 4, 2026",
+              "cite_line": "[TBPN | Tuesday, August 4](/watch?v=dQw4w9WgXcQ&t=4787) \u00b7 @1:19:47 \u00b7 TBPN \u00b7 Aug 4, 2026",
               "score": 0.71,
               "about": [
                 {
@@ -5584,6 +5584,14 @@
           "current_monitor_id": {
             "type": "string",
             "description": "With reason tracked_in_another_monitor: the monitor the tracker is in."
+          },
+          "name": {
+            "type": "string",
+            "description": "The name this result follows, for a names[] item."
+          },
+          "type": {
+            "type": "string",
+            "description": "The entity type of a names[] item."
           }
         },
         "required": [
@@ -7910,7 +7918,7 @@
                               "$ref": "#/components/schemas/FreeformSuggestedChange"
                             }
                           ],
-                          "description": "Your concrete proposed fix, shaped by issue_type: merge_suggestion → MergeSuggestionChange, wrong_entity/wrong_person → WrongEntityChange, wrong_entity_type → WrongEntityTypeChange, missing_result → MissingResultChange, wrong_classification → WrongClassificationChange, stale_metadata → StaleMetadataChange, bad_ranking → BadRankingChange, missed_alert → MissedAlertChange, delivery_issue → DeliveryIssueChange. Unknown keys are accepted and logged verbatim; only non-object values are rejected. Omit suggested_change entirely when you do not have a concrete fix."
+                          "description": "Your concrete proposed fix, shaped by issue_type: merge_suggestion \u2192 MergeSuggestionChange, wrong_entity/wrong_person \u2192 WrongEntityChange, wrong_entity_type \u2192 WrongEntityTypeChange, missing_result \u2192 MissingResultChange, wrong_classification \u2192 WrongClassificationChange, stale_metadata \u2192 StaleMetadataChange, bad_ranking \u2192 BadRankingChange, missed_alert \u2192 MissedAlertChange, delivery_issue \u2192 DeliveryIssueChange. Unknown keys are accepted and logged verbatim; only non-object values are rejected. Omit suggested_change entirely when you do not have a concrete fix."
                         },
                         "notes": {
                           "type": "string",
@@ -9900,11 +9908,48 @@
                       "both"
                     ],
                     "description": "For person trackers this request creates: mentions (default) matches others talking about the person; appearances matches the person present as a speaker, host or guest; both accepts either. Other types ignore it, and a tracker that already exists keeps its own setting (change it with PATCH /v1/trackers/{id})."
+                  },
+                  "names": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 90,
+                    "description": "Exact names to follow before they are indexed, created under the monitor's account (basedanarki/arcmira PR 678 follow-up; fixture until the document carries it).",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "person",
+                            "organization",
+                            "org",
+                            "product",
+                            "topic",
+                            "channel"
+                          ]
+                        },
+                        "person_match_mode": {
+                          "type": "string",
+                          "enum": [
+                            "mentions",
+                            "appearances",
+                            "both"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
                   }
                 },
-                "required": [
-                  "entity_ids"
-                ],
+                "required": [],
                 "additionalProperties": false
               }
             }
@@ -10761,6 +10806,19 @@
             "description": "The surface making this call. The Arcmira MCP server sends mcp-tool so every unlock link in a gate attributes to the directory install. Omit from your own client.",
             "name": "src",
             "in": "query"
+          },
+          {
+            "name": "retry",
+            "in": "query",
+            "required": false,
+            "description": "true buys a Premium transcript again after a failed or refunded purchase (fixture until the document carries it).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
           }
         ],
         "responses": {
@@ -10974,7 +11032,7 @@
         ],
         "operationId": "list_transcriptions",
         "summary": "List your transcription requests",
-        "description": "Your transcription requests in descending creation time and id order. limit defaults to 20 and accepts 1–100. Follow next_cursor with the same video_id, limit and credential; has_more is false and next_cursor is null on the last page. A traversal excludes requests inserted after its first page. Each entry has the same shape as the status poll plus a `title` field (the video title, null when unknown). The scheduled reconciler advances requests; reading this list never dispatches work or changes billing. In-flight entries carry `eta_seconds` and `next_poll_seconds`.",
+        "description": "Your transcription requests in descending creation time and id order. limit defaults to 20 and accepts 1\u2013100. Follow next_cursor with the same video_id, limit and credential; has_more is false and next_cursor is null on the last page. A traversal excludes requests inserted after its first page. Each entry has the same shape as the status poll plus a `title` field (the video title, null when unknown). The scheduled reconciler advances requests; reading this list never dispatches work or changes billing. In-flight entries carry `eta_seconds` and `next_poll_seconds`.",
         "security": [
           {
             "bearerAuth": []
