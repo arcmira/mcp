@@ -49,13 +49,13 @@ const assumed = Boolean(r?.suggested), why = r?.suggested?.evidence ?? null;
 const hits = await arcmira.search({ query: "Anthropic IPO", speakerIds: [id], limit: 5 });
 const moments = [];
 for (const c of hits.chunks.slice(0, 2)) {
-  const moment = { episode: c.videoTitle, show: c.channelName, date: c.publishedAt, url: c.watchUrl, speakers: c.speakers_by.map(s => s.name) };
+  const moment = { episode: c.video_title, show: c.channel_name, date: c.published_at, url: c.watch_url, speakers: c.speakers_by.map(s => s.name) };
   try {
-    const t = await arcmira.transcript(c.videoId, { start: Math.max(0, c.startSeconds - 10), end: c.startSeconds + 50 });
-    moment.clip = { start: t.lines[0]?.start ?? c.startSeconds, end: t.lines.at(-1)?.end ?? c.startSeconds + 60 };
+    const t = await arcmira.transcript(c.video_id, { start: Math.max(0, c.start_seconds - 10), end: c.start_seconds + 50 });
+    moment.clip = { start: t.lines[0]?.start ?? c.start_seconds, end: t.lines.at(-1)?.end ?? c.start_seconds + 60 };
     moment.lines = t.lines.map(l => `[${Math.round(l.start)}s] ${l.text}`);
   } catch (err) {
-    moment.clip = { start: c.startSeconds, end: c.startSeconds + 60 };
+    moment.clip = { start: c.start_seconds, end: c.start_seconds + 60 };
     moment.passage = c.text;
     moment.transcript = err.code;
   }
@@ -68,7 +68,7 @@ return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of
 
 - Names the speaker or show it searched, with the id, and quotes the words exactly as the transcript lines give them, trimmed to whole sentences, never paraphrased inside quotation marks.
 - Gives the show, the episode title, the date, and the speaker when the chunk or a premium transcript names one.
-- Links the `watchUrl`, which starts at the moment, and gives a clip start and end in seconds from the transcript lines.
+- Links the `watch_url`, which starts at the moment, and gives a clip start and end in seconds from the transcript lines.
 - Says so when nothing matched, with `as_of`, instead of offering a quote from memory.
 
 ## Traps

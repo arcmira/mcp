@@ -64,11 +64,12 @@ const id = ID ?? e.id;
 const assumed = Boolean(r?.suggested), why = r?.suggested?.evidence ?? null;
 const after = arcmira.daysAgo(90);
 const reads = [];
-let cursor, entity;
+let cursor, entity, window;
 do {
   const page = await arcmira.recommendations(id, { kind: "sponsored", after, limit: 50, cursor });
   entity = page.entity;
-  reads.push(...page.data);
+  window = page.window;
+  reads.push(...page.recommendations);
   cursor = page.has_more ? page.next_cursor : undefined;
 } while (cursor && reads.length < 500);
 const shows = new Map();
@@ -81,7 +82,7 @@ for (const x of reads) {
   shows.set(name, row);
 }
 return {
-  brand: { id, name: entity?.name ?? e?.name ?? null, type: entity?.type ?? e?.type ?? null, assumed, why }, window: { after, through: arcmira.today() }, ad_reads_total: reads.length,
+  brand: { id, name: entity?.name ?? e?.name ?? null, type: entity?.type ?? e?.type ?? null, assumed, why }, window, ad_reads_total: reads.length,
   shows: [...shows.values()].sort((a, b) => b.ad_reads - a.ad_reads).slice(0, 10).map(s => ({ ...s, episodes: s.episodes.size })),
   sample_read: reads[0] ? { said: reads[0].verbatim_quote, show: reads[0].media.source_channel?.name ?? null, date: reads[0].media.published_at, promo_code: reads[0].promo_code } : null,
 };

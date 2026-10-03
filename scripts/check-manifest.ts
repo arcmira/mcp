@@ -3,27 +3,30 @@
  * fetch and matched to the live OpenAPI document, so a v1 rename breaks here before it breaks
  * in a host. Also lints the tool definitions, the reference text, and server.json.
  *
- *   node --experimental-strip-types scripts/check-manifest.ts [openapi-url]
+ *   node --experimental-strip-types scripts/check-manifest.ts [openapi-url-or-file]
+ *
+ * A file path (or file: URL) checks a document before it is live, such as the spec of an
+ * unreleased backend change: pnpm manifest:check ../arcmira/apps/docs/openapi/arcmira-v1.json
  */
 import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { SRC } from '../src/api.ts';
 import { METHODS, referenceText } from '../src/reference.ts';
 import { FEEDBACK_CATEGORIES, READ_ONLY, SERVER_INSTRUCTIONS, TOOLS, feedbackBody } from '../src/tools.ts';
 import server from '../server.json' with { type: 'json' };
 
-const openapiUrl = process.argv[2] ?? 'https://api.arcmira.com/v1/openapi.json';
-/** Query params /v1 added for code mode on 2026-09-30; a warning, not a failure, while the OpenAPI document catches up. */
-const PENDING_PARAMS = new Set(['about', 'by', 'kind']);
+const arg = process.argv[2] ?? 'https://api.arcmira.com/v1/openapi.json';
+const openapiUrl = /^(https?|file):/.test(arg) ? arg : pathToFileURL(arg).href;
 /**
  * Operations that do not document src: they are not entry points that mint unlock links. The
  * outbound still appends src=mcp-tool to every sandbox request, and v1 ignores a query key a route
- * does not read (0.8 sent it on POST /v1/transcriptions).
+ * does not read.
  */
 const NO_SRC = new Set([
   'get_me',
   'quote_transcription',
-  'submit_transcription',
+  'create_tracker',
   'list_monitors',
   'list_monitor_trackers',
   'create_monitor',
@@ -77,8 +80,11 @@ for (const [path, methods] of Object.entries(document.paths)) {
 }
 
 for (const [path, method] of [
+  ['/v1/transcripts/{video_id}', 'get'],
   ['/v1/transcripts/{video_id}/quote', 'get'],
-  ['/v1/transcriptions', 'post'],
+  ['/v1/search', 'get'],
+  ['/v1/recommendations', 'get'],
+  ['/v1/trackers', 'post'],
   ['/v1/monitors', 'get'],
   ['/v1/monitors', 'post'],
   ['/v1/monitors/{id}', 'patch'],
@@ -158,7 +164,7 @@ const SAMPLE_CALLS: Record<string, (a: Arcmira) => Promise<unknown>> = {
       about: ['ent_14'],
       entityIds: ['ent_14'],
       speakerIds: ['ent_99'],
-      kind: 'mention',
+      kind: ['sponsored', 'mention'],
       after: '2026-01-01',
       before: '2026-09-01',
       source: 'creator_captions',
@@ -205,7 +211,6 @@ const SAMPLE_CALLS: Record<string, (a: Arcmira) => Promise<unknown>> = {
       limit: 20,
     }),
   status_channel: (a) => a.status({ channelId: MTS }),
-  status_job: (a) => a.status({ jobId: '00000000-0000-4000-8000-000000000000' }),
   status_me: (a) => a.status({}),
   quote: (a) => a.quote('https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
   transcript_premium: (a) => a.transcript('dQw4w9WgXcQ', { quality: 'premium' }),
@@ -214,17 +219,20 @@ const SAMPLE_CALLS: Record<string, (a: Arcmira) => Promise<unknown>> = {
   monitors_create: (a) =>
     (a.monitors as unknown as Arcmira).create({
       name: 'Competitors',
-      notifyFrequency: 'daily',
-      notifyEmails: ['a@example.com'],
-      notifySlack: true,
-      slackIntegrationId: 'si_1',
-      slackChannelId: 'C1',
-      notifyWebhook: false,
-      webhookUrl: 'https://example.com/hook',
-      digestDay: 'monday',
-      digestTime: '09:00',
+      notify_frequency: 'daily',
+      notify_emails: ['a@example.com'],
+      notify_slack: true,
+      slack_integration_id: 'si_1',
+      slack_channel_id: 'C1',
+      notify_webhook: false,
+      webhook_url: 'https://example.com/hook',
+      digest_day: 'monday',
+      digest_time: '09:00',
     }),
-  monitors_update: (a) => (a.monitors as unknown as Arcmira).update('mon_1', { isPaused: true, notifyFrequency: 'hourly', isCollapsed: false, sortOrder: 1 }),
+  monitors_update: (a) => (a.monitors as unknown as Arcmira).update('mon_1', { paused: true, notify_frequency: 'hourly' }),
+  monitors_addName: (a) => (a.monitors as unknown as Arcmira).addName('mon_1', { name: 'Acme Robotics', type: 'org' }),
+  monitors_addName_person: (a) => (a.monitors as unknown as Arcmira).addName('mon_1', { name: 'Jensen Huang', type: 'person', personMatchMode: 'both' }),
+  monitors_addName_channel: (a) => (a.monitors as unknown as Arcmira).addName('mon_1', { name: TBPN, type: 'channel' }),
   monitors_attachTrackers: (a) => (a.monitors as unknown as Arcmira).attachTrackers('mon_1', ['trk_1']),
   integrations_slack: (a) => (a.integrations as unknown as Arcmira).slack(),
   monitors_addEntities: (a) => (a.monitors as unknown as Arcmira).addEntities('mon_1', ['ent_14', 'ent_99'], { personMatchMode: 'both' }),
@@ -237,16 +245,14 @@ for (const [name, call] of Object.entries(SAMPLE_CALLS)) {
   const recording = async (input: string, init?: RequestInit) => {
     urls.push({ url: new URL(input), method: (init?.method ?? 'GET').toLowerCase(), body: typeof init?.body === 'string' ? JSON.parse(init.body) : null });
     return Response.json({
-      state: 'preparation_required',
-      quote: { rows: 300 },
-      charge: { from: 'mixed' },
-      max_on_demand_cents: 12,
-      job: { id: 'j' },
+      state: 'ready',
       monitors: [],
+      tracker: { id: 'trk_1' },
       trackers: [],
       integrations: [],
       monitor: { id: 'mon_1' },
-      data: [],
+      mentions: [],
+      recommendations: [],
       chunks: [],
       rows: [],
       sponsors: [],
@@ -272,12 +278,7 @@ for (const [name, call] of Object.entries(SAMPLE_CALLS)) {
     if (body !== null) checkBody(label, match.operation, body);
     const documented = new Set((match.operation.parameters ?? []).filter((p) => p.in === 'query').map((p) => p.name));
     for (const key of url.searchParams.keys()) {
-      if (documented.has(key)) continue;
-      if (PENDING_PARAMS.has(key))
-        console.warn(
-          `warning: ${label}: sends ${key} to ${match.operation.operationId}, which does not document it yet (pending K-API)`,
-        );
-      else fail(`${label}: sends ${key} to ${match.operation.operationId}, which does not document it`);
+      if (!documented.has(key)) fail(`${label}: sends ${key} to ${match.operation.operationId}, which does not document it`);
     }
     const src = (match.operation.parameters ?? []).find((p) => p.name === 'src' && p.in === 'query');
     if (!NO_SRC.has(match.operation.operationId) && (src === undefined || !(src.schema?.enum ?? []).includes(SRC)))

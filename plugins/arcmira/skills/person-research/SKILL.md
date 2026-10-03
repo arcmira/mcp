@@ -51,9 +51,9 @@ const [m, rows, own] = await Promise.all([
 ]);
 const about = await arcmira.search({ query: m.entity.name, about: [id], after: arcmira.daysAgo(30), limit: 3 });
 const appeared = new Map();
-for (const x of rows.data) if (x.is_appearance) appeared.set(x.media.video_id, { show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at });
+for (const x of rows.mentions) if (x.is_appearance) appeared.set(x.media.video_id, { show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at });
 let fromAppearance = null;   // no speaker-tagged chunks: read their newest appearance instead
-const ep = own.chunks.length === 0 ? rows.data.find(x => x.is_appearance) : undefined;
+const ep = own.chunks.length === 0 ? rows.mentions.find(x => x.is_appearance) : undefined;
 if (ep) {
   try {
     const t = await arcmira.transcript(ep.media.video_id, { start: Math.max(0, ep.start_seconds - 5), end: ep.start_seconds + 90 });
@@ -68,9 +68,9 @@ return {
   attention: { verdict: m.verdict, last_30d: m.volume.mentions_30d, prior_30d: m.volume.mentions_prior_30d, as_of: m.as_of, top_shows: m.top_shows.map(s => [s.channel_name, s.mentions]) },
   appeared_on: [...appeared.values()].slice(0, 8),
   appeared_on_partial: rows.has_more,   // true: only the newest 40 mention rows were read
-  in_their_words: own.chunks.map(c => ({ said: c.text.slice(0, 300), episode: c.videoTitle, show: c.channelName, date: c.publishedAt, url: c.watchUrl })),
+  in_their_words: own.chunks.map(c => ({ said: c.text.slice(0, 300), episode: c.video_title, show: c.channel_name, date: c.published_at, url: c.watch_url })),
   from_their_appearance: fromAppearance,
-  said_about_them: about.chunks.map(c => ({ said: c.text.slice(0, 200), show: c.channelName, date: c.publishedAt, url: c.watchUrl })),
+  said_about_them: about.chunks.map(c => ({ said: c.text.slice(0, 200), show: c.channel_name, date: c.published_at, url: c.watch_url })),
 };
 ```
 

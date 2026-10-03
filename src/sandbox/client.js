@@ -13,9 +13,6 @@ export const ENTITY_ID = /^ent_\d+$/;
 export const CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/;
 export const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 
-/** API errors name the /v1 query key; a program wrote the client option, so the error names that. */
-const OPTION_FOR_WIRE_PARAM = new Map([['date_from', 'after'], ['published_after', 'after'], ['date_to', 'before'], ['published_before', 'before']]);
-
 export class ArcmiraError extends Error {
   constructor(message, code, extra = {}) {
     super(message);
@@ -64,19 +61,13 @@ function list(values, check, param, max) {
   return arr.map((v) => check(v, param)).join(',');
 }
 
-function isoDay(value, param) {
+/** One bound of a half-open window [after, before), sent as written: an ISO date or a datetime with offset, read in UTC. */
+function bound(value, param) {
   if (value === undefined || value === null || value === '') return undefined;
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(value)) {
-    throw new ArcmiraError(`${param} takes an ISO date like 2026-08-01; use arcmira.today() or arcmira.daysAgo(n).`, 'invalid_date');
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:?\d{2}))?$/.test(value)) {
+    throw new ArcmiraError(`${param} takes an ISO date like 2026-08-01 (or a datetime with offset); use arcmira.today() or arcmira.daysAgo(n).`, 'invalid_date');
   }
-  return value.slice(0, 10);
-}
-
-/** before is the last day counted everywhere in this client; /v1 published_before is exclusive, so send the next day. /v1 date_to is already inclusive. */
-function dayAfterInclusive(value, param) {
-  const day = isoDay(value, param);
-  if (day === undefined) return undefined;
-  return new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  return value;
 }
 
 /** The options object of a call, refusing any key the signature does not name: a misspelled after or before would otherwise drop the window silently. */
@@ -95,12 +86,15 @@ function needOptions(method, value, signature) {
 const MAX_WAIT_SECONDS = 25;
 const RETIRED_PREMIUM = 'arcmira.prepare and arcmira.wait are gone: arcmira.transcript(video, { quality: "premium" }) returns the lines, buying the transcript within the account\'s on-demand budget when it is not transcribed yet.';
 
-const KINDS = { sponsored: 'ad_read', organic: 'endorsement', all: 'all' };
+/** recommendations kind to /v1 class; all sends no class. */
+const KINDS = { sponsored: 'sponsored', organic: 'organic', all: undefined };
 const FREQUENCIES = new Set(['realtime', 'hourly', 'daily']);
 const PERSON_MATCH_MODES = new Set(['mentions', 'appearances', 'both']);
-/** The monitor fields POST /v1/monitors takes; PATCH also takes isPaused, isCollapsed and sortOrder. */
-const MONITOR_FIELDS = ['name', 'notifyFrequency', 'notifyEmails', 'notifySlack', 'slackIntegrationId', 'slackChannelId', 'notifyWebhook', 'webhookUrl', 'digestDay', 'digestTime'];
-const MONITOR_UPDATE_FIELDS = [...MONITOR_FIELDS, 'isPaused', 'isCollapsed', 'sortOrder'];
+/** The monitor fields POST /v1/monitors takes, by their /v1 names; PATCH also takes paused. */
+const MONITOR_FIELDS = ['name', 'notify_frequency', 'notify_emails', 'notify_slack', 'slack_integration_id', 'slack_channel_id', 'notify_webhook', 'webhook_url', 'digest_day', 'digest_time'];
+const MONITOR_UPDATE_FIELDS = [...MONITOR_FIELDS, 'paused'];
+/** The entity types POST /v1/trackers follows by exact name; org is accepted for organization. */
+const TRACKER_TYPES = new Set(['person', 'organization', 'org', 'product', 'topic', 'channel']);
 /** POST /v1/monitors/{id}/entities takes at most this many ids per call. */
 const MAX_ENTITY_IDS = 90;
 
@@ -113,12 +107,12 @@ function needMonitorId(value) {
 
 function monitorFields(method, value, allowed) {
   const fields = needOptions(method, value, `arcmira.${method}({ ${allowed.map((k) => `${k}?`).join(', ')} })`);
-  if (fields.notifyFrequency !== undefined && !FREQUENCIES.has(fields.notifyFrequency)) {
-    throw new ArcmiraError('notifyFrequency is realtime (as it happens), hourly (an hourly digest) or daily (a daily digest).', 'invalid_request');
+  if (fields.notify_frequency !== undefined && !FREQUENCIES.has(fields.notify_frequency)) {
+    throw new ArcmiraError('notify_frequency is realtime (as it happens), hourly (an hourly digest) or daily (a daily digest).', 'invalid_request');
   }
   return Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
 }
-const SEARCH_KINDS = new Set(['mention', 'recommendation_sponsored', 'recommendation_organic']);
+const SEARCH_KINDS = new Set(['sponsored', 'organic', 'mention']);
 
 /**
  * @param {{ base: string, fetch?: typeof fetch, maxCalls?: number, now?: () => Date, sleep?: (ms: number) => Promise<void>, onCall?: (call: object) => void, access?: 'read' | 'write', idempotencyKey?: () => string }} options
@@ -159,48 +153,22 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
     onCall?.({ method: send ? (send.method ?? 'POST') : 'GET', path, query, body: send?.body, status: res.status, ms: Date.now() - started });
     if (res.ok && body) return { body, headers: res.headers };
     const err = body?.error ?? {};
-    const option = OPTION_FOR_WIRE_PARAM.get(err.param);
-    const message = err.message ?? `HTTP ${res.status}`;
-    throw new ArcmiraError(option ? message.replace(new RegExp(`\\b${err.param}\\b`, 'g'), option) : message, err.code ?? 'http_error', {
+    throw new ArcmiraError(err.message ?? `HTTP ${res.status}`, err.code ?? 'http_error', {
       status: res.status,
       unlock: err.unlock,
       gate: err.gate,
-      param: option ?? err.param,
+      param: err.param,
       retry_after_seconds: err.retry_after_seconds,
       retry_after: res.headers.get('retry-after'),
       doc_url: err.doc_url,
       request_id: err.request_id,
-      quote: body?.quote,
+      quote: err.details?.quote,
+      existing_id: err.details?.existing_id,
     });
   }
 
   async function get(path, query = {}) {
     return (await call(path, query)).body;
-  }
-
-  /** Buys the whole-video Premium transcript at its quote and returns the Job; a video already bought answers its existing Job. */
-  async function buy(id) {
-    const q = await get(`/v1/transcripts/${id}/quote`);
-    const rows = Number(q?.quote?.rows);
-    if (!Number.isInteger(rows) || rows < 0) throw new ArcmiraError(`The quote for ${id} carried no row count, so nothing was bought. Read arcmira.quote("${id}") and retry.`, 'quote_unreadable');
-    const cents = q.charge?.from === 'included' ? 0 : Math.max(0, Math.ceil(Number(q.max_on_demand_cents) || 0));
-    const body = (await call('/v1/transcriptions', {}, { body: { video_id: id, max_rows: rows, max_on_demand_cents: cents } })).body;
-    return body.job ?? body;
-  }
-
-  /** Polls a Job at its next_poll_seconds until it leaves pending, for at most MAX_WAIT_SECONDS. */
-  async function waitFor(job) {
-    const deadline = now().getTime() + MAX_WAIT_SECONDS * 1000;
-    for (;;) {
-      if (job.state !== 'pending') return job;
-      const remaining = deadline - now().getTime();
-      if (remaining <= 0) return job;
-      const { body, headers } = await call(`/v1/transcriptions/${encodeURIComponent(job.id)}`);
-      job = body;
-      if (job.state !== 'pending') return job;
-      const poll = Number(job.next_poll_seconds ?? headers.get('retry-after')) || 10;
-      await sleep(Math.min(poll * 1000, Math.max(0, deadline - now().getTime())));
-    }
   }
 
   async function write(method, path, body, verb = 'POST') {
@@ -237,16 +205,17 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
     async search(options) {
       const { query, channelIds, about, entityIds, speakerIds, kind, after, before, source, limit = 5 } = needOptions('search', options, 'arcmira.search({ query, channelIds?, about?, entityIds?, speakerIds?, kind?, after?, before?, source?, limit? })');
       if (typeof query !== 'string' || query.length < 2) throw new ArcmiraError('search needs query, a topic or phrase of 2 or more characters', 'invalid_query');
-      if (kind !== undefined && !SEARCH_KINDS.has(kind)) throw new ArcmiraError('kind is mention, recommendation_sponsored or recommendation_organic', 'invalid_kind');
-      return get('/v1/transcripts/search', {
+      const kinds = kind === undefined ? undefined : Array.isArray(kind) ? kind : [kind];
+      if (kinds?.some((k) => !SEARCH_KINDS.has(k))) throw new ArcmiraError('kind is sponsored, organic or mention, or an array of them', 'invalid_kind');
+      return get('/v1/search', {
         q: query,
         channel_ids: list(channelIds, needChannelId, 'channelIds', 8),
         about: list(about, needEntityId, 'about', 8),
         entity_ids: list(entityIds, needEntityId, 'entityIds', 8),
         by: list(speakerIds, needEntityId, 'speakerIds', 8),
-        kind,
-        published_after: isoDay(after, 'after'),
-        published_before: dayAfterInclusive(before, 'before'),
+        kind: kinds?.join(','),
+        after: bound(after, 'after'),
+        before: bound(before, 'before'),
         source,
         limit,
       });
@@ -256,8 +225,8 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       return get('/v1/mentions', {
         entity_id: needEntityId(entityId, 'entityId'),
         channel_id: channelId === undefined ? undefined : needChannelId(channelId, 'channelId'),
-        date_from: isoDay(after, 'after'),
-        date_to: isoDay(before, 'before'),
+        after: bound(after, 'after'),
+        before: bound(before, 'before'),
         limit,
         cursor,
       });
@@ -272,11 +241,12 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
     async recommendations(entityId, options) {
       const { kind = 'all', channelId, after, before, limit = 10, cursor } = needOptions('recommendations', options, 'arcmira.recommendations(entityId, { kind?, channelId?, after?, before?, limit?, cursor? })');
       if (!(kind in KINDS)) throw new ArcmiraError('kind is sponsored, organic or all', 'invalid_kind');
-      return get(`/v1/entities/${needEntityId(entityId, 'entityId')}/recommendations`, {
-        mention_class: KINDS[kind],
+      return get('/v1/recommendations', {
+        entity_id: needEntityId(entityId, 'entityId'),
+        class: KINDS[kind],
         channel_id: channelId === undefined ? undefined : needChannelId(channelId, 'channelId'),
-        date_from: isoDay(after, 'after'),
-        date_to: isoDay(before, 'before'),
+        after: bound(after, 'after'),
+        before: bound(before, 'before'),
         limit,
         cursor,
       });
@@ -285,29 +255,32 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       const { limit = 10, after, before } = needOptions('episodes', options, 'arcmira.episodes(channelId, { limit?, after?, before? })');
       return get(`/v1/channels/${needChannelId(channelId, 'channelId')}/videos`, {
         limit,
-        published_after: isoDay(after, 'after'),
-        published_before: dayAfterInclusive(before, 'before'),
+        after: bound(after, 'after'),
+        before: bound(before, 'before'),
       });
     },
     /**
-     * One video's transcript. A Premium read of a video not yet transcribed buys it at its quote (included
-     * credits, then on-demand within the account's budget, which is the approval), waits, and reads again.
+     * One video's transcript. A Premium read of a video not yet transcribed buys it (included credits, then
+     * on-demand within the account's budget, which is the approval) and answers 202 with the job; the read
+     * repeats at Retry-After for at most MAX_WAIT_SECONDS. Repeated reads never buy twice.
      */
     async transcript(video, options) {
       const { quality, language, timestamps, start, end } = needOptions('transcript', options, 'arcmira.transcript(video, { quality?, language?, timestamps?, start?, end? })');
       const id = videoIdOf(video);
-      const read = () => get(`/v1/transcripts/${id}`, { quality, language, timestamps: timestamps === false ? 'false' : undefined, start, end });
-      const first = await read();
-      if (quality !== 'premium' || (first.state !== 'preparation_required' && first.state !== 'pending')) return first;
-      const job = await waitFor(first.state === 'pending' ? first.job : await buy(id));
-      if (job.state === 'ready') return read();
-      return {
-        state: job.state,
-        job,
-        note: job.state === 'pending'
-          ? 'Still transcribing. Run the same read in the next program; it reads this job and never buys twice.'
-          : 'The transcript was not produced; job.error says why. Report it; never substitute captions.',
-      };
+      const read = () => call(`/v1/transcripts/${id}`, { quality, language, timestamps: timestamps === false ? 'false' : undefined, start, end });
+      const deadline = now().getTime() + MAX_WAIT_SECONDS * 1000;
+      for (;;) {
+        const { body, headers } = await read();
+        if (quality !== 'premium' || body.state !== 'pending') return body;
+        const remaining = deadline - now().getTime();
+        if (remaining <= 0) {
+          const eta = Number.isFinite(body.job?.eta_seconds) ? body.job.eta_seconds : undefined;
+          const left = eta === undefined ? '' : `, about ${Math.max(1, Math.round(eta / 60))} min left`;
+          return { ...body, eta_seconds: eta, note: `Still transcribing${left}. Tell the user, then run the same read again later; it never buys twice.` };
+        }
+        const poll = Number(headers.get('retry-after') ?? body.job?.next_poll_seconds);
+        await sleep(Math.min((Number.isFinite(poll) ? Math.max(1, poll) : 10) * 1000, remaining));
+      }
     },
     async occurrences(options) {
       const { channelIds, entityIds, videoIds, types, mode, after, before, limit = 20 } = needOptions('occurrences', options, 'arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })');
@@ -321,8 +294,8 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         video_ids,
         entity_types: Array.isArray(types) ? types.join(',') : types,
         mode,
-        published_after: isoDay(after, 'after'),
-        published_before: dayAfterInclusive(before, 'before'),
+        after: bound(after, 'after'),
+        before: bound(before, 'before'),
         limit,
       });
     },
@@ -336,9 +309,8 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       throw new ArcmiraError(RETIRED_PREMIUM, 'method_retired');
     },
     async status(options) {
-      const { channelId, jobId } = needOptions('status', options, 'arcmira.status({ channelId }) or arcmira.status({ jobId })');
+      const { channelId } = needOptions('status', options, 'arcmira.status({ channelId? })');
       if (channelId) return get(`/v1/channels/${needChannelId(channelId, 'channelId')}/coverage`);
-      if (jobId) return get(`/v1/transcriptions/${encodeURIComponent(jobId)}`);
       return get('/v1/me');
     },
     integrations: {
@@ -356,13 +328,13 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       async create(options) {
         const fields = monitorFields('monitors.create', options, MONITOR_FIELDS);
         if (typeof fields.name !== 'string' || fields.name.trim() === '') throw new ArcmiraError('arcmira.monitors.create needs name, 1 to 100 characters.', 'invalid_request');
-        if (fields.notifyFrequency === undefined) throw new ArcmiraError('arcmira.monitors.create needs notifyFrequency: ask the user realtime, hourly or daily (default daily).', 'invalid_request');
+        if (fields.notify_frequency === undefined) throw new ArcmiraError('arcmira.monitors.create needs notify_frequency: ask the user realtime, hourly or daily (default daily).', 'invalid_request');
         return write('monitors.create', '/v1/monitors', fields);
       },
       async update(monitorId, patch) {
         const path = `/v1/monitors/${needMonitorId(monitorId)}`;
         const fields = monitorFields('monitors.update', patch, MONITOR_UPDATE_FIELDS);
-        if (Object.keys(fields).length === 0) throw new ArcmiraError('arcmira.monitors.update needs at least one field to change, like { isPaused: true }.', 'invalid_request');
+        if (Object.keys(fields).length === 0) throw new ArcmiraError('arcmira.monitors.update needs at least one field to change, like { paused: true }.', 'invalid_request');
         return write('monitors.update', path, fields, 'PATCH');
       },
       async attachTrackers(monitorId, trackerIds) {
@@ -370,7 +342,7 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         const ids = Array.isArray(trackerIds) ? trackerIds : [trackerIds];
         if (ids.length === 0 || ids.length > MAX_ENTITY_IDS) throw new ArcmiraError(`arcmira.monitors.attachTrackers takes 1 to ${MAX_ENTITY_IDS} tracker ids; split the call.`, 'too_many');
         for (const id of ids) if (typeof id !== 'string' || !/^trk_/.test(id)) throw new ArcmiraError(`attachTrackers takes tracker ids like trk_..., the tracker_id of an addEntities result, got ${JSON.stringify(id)}.`, 'id_required');
-        return write('monitors.attachTrackers', path, { trackerIds: [...new Set(ids)] });
+        return write('monitors.attachTrackers', path, { tracker_ids: [...new Set(ids)] });
       },
       async addEntities(monitorId, entityIds, options) {
         const path = `/v1/monitors/${needMonitorId(monitorId)}/entities`;
@@ -380,6 +352,28 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         if (personMatchMode !== undefined && !PERSON_MATCH_MODES.has(personMatchMode)) throw new ArcmiraError('personMatchMode is mentions, appearances or both.', 'invalid_request');
         const body = { entity_ids: [...new Set(ids.map((id) => needEntityId(id, 'entityIds')))], ...(personMatchMode ? { person_match_mode: personMatchMode } : {}) };
         return write('monitors.addEntities', path, body);
+      },
+      /**
+       * Follows one exact name, which may not be indexed yet: creates the account's tracker for it and attaches
+       * it to the monitor. A tracker the account already has is not moved; the result names it instead.
+       */
+      async addName(monitorId, options) {
+        const path = `/v1/monitors/${needMonitorId(monitorId)}/trackers`;
+        const { name, type, personMatchMode } = needOptions('monitors.addName', options, 'arcmira.monitors.addName(monitorId, { name, type, personMatchMode? })');
+        if (typeof name !== 'string' || name.trim() === '') throw new ArcmiraError('arcmira.monitors.addName needs name, the exact name to follow.', 'invalid_request');
+        if (!TRACKER_TYPES.has(type)) throw new ArcmiraError('type is person, organization (or org), product, topic or channel.', 'invalid_request');
+        if (type === 'channel') needChannelId(name, 'name');
+        if (personMatchMode !== undefined && (type !== 'person' || !PERSON_MATCH_MODES.has(personMatchMode))) throw new ArcmiraError('personMatchMode is mentions, appearances or both, for a person only.', 'invalid_request');
+        const body = { entity_name: name.trim(), entity_type: type === 'org' ? 'organization' : type, ...(personMatchMode ? { person_match_mode: personMatchMode } : {}) };
+        let tracker;
+        try {
+          tracker = (await write('monitors.addName', '/v1/trackers', body)).tracker;
+        } catch (error) {
+          if (error.code !== 'tracker_already_exists') throw error;
+          return { tracker_id: error.existing_id ?? null, entity_name: body.entity_name, created: false, attached: false, reason: 'tracker_exists' };
+        }
+        await write('monitors.addName', path, { tracker_ids: [tracker.id] });
+        return { tracker_id: tracker.id, entity_name: tracker.entity_name, entity_type: tracker.entity_type, created: true, attached: true };
       },
     },
   };

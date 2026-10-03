@@ -26,7 +26,7 @@ export const LINKS = {
 export const BUDGET_RULE = `On-demand spend extends the plan: the account's on-demand budget is the approval, so never ask the user for a cents amount. When a budget or plan blocks a purchase (spend_limit_exceeded, quota_exceeded, a plan gate), tell the user to raise the on-demand budget at ${LINKS.spending} or upgrade the plan at ${LINKS.pricing} (not on Ultra or Enterprise), and link unlock.url when the refusal carries one.`;
 
 /** Rule 5: monitors are the user's, so the agent reads them before it suggests or creates one. */
-export const MONITOR_RULE = `MONITORS. Never assume a monitor exists ("Competitors" may not). To follow entities the research found: list the user's monitors with arcmira.monitors.list() and suggest any whose name or trackers fit. If none fits, ask how they want updates, one question at a time, each with a default: email (default) or Slack, then as it happens, an hourly digest or a daily digest (default daily). For Slack, read arcmira.integrations.slack(): with a workspace, set notifySlack: true, slackIntegrationId and its default_channel_id as slackChannelId; with none, link ${LINKS.integrations} to connect one and use email for now, saying so. For a topic, resolve its spelling variants ("data centers", "datacenters", "data centre") and follow every one that is its own topic id. Then in arcmira_execute_write: arcmira.monitors.create when there is no fit, and arcmira.monitors.addEntities with every id in one call. Tell the user about every result with attached: false: entity_not_found, entity_type_not_trackable, tracker_limit_reached, or tracked_in_another_monitor (name the monitor at current_monitor_id and ask before moving it with arcmira.monitors.attachTrackers). Pause with arcmira.monitors.update(id, { isPaused: true }); there is no delete.`;
+export const MONITOR_RULE = `MONITORS. Never assume a monitor exists ("Competitors" may not). To follow entities the research found: list the user's monitors with arcmira.monitors.list() and suggest any whose name or trackers fit. If none fits, ask how they want updates, one question at a time, each with a default: email (default) or Slack, then as it happens, an hourly digest or a daily digest (default daily). For Slack, read arcmira.integrations.slack(): with a workspace, set notify_slack: true, its id as slack_integration_id and its default_channel_id as slack_channel_id; with none, link ${LINKS.integrations} to connect one and use email for now, saying so. For a topic, resolve its spelling variants ("data centers", "datacenters", "data centre") and follow every one that is its own topic id. Then in arcmira_execute_write: arcmira.monitors.create when there is no fit, and arcmira.monitors.addEntities with every id in one call. A name that resolves to nothing can still be followed by its exact name with arcmira.monitors.addName(monitorId, { name, type }); a show by its UC id. Tell the user about every result with attached: false: entity_not_found, entity_type_not_trackable, tracker_limit_reached, or tracked_in_another_monitor (name the monitor at current_monitor_id and ask before moving it with arcmira.monitors.attachTrackers). Pause with arcmira.monitors.update(id, { paused: true }); there is no delete.`;
 
 /** Rule 6b: the closing line of every skill. */
 export const FEEDBACK_LINE = 'If anything was wrong, slow, or missing for the user, send one arcmira_feedback.';
@@ -38,7 +38,7 @@ export function feedbackNudge(callId: string): string {
 
 export const ACCESS_GUIDANCE = 'When a plan or usage limit blocks a capability, briefly name the limit and any required tier reported by the API. Link to https://arcmira.com/pricing as "Plan access details" for information; do not upgrade a plan. Requested Premium work uses included credits, then on-demand within the account\'s budget, without another confirmation. Preserve error codes and reported quota or reset facts. If the user requested Premium, keep quality: "premium". Do not retry with captions, suggest third-party transcripts, or present them as equivalent. Only change the requested quality if the user asks.';
 
-const PREMIUM = `PREMIUM. A Premium read returns the lines. When the video is not transcribed yet, the same call buys it at its quote (included credits, then on-demand within the account's budget), waits up to 25 seconds and reads again; a Premium request is the go-ahead, so do not ask. Still state pending: run the same read in the next program; it never buys twice. ${BUDGET_RULE} The price covers the whole video (75 rows per 15-minute quarter, four credits per row); start and end never lower it, and arcmira.quote(video) reads it for free. state failed or refunded carries job.error; status refund_pending is not a completed refund. Plans without Premium answer captions with an access gate: report it, never present captions as Premium.`;
+const PREMIUM = `PREMIUM. A Premium read returns the lines. When the video is not transcribed yet, the same read buys it at its quote (included credits, then on-demand within the account's budget) and the client reads again for up to 25 seconds; a Premium request is the go-ahead, so do not ask. Still state pending: tell the user about how long (eta_seconds), then run the same read in a later program; it never buys twice. ${BUDGET_RULE} The price covers the whole video (75 rows per 15-minute quarter, four credits per row); start and end never lower it, and arcmira.quote(video) reads it for free. A plan without Premium throws paid_plan_required with unlock: report it, and never present captions as Premium.`;
 
 export const COVERAGE_GUIDANCE = 'Search as_of is the newest publication date among the returned passages, not the date the whole index was updated. For channel freshness, call arcmira.status({ channelId }) and report channel.search_indexed_through for transcript search. A result date or an empty query does not establish missing recent episodes.';
 
@@ -67,16 +67,16 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'search',
     signature: 'arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, after?, before?, source?, limit? })',
-    returns: '{ chunks[{text, videoId, videoTitle, publishedAt, startSeconds, watchUrl, channelId, channelName, about[], speakers_by[]}], as_of, note }',
+    returns: '{ chunks[{text, video_id, video_title, published_at, start_seconds, watch_url, cite_line, channel_id, channel_name, about[], speakers_by[]}], window{after, before}, as_of, note }',
     notes: [
       COVERAGE_GUIDANCE,
-      'Spoken passages that match the words in query (a topic, a phrase). channelIds: up to 8 UC ids. about: up to 8 ent_ ids of a brand or person the passage is about. speakerIds: up to 8 person ids; returns passages where that person says the query words, and each line of chunk.text starts with "Name: ". Speaker labels cover a minority of shows: when a speakerIds search is empty, read note before saying the person never said it, and try about with the same id for what others said about them. kind: mention | recommendation_sponsored | recommendation_organic. Never put a topic word in about; it goes in query. If a search with about, speakerIds or kind returns no chunks, rerun it with query and channelIds only before saying nothing was found. limit 1..20 (default 5). source: arcmira_premium | creator_captions | third_party_quick.',
+      'Spoken passages that match the words in query (a topic, a phrase). channelIds: up to 8 UC ids. about: up to 8 ent_ ids of a brand or person the passage is about. speakerIds: up to 8 person ids; returns passages where that person says the query words, and each line of chunk.text starts with "Name: ". Speaker labels cover a minority of shows: when a speakerIds search is empty, read note before saying the person never said it, and try about with the same id for what others said about them. kind: sponsored | organic | mention, or an array of them (sponsored is ad reads, organic is unpaid recommendations). Never put a topic word in about; it goes in query. If a search with about, speakerIds or kind returns no chunks, rerun it with query and channelIds only before saying nothing was found. limit 1..20 (default 5). source: arcmira_premium | creator_captions | third_party_quick.',
     ],
   },
   {
     name: 'mentions',
     signature: 'arcmira.mentions({ entityId, channelId?, after?, before?, limit?, cursor? })',
-    returns: '{ entity{id, name, page}, data[{media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds, is_appearance, description}], has_more, next_cursor }',
+    returns: '{ entity{id, name, page}, mentions[{media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds, is_appearance, description}], window{after, before}, has_more, next_cursor }',
     notes: ['When and where a name came up: one row per catalog mention, newest first, several rows per episode, limit 1..100. Never count rows to answer how many episodes: occurrences gives count per window. Rows carry no wording; for a quote use search. Read the episode title before asserting a lone row: a title far from the entity (a jungle episode for a bank) is a homonym the catalog mislabelled.'],
   },
   {
@@ -94,25 +94,25 @@ export const METHODS: readonly MethodDoc[] = [
   {
     name: 'recommendations',
     signature: 'arcmira.recommendations(entityId, { kind?, channelId?, after?, before?, limit?, cursor? })',
-    returns: '{ entity, data[{mention_class (ad_read = sponsored, endorsement = organic), verbatim_quote, promo_code, media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds}], has_more, next_cursor }',
+    returns: '{ entity, recommendations[{class: sponsored | organic, verbatim_quote, promo_code, media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds}], window{after, before}, has_more, next_cursor }',
     notes: ['Who recommends one entity on air. kind: sponsored | organic | all (default all), limit 1..50. Account access applies; a gate reports the required tier in unlock.tier.'],
   },
   {
     name: 'episodes',
     signature: 'arcmira.episodes(channelId, { limit?, after?, before? })',
-    returns: '{ episodes[{video_id, title, published_at, duration_seconds, view_count, watch_url}], indexed_through, index_age_days }',
+    returns: '{ episodes[{video_id, title, published_at, duration_seconds, view_count, watch_url}], window{after, before}, indexed_through, index_age_days }',
     notes: ['Newest indexed episodes of one show, limit 1..25; episodes[0] is the latest. Never count episodes to size a show: status({ channelId }).channel.searchable_videos is the count.'],
   },
   {
     name: 'transcript',
     signature: 'arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })',
-    returns: '{ state: ready | pending | failed | refunded; ready: video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name}], quality, source, language, as_of; otherwise: job{id, state, status, charge, error?}, note }',
+    returns: '{ state: ready | pending; ready: video{id, title, channel_name, published_at, watch_url}, lines[{start, end, text, speaker?}], speakers[{id, name, entity_id}], quality, source, language, as_of; pending: eta_seconds, job{id, state, status, charge, eta_seconds}, note }',
     notes: ['quality: captions (default) | premium (diarized: each line carries speaker, an id into speakers[], where name is the person or a label like Speaker 1; paid plans). start/end select returned lines only. Every read is metered. Read state before lines.', PREMIUM],
   },
   {
     name: 'occurrences',
     signature: 'arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })',
-    returns: '{ rows[{entity_id, name, type, channel_id, channel_name, count (episodes), occurrences (times said)}], shared[{entity_id, name, type, by_channel[{channel_id, channel_name, count}]}], as_of }',
+    returns: '{ rows[{entity_id, name, type, channel_id, channel_name, count (episodes), occurrences (times said)}], shared[{entity_id, name, type, by_channel[{channel_id, channel_name, count}]}], window{after, before}, as_of }',
     notes: [
       'Ranked catalog counts per entity per channel: what a show talks about, how many episodes mentioned an entity in a window, what one episode mentions (videoIds). Needs channelIds (up to 8), entityIds (up to 20) or videoIds (up to 20). types: person | organization | product | topic | channel. With two or more channelIds read shared, not rows, for what both shows mention.',
     ],
@@ -125,34 +125,34 @@ export const METHODS: readonly MethodDoc[] = [
   },
   {
     name: 'status',
-    signature: 'arcmira.status({ channelId? | jobId? })',
-    returns: '{ channel{youtube_channel_id, searchable_videos, indexed_through, search_indexed_through} } for a show; a transcription job for jobId; with no argument the key: { tier, scopes, usage{credits{available, on_demand}, current_spend_cents} }',
+    signature: 'arcmira.status({ channelId? })',
+    returns: '{ channel{youtube_channel_id, searchable_videos, indexed_through, search_indexed_through} } for a show; with no argument the key: { tier, scopes, usage{credits{available, on_demand}, current_spend_cents} }',
     notes: ['searchable_videos counts searchable videos for this show. search_indexed_through is the newest publication date in its transcript search index; indexed_through describes overall indexed coverage. Neither date guarantees every earlier episode is present.'],
   },
   {
     name: 'monitors.list',
     signature: 'arcmira.monitors.list()',
-    returns: '{ monitors[{id, name, isPaused, notifyFrequency, notifyEmails, notifySlack, trackerCount, slackIntegration{team_name, channel_name}}] }',
+    returns: '{ monitors[{id, name, paused, notify_frequency, notify_emails, notify_slack, tracker_count, slack_integration{team_name, channel_name}}] }',
     notes: [MONITOR_RULE],
   },
   {
     name: 'monitors.trackers',
     signature: 'arcmira.monitors.trackers(monitorId)',
-    returns: '{ trackers[{id, entityName, entityType, displayName, isPaused}] }',
+    returns: '{ trackers[{id, entity_name, entity_type, display_name, paused}] }',
     notes: ['What one monitor already follows, so a suggestion never adds a duplicate.'],
   },
   {
     name: 'monitors.create',
-    signature: 'arcmira.monitors.create({ name, notifyFrequency, notifyEmails?, notifySlack?, slackIntegrationId?, slackChannelId?, digestTime? })',
-    returns: '{ monitor{id, name, notifyFrequency, notifyEmails, notifySlack, isPaused} }',
-    notes: ['notifyFrequency: realtime (as it happens) | hourly | daily (digests), from the user\'s answer. Email goes to the account email; notifyEmails adds recipients, who confirm before delivery. Slack: notifySlack: true with slackIntegrationId and slackChannelId from arcmira.integrations.slack().'],
+    signature: 'arcmira.monitors.create({ name, notify_frequency, notify_emails?, notify_slack?, slack_integration_id?, slack_channel_id?, digest_time? })',
+    returns: '{ monitor{id, name, notify_frequency, notify_emails, notify_slack, paused} }',
+    notes: ['Fields take the names monitors.list returns. notify_frequency: realtime (as it happens) | hourly | daily (digests), from the user\'s answer. Email goes to the account email; notify_emails adds recipients, who confirm before delivery. Slack: notify_slack: true with slack_integration_id and slack_channel_id from arcmira.integrations.slack().'],
     access: 'write',
   },
   {
     name: 'monitors.update',
-    signature: 'arcmira.monitors.update(monitorId, { name?, notifyFrequency?, notifyEmails?, notifySlack?, isPaused?, ... })',
+    signature: 'arcmira.monitors.update(monitorId, { name?, notify_frequency?, notify_emails?, notify_slack?, paused?, ... })',
     returns: '{ monitor }',
-    notes: ['Changes delivery or pauses: { isPaused: true } stops delivery and keeps the monitor.'],
+    notes: ['Changes delivery or pauses: { paused: true } stops delivery and keeps the monitor.'],
     access: 'write',
   },
   {
@@ -163,9 +163,16 @@ export const METHODS: readonly MethodDoc[] = [
     access: 'write',
   },
   {
+    name: 'monitors.addName',
+    signature: 'arcmira.monitors.addName(monitorId, { name, type, personMatchMode? })',
+    returns: '{ tracker_id, entity_name, entity_type, created, attached, reason? }',
+    notes: ['Follows one exact name, matched case-insensitively in newly analyzed media, so it works before the name is in the index. Use it only when resolve finds nothing for a name the user wants followed; an id from resolve goes to addEntities. type: person | organization (org) | product | topic | channel; a channel is followed by its UC id, never its name. A name the account already tracks answers created: false, attached: false, reason tracker_exists with its tracker_id: read arcmira.monitors.trackers to see where it is, and move it with attachTrackers only on a yes.'],
+    access: 'write',
+  },
+  {
     name: 'monitors.attachTrackers',
     signature: 'arcmira.monitors.attachTrackers(monitorId, trackerIds)',
-    returns: '{ monitorId, attachedCount, message }',
+    returns: '{ monitor_id, attached_count, message }',
     notes: ['Moves existing trackers (trk_ ids, the tracker_id of an addEntities result) into this monitor. Only after the user agreed to move a tracker another monitor holds.'],
     access: 'write',
   },
@@ -173,7 +180,7 @@ export const METHODS: readonly MethodDoc[] = [
     name: 'integrations.slack',
     signature: 'arcmira.integrations.slack()',
     returns: '{ integrations[{id, team_name, default_channel_id, channels[{id, name}]}] }',
-    notes: [`The Slack workspaces connected to the account. Pass id as slackIntegrationId and default_channel_id as slackChannelId. Empty: the user connects one at ${LINKS.integrations}.`],
+    notes: [`The Slack workspaces connected to the account. Pass id as slack_integration_id and default_channel_id as slack_channel_id. Empty: the user connects one at ${LINKS.integrations}.`],
   },
 ];
 
@@ -181,7 +188,7 @@ export const EXAMPLES: ReadonlyArray<{ title: string; code: string }> = [
   {
     title: 'One search, compact result',
     code: `const hits = await arcmira.search({ query: "stablecoins", channelIds: ["UC-DRzaGnL_vtBUpCFH5M0tg"], after: arcmira.daysAgo(90), limit: 3 });
-return hits.chunks.map(c => ({ said: c.text, video: c.videoTitle, date: c.publishedAt, url: c.watchUrl }));`,
+return hits.chunks.map(c => ({ said: c.text, video: c.video_title, date: c.published_at, url: c.watch_url }));`,
   },
   {
     title: 'Resolve, then filter; say when the entity was assumed',
@@ -212,7 +219,7 @@ return o.shared.slice(0, 5).map(s => ({ name: s.name, id: s.entity_id, episodes_
 const e = p.best ?? p.suggested;
 if (!e) return { ask: p.ask };
 const hits = await arcmira.search({ query: "ramp", speakerIds: [e.id], after: arcmira.daysAgo(30), limit: 5 });
-const said = hits.chunks.map(c => ({ lines: c.text.split("\\n").filter(l => l.startsWith(e.name + ": ")), url: c.watchUrl, date: c.publishedAt }));
+const said = hits.chunks.map(c => ({ lines: c.text.split("\\n").filter(l => l.startsWith(e.name + ": ")), url: c.watch_url, date: c.published_at }));
 return { person: e.name, id: e.id, assumed: Boolean(p.suggested), why: p.suggested?.evidence ?? null, ...(said.length ? { said } : { none: hits.note }) };`,
   },
   {
@@ -224,19 +231,18 @@ return a.sponsors.filter(s => inB.has(s.entity.id)).map(s => ({ name: s.entity.n
   {
     title: 'A Premium transcript: who speaks in the first minute',
     code: `const t = await arcmira.transcript("cdLeJU_1UH8", { quality: "premium", start: 0, end: 60 });
-if (t.state !== "ready") return t;   // pending: run this again; failed: report job.error
+if (t.state !== "ready") return { state: t.state, eta_seconds: t.eta_seconds, note: t.note };   // pending: tell the user, run this again later
 const name = new Map(t.speakers.map(s => [s.id, s.name]));
 return t.lines.map(l => \`[\${l.start}] \${name.get(l.speaker)}: \${l.text}\`);`,
   },
   {
-    title: 'A month window (after and before are both counted); return the window so the answer states it',
+    title: 'A month window (after is counted, before is the first day left out); return the window the API echoes',
     code: `const p = await arcmira.resolve("Cursor");
 const e = p.best ?? p.suggested;
 if (!e) return { ask: p.ask };
-const window = { after: "2026-08-01", before: "2026-08-31" };
-const o = await arcmira.occurrences({ channelIds: ["UC-DRzaGnL_vtBUpCFH5M0tg"], entityIds: [e.id], ...window });
+const o = await arcmira.occurrences({ channelIds: ["UC-DRzaGnL_vtBUpCFH5M0tg"], entityIds: [e.id], after: "2026-08-01", before: "2026-09-01" });
 const row = o.rows[0];
-return { entity: e.name, id: e.id, assumed: Boolean(p.suggested), why: p.suggested?.evidence ?? null, window, episodes: row?.count ?? 0, times: row?.occurrences ?? 0, as_of: o.as_of };`,
+return { entity: e.name, id: e.id, assumed: Boolean(p.suggested), why: p.suggested?.evidence ?? null, window: o.window, episodes: row?.count ?? 0, times: row?.occurrences ?? 0, as_of: o.as_of };`,
   },
   {
     title: 'Rank brands by 30-day mentions',
@@ -253,7 +259,7 @@ return out.sort((a, b) => (b.last30 ?? -1) - (a.last30 ?? -1));`,
 ];
 
 export const QUIRKS = [
-  'Dates: arcmira.today() and arcmira.daysAgo(n) give ISO dates from the server clock; never guess today. after and before are both counted (August is after 2026-08-01, before 2026-08-31), in UTC. Coverage is partial; check channel coverage before making freshness claims.',
+  'Dates: arcmira.today() and arcmira.daysAgo(n) give ISO dates from the server clock; never guess today. Windows are half-open in UTC: after is the first day counted, before is the first day left out (August is after 2026-08-01, before 2026-09-01). Every dated result echoes window{after, before}; state it in the answer. Coverage is partial; check channel coverage before making freshness claims.',
   'Momentum, mentions and counts measure the shows Arcmira indexes, not the internet; say so when it matters. An empty result means this query returned no matches. Keep outside evidence separate from Arcmira results.',
   'Before asserting a mention, read its description or the passage text and say which sense of the name it is (Mercury the bank, not the planet or the element). Drop rows about another sense.',
   ACCESS_GUIDANCE,
@@ -263,7 +269,7 @@ export const QUIRKS = [
 
 export const MAX_CALLS = 40;
 
-export const ERRORS = `Errors throw ArcmiraError with .code and, for gates, .unlock { tier, url }: id_required (a name where an id belongs; call arcmira.resolve first), invalid_video, too_many (over an id cap), entity_not_found, filter_requires_paid, recommendations_not_enabled, quota_exceeded and spend_limit_exceeded (the budget rule), insufficient_scope (the sign-in lacks monitors:write or trackers:write: reconnect and allow it), write_tool_required (a monitors write in arcmira_execute_read), rate_limited (.retry_after_seconds), call_budget (over ${MAX_CALLS} API calls in one program). See ${DOCS.errors}.`;
+export const ERRORS = `Errors throw ArcmiraError with .code and, for gates, .unlock { tier, url }: id_required (a name where an id belongs; call arcmira.resolve first), invalid_video, too_many (over an id cap), entity_not_found, filter_requires_paid, recommendations_not_enabled, paid_plan_required (Premium needs a paid plan), quota_exceeded and spend_limit_exceeded (the budget rule), insufficient_scope (the sign-in lacks monitors:write or trackers:write: reconnect and allow it), write_tool_required (a monitors write in arcmira_execute_read), rate_limited (.retry_after_seconds), call_budget (over ${MAX_CALLS} API calls in one program). See ${DOCS.errors}.`;
 
 const ROUTING =
   'WHICH METHOD. A quote or what was said about a topic: search. Whether and when a name came up: mentions. How hot something is: momentum. What a show talks about, what two shows share, what one episode mentions, how many episodes mentioned X in a window: occurrences. Who sponsors a show: sponsors. Who recommends a brand: recommendations. The latest episode: episodes(channelId, { limit: 1 }). How many videos a show has indexed and its as-of date: status({ channelId }). One video\'s words: transcript. The key, plan, credits and on-demand budget: status(). Following entities over time: monitors (the MONITORS note on monitors.list).';
@@ -314,7 +320,7 @@ export function referenceText(topic?: string): string {
 export const SHORT_GUIDE = [
   'Arcmira is the search engine for the spoken web: indexed YouTube and podcast transcripts with a catalog of who is mentioned where, who sponsors whom, and who recommends what on air.',
   'Searches indexed YouTube and podcast transcripts for the passages and metadata requested by the user.',
-  'arcmira_describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first program. arcmira_execute_read runs JavaScript that reads, Premium transcripts included, and returns bounded outcome-first JSON. arcmira_execute_write runs the same client plus the monitor writes (create, update, addEntities). arcmira_feedback tells Arcmira what was wrong, slow, missing or confusing.',
+  'arcmira_describe returns the arcmira client reference (methods, worked example programs, quirks, doc links): call it once before your first program. arcmira_execute_read runs JavaScript that reads, Premium transcripts included, and returns bounded outcome-first JSON. arcmira_execute_write runs the same client plus the monitor writes (create, update, addEntities, addName). arcmira_feedback tells Arcmira what was wrong, slow, missing or confusing.',
   BUDGET_RULE,
   'Write one program per question: resolve every name it carries (arcmira.resolve, with the user\'s own words about the name as context), use best, or suggested and tell the user you assumed it, or return ask.options for the user to pick (a name that resolves to nothing is not in the index), run every query the question needs, and return only the fields the answer needs. Filters take ids only (ent_..., UC..., 11-character video ids); a name where an id belongs throws id_required.',
   'Use arcmira.today() and arcmira.daysAgo(n) for date windows; when the user names no window, use the last 30 days, since a week of the index is often thin. Momentum, mentions and counts measure the shows Arcmira indexes, not the internet. Keep outside evidence separate from Arcmira results.',
