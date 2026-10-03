@@ -1,7 +1,7 @@
 {
   "name": "arcmira",
-  "version": "0.10.0",
-  "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations.",
+  "version": "0.10.1",
+  "description": "Search YouTube transcripts for timestamps, speaker appearances, sponsors and recommendations.",
   "mcpServers": {
     "arcmira": {
       "httpUrl": "https://mcp.arcmira.com/mcp"

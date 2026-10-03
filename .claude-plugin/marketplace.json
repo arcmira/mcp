@@ -3,12 +3,12 @@
   "owner": {
     "name": "Arcmira"
   },
-  "description": "Arcmira plugins: YouTube and podcast transcripts, mentions, sponsors and recommendations for your agent.",
+  "description": "Search YouTube transcripts for timestamps, speaker appearances, sponsors and recommendations.",
   "plugins": [
     {
       "name": "arcmira",
       "source": "./plugins/arcmira",
-      "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations."
+      "description": "Search YouTube transcripts for timestamps, speaker appearances, sponsors and recommendations."
     }
   ]
 }

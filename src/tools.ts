@@ -9,14 +9,6 @@ import { renderExecution, runProgram, type Access, type Execution, type SandboxH
 import { OUTPUT_LIMITS } from './output.ts';
 import { intentParam } from './telemetry.ts';
 
-/** arcmira_describe, arcmira_execute_read and arcmira_feedback change nothing on the user's account. */
-export const READ_ONLY: ToolAnnotations = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false,
-};
-
 export const TOOL_NAMES = ['arcmira_describe', 'arcmira_execute_read', 'arcmira_execute_write', 'arcmira_feedback'] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
@@ -55,7 +47,7 @@ export interface ToolSpec<Schema extends z.ZodObject<z.ZodRawShape>> {
   readonly title: string;
   readonly description: string;
   readonly inputSchema: Schema;
-  annotations?: ToolAnnotations;
+  readonly annotations: Required<Pick<ToolAnnotations, 'readOnlyHint' | 'destructiveHint' | 'idempotentHint' | 'openWorldHint'>>;
   run(input: z.output<Schema>, context: ToolContext): Promise<ToolResult>;
 }
 
@@ -75,6 +67,7 @@ export const describeTool = tool({
   name: 'arcmira_describe',
   title: 'The arcmira client reference',
   description: `Returns the reference for the typed arcmira client the execute tools run: method arguments, return fields, entity ID rules, examples, errors, the budget and monitor rules, and documentation links. The optional topic narrows it to a method or subject. Reads no indexed content and bills nothing. Docs: ${DOCS.mcp}`,
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   inputSchema: z.object({
     topic: z.string().max(60).optional().describe(`One word to narrow the reference, like sponsors, resolve, transcript, monitors or dates. Omit for the whole reference (${REFERENCE_SIZE}).`),
     intent: intentParam,
@@ -94,8 +87,10 @@ const LIMITS = `Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`;
 
 export const executeReadTool = tool({
   name: 'arcmira_execute_read',
-  title: 'Read Arcmira with a program',
+  title: 'Research with a program',
   description: `Runs JavaScript against the Arcmira API through the arcmira client: indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, coverage, Premium transcripts (a Premium read buys an untranscribed video at its quote, from included credits then on-demand within the account's budget; never ask for cents), and the user's monitors. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then call/rate/build facts and capped logs. Methods and examples: arcmira_describe. Filters require entity, channel, or video IDs. ${LIMITS}`,
+  // Premium retrieval can start paid work for an arbitrary public video.
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   inputSchema: z.object({ code, intent: intentParam }),
   async run(input, context) {
     return execute(input.code, 'read', context);
@@ -108,9 +103,9 @@ export const executeWriteTool = tool({
   description: `Runs JavaScript like arcmira_execute_read, with the account writes added: arcmira.monitors.create, arcmira.monitors.update (including paused), arcmira.monitors.addEntities, arcmira.monitors.addName and arcmira.monitors.attachTrackers. Use it only to save what the user asked to follow: list their monitors first, never assume one exists, and ask how they want updates (email or Slack; as it happens, hourly or daily) before creating one. Nothing is deleted; pause instead. ${LIMITS}`,
   annotations: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: false,
-    openWorldHint: false,
+    openWorldHint: true,
   },
   inputSchema: z.object({ code, intent: intentParam }),
   async run(input, context) {
@@ -150,9 +145,8 @@ export function feedbackBody(input: Omit<z.output<typeof feedbackInput>, 'intent
 export const feedbackTool = tool({
   name: 'arcmira_feedback',
   title: 'Tell Arcmira what went wrong',
-  description: 'Tells the Arcmira team what was wrong, slow, missing or confusing in a task, so they can fix it. Send one when a result was empty, an error, truncated or an ask that did not serve the user, or when the user says something was off. It changes nothing on the user\'s account and costs nothing.',
-  // Read-only: it changes nothing on the user's account. Each call files one more row, so not idempotent.
-  annotations: { ...READ_ONLY, idempotentHint: false },
+  description: 'Saves a feedback record for the Arcmira team about what was wrong, slow, missing or confusing in a task. Send one when a result was empty, an error, truncated or an ask that did not serve the user, or when the user says something was off. Each call adds a record; repeated calls create separate records. Costs nothing.',
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   inputSchema: feedbackInput,
   async run(input, { api }) {
     const answer = await api.post('/v1/feedback', feedbackBody(input), { idempotencyKey: crypto.randomUUID() });

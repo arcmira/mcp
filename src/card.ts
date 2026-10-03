@@ -4,7 +4,7 @@ import pkg from '../package.json' with { type: 'json' };
 import server from '../server.json' with { type: 'json' };
 import { DEFAULT_API_BASE, SRC } from './api.ts';
 import { PROTECTED_RESOURCE_PATH } from './auth.ts';
-import { READ_ONLY, TOOLS } from './tools.ts';
+import { TOOLS } from './tools.ts';
 import { SHORT_GUIDE } from './reference.ts';
 
 /**
@@ -22,7 +22,7 @@ export function serverCard(origin: string): Record<string, unknown> {
   return {
     $schema: server.$schema,
     name: server.name,
-    title: 'Arcmira',
+    title: 'Arcmira: YouTube Transcript Search',
     description: server.description,
     version: server.version,
     websiteUrl: server.websiteUrl,
@@ -43,7 +43,7 @@ export function serverCard(origin: string): Record<string, unknown> {
       title: tool.title,
       description: tool.description,
       inputSchema: z.toJSONSchema(tool.inputSchema, { io: 'input' }),
-      annotations: { ...(tool.annotations ?? READ_ONLY), title: tool.title },
+      annotations: { ...tool.annotations, title: tool.title },
     })),
   };
 }

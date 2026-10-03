@@ -5,7 +5,7 @@ import { noKeyError, type ApiClient } from './api.ts';
 import { clientLabel, errorResult, withBuild, withRateLimit } from './result.ts';
 import type { Access, SandboxHost } from './sandbox.ts';
 import { callId, inputState, outline, type Recorder } from './telemetry.ts';
-import { READ_ONLY, RETIRED_TOOLS, SERVER_INSTRUCTIONS, TOOLS, retiredToolResult } from './tools.ts';
+import { RETIRED_TOOLS, SERVER_INSTRUCTIONS, TOOLS, retiredToolResult } from './tools.ts';
 
 export const MCP_PATH = '/mcp';
 
@@ -51,7 +51,7 @@ export function createServer(caller: Caller, deploy: string | null = null): McpS
         title: tool.title,
         description: tool.description,
         inputSchema: tool.inputSchema,
-        annotations: { ...(tool.annotations ?? READ_ONLY), title: tool.title },
+        annotations: { ...tool.annotations, title: tool.title },
       },
       async ({ intent, ...input }) => {
         const started = Date.now();

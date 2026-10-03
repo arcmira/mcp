@@ -93,7 +93,7 @@ describe('withRateLimit', () => {
 });
 
 describe('the four tools through the handler', () => {
-  it('tools/list serves the four tools with the ruled annotations', async () => {
+  it('tools/list distinguishes reference lookup, paid programs and persisted feedback', async () => {
     const request = new Request('https://mcp.arcmira.com/mcp', {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer arc_sk_fixture' },
@@ -104,12 +104,12 @@ describe('the four tools through the handler', () => {
     const data = text.split('\n').find((line) => line.startsWith('data:'));
     const tools = (JSON.parse(data ? data.slice(5) : text) as { result: { tools: Array<{ name: string; annotations: Record<string, unknown>; inputSchema: { properties: Record<string, unknown> } }> } }).result.tools;
     assert.deepEqual(
-      Object.fromEntries(tools.map((t) => [t.name, [t.annotations.readOnlyHint, t.annotations.destructiveHint]])),
+      Object.fromEntries(tools.map((t) => [t.name, [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.idempotentHint, t.annotations.openWorldHint]])),
       {
-        arcmira_describe: [true, false],
-        arcmira_execute_read: [true, false],
-        arcmira_execute_write: [false, false],
-        arcmira_feedback: [true, false],
+        arcmira_describe: [true, false, true, false],
+        arcmira_execute_read: [false, true, false, true],
+        arcmira_execute_write: [false, true, false, true],
+        arcmira_feedback: [false, false, false, false],
       },
     );
     for (const tool of tools) assert.ok('intent' in tool.inputSchema.properties, `${tool.name} takes intent`);
