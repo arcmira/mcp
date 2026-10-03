@@ -1,16 +1,7 @@
 name: Publish to the MCP registry
-run-name: Publish to the MCP registry (${{ inputs.mode }})
 
 on:
   workflow_dispatch:
-    inputs:
-      mode:
-        description: "publish: add server.json's version if the registry lacks it. update: replace the record of the version server.json names (metadata only, same version)."
-        type: choice
-        default: publish
-        options:
-          - publish
-          - update
 
 concurrency:
   group: publish
@@ -41,33 +32,11 @@ jobs:
         env:
           MCP_PUBLISHER_VERSION: v1.8.1
       - name: Publish if this version is new
-        if: ${{ inputs.mode != 'update' }}
         run: |
           version="$(node -p "require('./server.json').version")"
           if curl -sf "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.arcmira/arcmira&version=${version}" | grep -q "\"version\":\"${version}\""; then
-            echo "io.github.arcmira/arcmira ${version} is already on the registry. Skipping publish."
+            echo "io.github.arcmira/arcmira ${version} is already on the registry. Published metadata is immutable; include changes in the next release. Skipping publish."
             exit 0
           fi
           ./mcp-publisher login github-oidc
           ./mcp-publisher publish
-
-      - name: Update the record of this version in place
-        if: ${{ inputs.mode == 'update' }}
-        run: |
-          version="$(node -p "require('./server.json').version")"
-          ./mcp-publisher login github-oidc
-          token="$(node -e "
-            const fs = require('fs'), os = require('os');
-            const paths = [os.homedir() + '/.config/mcp-publisher/token.json', os.homedir() + '/.mcp_publisher_token'];
-            const file = paths.find((p) => fs.existsSync(p));
-            if (!file) throw new Error('mcp-publisher wrote no token file at ' + paths.join(' or '));
-            const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
-            process.stdout.write(saved.token ?? saved.Token ?? saved.access_token ?? '');
-          ")"
-          test -n "${token}"
-          code="$(curl -s -o response.json -w '%{http_code}' -X PUT \
-            "https://registry.modelcontextprotocol.io/v0/servers/io.github.arcmira%2Farcmira/versions/${version}" \
-            -H "authorization: Bearer ${token}" -H "content-type: application/json" --data-binary @server.json)"
-          echo "PUT answered ${code}"
-          node -e "const r=require('./response.json'); console.log(JSON.stringify({websiteUrl: r.server?.websiteUrl, icons: r.server?.icons, updatedAt: r._meta?.['io.modelcontextprotocol.registry/official']?.updatedAt}, null, 2))"
-          test "${code}" = "200"
