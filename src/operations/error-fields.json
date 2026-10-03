@@ -1,0 +1,114 @@
+{
+  "kind": "object",
+  "properties": {
+    "error": {
+      "kind": "error",
+      "properties": {
+        "type": {
+          "kind": "scalar"
+        },
+        "code": {
+          "kind": "scalar"
+        },
+        "reason": {
+          "kind": "scalar"
+        },
+        "message": {
+          "kind": "scalar"
+        },
+        "param": {
+          "kind": "scalar"
+        },
+        "gate": {
+          "kind": "scalar"
+        },
+        "resource": {
+          "kind": "object",
+          "properties": {
+            "kind": {
+              "kind": "scalar"
+            },
+            "beyond_row": {
+              "kind": "scalar"
+            },
+            "window_days": {
+              "kind": "scalar"
+            },
+            "cutoff": {
+              "kind": "scalar"
+            },
+            "section": {
+              "kind": "scalar"
+            },
+            "param": {
+              "kind": "scalar"
+            },
+            "what": {
+              "kind": "scalar"
+            },
+            "feature": {
+              "kind": "scalar"
+            },
+            "requested": {
+              "kind": "scalar"
+            },
+            "remaining": {
+              "kind": "scalar"
+            },
+            "scope": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "retry_after_seconds": {
+          "kind": "scalar"
+        },
+        "details": {
+          "kind": "object",
+          "properties": {
+            "quote": {
+              "kind": "object",
+              "properties": {
+                "quarters": {
+                  "kind": "scalar"
+                },
+                "rows": {
+                  "kind": "scalar"
+                },
+                "charge": {
+                  "kind": "object",
+                  "properties": {
+                    "unit": {
+                      "kind": "scalar"
+                    },
+                    "amount": {
+                      "kind": "scalar"
+                    },
+                    "from": {
+                      "kind": "scalar"
+                    }
+                  }
+                },
+                "max_on_demand_cents": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "existing_id": {
+              "kind": "scalar"
+            },
+            "limit": {
+              "kind": "scalar"
+            },
+            "count": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "doc_url": {
+          "kind": "scalar"
+        }
+      }
+    }
+  }
+}

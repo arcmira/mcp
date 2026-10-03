@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { OPERATION_DEFINITIONS, EFFECTS } from '../src/operations/definitions.ts';
+import type { ResponseFields } from '../src/operations/responses.ts';
 
 const object = z.record(z.string(), z.unknown());
 const parameter = z.object({ name: z.string(), in: z.enum(['query', 'path', 'header']), required: z.boolean().optional(), schema: object });
@@ -8,6 +9,7 @@ const operation = z.object({
   operationId: z.string(),
   parameters: z.array(parameter).default([]),
   requestBody: z.object({ required: z.boolean().optional(), content: z.object({ 'application/json': z.object({ schema: object }) }) }).optional(),
+  responses: z.record(z.string(), z.object({ content: z.object({ 'application/json': z.object({ schema: object }) }).optional() })),
 });
 const documentSchema = z.object({ paths: z.record(z.string(), object) }).passthrough();
 const source = process.argv.find((arg) => arg.startsWith('--source='))?.slice('--source='.length) ?? 'https://api.arcmira.com/v1/openapi.json';
@@ -30,6 +32,35 @@ function resolve(value: unknown, seen: string[] = []): unknown {
     return resolve({ ...object.parse(target), ...siblings }, [...seen, ref]);
   }
   return Object.fromEntries(Object.entries(record).map(([key, item]) => [key, resolve(item, seen)]));
+}
+
+const omitted = new Set(['user_id', 'key_id', 'key_label', 'credential_kind', 'email_masked',
+  'request_id', 'image_checked_at', 'search_index', 'failed_batches', 'webhook_secret',
+  'webhook_secret_hint', 'unlock', 'upgrade']);
+
+function responseFields(schemas: unknown[], path: string[] = []): ResponseFields {
+  function flatten(schema: unknown): Record<string, unknown>[] {
+    const value = object.parse(schema);
+    return [value, ...['allOf', 'oneOf', 'anyOf'].flatMap((key) => (z.array(object).optional().parse(value[key]) ?? []).flatMap(flatten))];
+  }
+  const expanded = schemas.flatMap(flatten);
+  const properties = expanded.flatMap((schema) => Object.entries(object.optional().parse(schema.properties) ?? {}));
+  if (properties.length) {
+    const children: Record<string, unknown[]> = {};
+    for (const [key, schema] of properties) {
+      if (omitted.has(key) || (path[0] === 'submit_feedback' && path.length === 1 && key === 'query')
+        || (['job', 'premium_job', 'last_attempt'].includes(path.at(-1) ?? '') && ['id', 'created_at', 'completed_at'].includes(key))) continue;
+      (children[key] ??= []).push(schema);
+    }
+    return {
+      kind: properties.some(([key]) => key === 'code') && properties.some(([key]) => key === 'message') ? 'error' : 'object',
+      properties: Object.fromEntries(Object.entries(children).map(([key, values]) => [key, responseFields(values, [...path, key])])),
+    };
+  }
+  const items = expanded.flatMap((schema) => schema.items === undefined ? [] : [schema.items]);
+  if (items.length) return { kind: 'array', items: responseFields(items, [...path, '[]']) };
+  if (expanded.some((schema) => schema.type === 'object' || schema.additionalProperties)) throw new Error(`Unreviewed open-ended response object: ${path.join('.')}`);
+  return { kind: 'scalar' };
 }
 
 const catalog = OPERATION_DEFINITIONS.map(([id, title, description, effect]) => {
@@ -60,11 +91,20 @@ const catalog = OPERATION_DEFINITIONS.map(([id, title, description, effect]) => 
   const inputSchema = { type: 'object', properties, required, additionalProperties: false };
   // Fail generation when the runtime validator cannot support this contract.
   z.fromJSONSchema(object.parse(inputSchema));
-  return { id, name: `arcmira_${id}`, title, description, method: method.toUpperCase(), path, parameters: parameters.map(({ name, in: location }) => ({ name, location })), annotations: EFFECTS[effect], inputSchema };
+  const responses = Object.entries(spec.responses).flatMap(([status, response]) =>
+    /^2\d\d$/.test(status) && response.content ? [resolve(response.content['application/json'].schema)] : []);
+  if (!responses.length) throw new Error(`${id}: no successful JSON response contract`);
+  const outputFields = responseFields(responses, [id]);
+  return { id, name: `arcmira_${id}`, title, description, method: method.toUpperCase(), path, parameters: parameters.map(({ name, in: location }) => ({ name, location })), annotations: EFFECTS[effect], inputSchema, outputFields };
 });
-const output = `${JSON.stringify(catalog, null, 2)}\n`;
-const destination = new URL('../src/operations/catalog.json', import.meta.url);
-if (process.argv.includes('--check')) {
-  if (await readFile(destination, 'utf8') !== output) throw new Error('Operation catalog differs from the OpenAPI contract. Run pnpm operations:build and review the diff.');
-} else await writeFile(destination, output);
+for (const [filename, value] of [
+  ['catalog.json', catalog],
+  ['error-fields.json', responseFields([resolve({ $ref: '#/components/schemas/Error' })])],
+] as const) {
+  const output = `${JSON.stringify(value, null, 2)}\n`;
+  const destination = new URL(`../src/operations/${filename}`, import.meta.url);
+  if (process.argv.includes('--check')) {
+    if (await readFile(destination, 'utf8') !== output) throw new Error('Operation catalog differs from the OpenAPI contract. Run pnpm operations:build and review the diff.');
+  } else await writeFile(destination, output);
+}
 console.log(`${catalog.length} explicit operation contracts ${process.argv.includes('--check') ? 'checked' : 'generated'}.`);

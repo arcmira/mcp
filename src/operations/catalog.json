@@ -18,6 +18,107 @@
       "properties": {},
       "required": [],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "period_resets_at": {
+          "kind": "scalar"
+        },
+        "tier": {
+          "kind": "scalar"
+        },
+        "scopes": {
+          "kind": "array",
+          "items": {
+            "kind": "scalar"
+          }
+        },
+        "rate_limit": {
+          "kind": "scalar"
+        },
+        "recommendations_api_enabled": {
+          "kind": "scalar"
+        },
+        "usage": {
+          "kind": "object",
+          "properties": {
+            "rows_used": {
+              "kind": "scalar"
+            },
+            "rows_remaining": {
+              "kind": "scalar"
+            },
+            "monthly_rows": {
+              "kind": "scalar"
+            },
+            "current_spend_cents": {
+              "kind": "scalar"
+            },
+            "credits": {
+              "kind": "object",
+              "properties": {
+                "available": {
+                  "kind": "scalar"
+                },
+                "plan": {
+                  "kind": "object",
+                  "properties": {
+                    "credits": {
+                      "kind": "scalar"
+                    },
+                    "used": {
+                      "kind": "scalar"
+                    },
+                    "resets_at": {
+                      "kind": "scalar"
+                    }
+                  }
+                },
+                "granted": {
+                  "kind": "scalar"
+                },
+                "purchased": {
+                  "kind": "scalar"
+                },
+                "on_demand": {
+                  "kind": "object",
+                  "properties": {
+                    "enabled": {
+                      "kind": "scalar"
+                    },
+                    "cap_credits": {
+                      "kind": "scalar"
+                    },
+                    "used": {
+                      "kind": "scalar"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "settings": {
+          "kind": "object",
+          "properties": {
+            "transcripts": {
+              "kind": "object",
+              "properties": {
+                "quality": {
+                  "kind": "scalar"
+                },
+                "language": {
+                  "kind": "scalar"
+                },
+                "timestamps": {
+                  "kind": "scalar"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   {
@@ -88,6 +189,159 @@
         "q"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "query": {
+          "kind": "scalar"
+        },
+        "context": {
+          "kind": "scalar"
+        },
+        "confidence": {
+          "kind": "scalar"
+        },
+        "best": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "scalar"
+            },
+            "name": {
+              "kind": "scalar"
+            },
+            "slug": {
+              "kind": "scalar"
+            },
+            "type": {
+              "kind": "scalar"
+            },
+            "appearance_count": {
+              "kind": "scalar"
+            },
+            "youtube_channel_id": {
+              "kind": "scalar"
+            },
+            "description": {
+              "kind": "scalar"
+            },
+            "page": {
+              "kind": "scalar"
+            },
+            "match": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "suggested": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "scalar"
+            },
+            "name": {
+              "kind": "scalar"
+            },
+            "slug": {
+              "kind": "scalar"
+            },
+            "type": {
+              "kind": "scalar"
+            },
+            "appearance_count": {
+              "kind": "scalar"
+            },
+            "youtube_channel_id": {
+              "kind": "scalar"
+            },
+            "description": {
+              "kind": "scalar"
+            },
+            "page": {
+              "kind": "scalar"
+            },
+            "match": {
+              "kind": "scalar"
+            },
+            "reason": {
+              "kind": "scalar"
+            },
+            "evidence": {
+              "kind": "scalar"
+            },
+            "assumed": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "ask": {
+          "kind": "object",
+          "properties": {
+            "question": {
+              "kind": "scalar"
+            },
+            "options": {
+              "kind": "array",
+              "items": {
+                "kind": "object",
+                "properties": {
+                  "id": {
+                    "kind": "scalar"
+                  },
+                  "name": {
+                    "kind": "scalar"
+                  },
+                  "type": {
+                    "kind": "scalar"
+                  },
+                  "label": {
+                    "kind": "scalar"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "candidates": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "id": {
+                "kind": "scalar"
+              },
+              "name": {
+                "kind": "scalar"
+              },
+              "slug": {
+                "kind": "scalar"
+              },
+              "type": {
+                "kind": "scalar"
+              },
+              "appearance_count": {
+                "kind": "scalar"
+              },
+              "youtube_channel_id": {
+                "kind": "scalar"
+              },
+              "description": {
+                "kind": "scalar"
+              },
+              "page": {
+                "kind": "scalar"
+              },
+              "match": {
+                "kind": "scalar"
+              }
+            }
+          }
+        },
+        "note": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -121,6 +375,87 @@
         "id"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "entity": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "scalar"
+            },
+            "canonical_id": {
+              "kind": "scalar"
+            },
+            "name": {
+              "kind": "scalar"
+            },
+            "type": {
+              "kind": "scalar"
+            },
+            "platform": {
+              "kind": "scalar"
+            },
+            "url": {
+              "kind": "scalar"
+            },
+            "image_url": {
+              "kind": "scalar"
+            },
+            "appearance_count": {
+              "kind": "scalar"
+            },
+            "owner_entity_id": {
+              "kind": "scalar"
+            },
+            "is_canonical": {
+              "kind": "scalar"
+            },
+            "merged_from_id": {
+              "kind": "scalar"
+            },
+            "slug": {
+              "kind": "scalar"
+            },
+            "route": {
+              "kind": "scalar"
+            },
+            "page": {
+              "kind": "scalar"
+            },
+            "appearances_page": {
+              "kind": "scalar"
+            },
+            "mentions_page": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "recommendations_summary": {
+          "kind": "object",
+          "properties": {
+            "total_ad_reads": {
+              "kind": "scalar"
+            },
+            "total_endorsements": {
+              "kind": "scalar"
+            },
+            "unique_shows": {
+              "kind": "scalar"
+            },
+            "first_seen_at": {
+              "kind": "scalar"
+            },
+            "last_seen_at": {
+              "kind": "scalar"
+            },
+            "channels_as_sponsor": {
+              "kind": "scalar"
+            }
+          }
+        }
+      }
     }
   },
   {
@@ -243,6 +578,296 @@
         "q"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "query": {
+          "kind": "scalar"
+        },
+        "limit": {
+          "kind": "scalar"
+        },
+        "returned": {
+          "kind": "scalar"
+        },
+        "filters": {
+          "kind": "object",
+          "properties": {
+            "channel_ids": {
+              "kind": "array",
+              "items": {
+                "kind": "scalar"
+              }
+            },
+            "entity_ids": {
+              "kind": "array",
+              "items": {
+                "kind": "scalar"
+              }
+            },
+            "about": {
+              "kind": "array",
+              "items": {
+                "kind": "object",
+                "properties": {
+                  "id": {
+                    "kind": "scalar"
+                  },
+                  "name": {
+                    "kind": "scalar"
+                  },
+                  "type": {
+                    "kind": "scalar"
+                  }
+                }
+              }
+            },
+            "by": {
+              "kind": "array",
+              "items": {
+                "kind": "object",
+                "properties": {
+                  "id": {
+                    "kind": "scalar"
+                  },
+                  "name": {
+                    "kind": "scalar"
+                  },
+                  "type": {
+                    "kind": "scalar"
+                  }
+                }
+              }
+            },
+            "kind": {
+              "kind": "array",
+              "items": {
+                "kind": "scalar"
+              }
+            }
+          }
+        },
+        "window": {
+          "kind": "object",
+          "properties": {
+            "after": {
+              "kind": "scalar"
+            },
+            "before": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "chunks": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "id": {
+                "kind": "scalar"
+              },
+              "video_id": {
+                "kind": "scalar"
+              },
+              "channel_id": {
+                "kind": "scalar"
+              },
+              "channel_name": {
+                "kind": "scalar"
+              },
+              "channel_page": {
+                "kind": "scalar"
+              },
+              "video_title": {
+                "kind": "scalar"
+              },
+              "speakers": {
+                "kind": "array",
+                "items": {
+                  "kind": "scalar"
+                }
+              },
+              "source": {
+                "kind": "scalar"
+              },
+              "source_label": {
+                "kind": "scalar"
+              },
+              "published_at": {
+                "kind": "scalar"
+              },
+              "text": {
+                "kind": "scalar"
+              },
+              "start_seconds": {
+                "kind": "scalar"
+              },
+              "watch_url": {
+                "kind": "scalar"
+              },
+              "cite_line": {
+                "kind": "scalar"
+              },
+              "score": {
+                "kind": "scalar"
+              },
+              "about": {
+                "kind": "array",
+                "items": {
+                  "kind": "object",
+                  "properties": {
+                    "id": {
+                      "kind": "scalar"
+                    },
+                    "name": {
+                      "kind": "scalar"
+                    },
+                    "type": {
+                      "kind": "scalar"
+                    }
+                  }
+                }
+              },
+              "speakers_by": {
+                "kind": "array",
+                "items": {
+                  "kind": "object",
+                  "properties": {
+                    "id": {
+                      "kind": "scalar"
+                    },
+                    "name": {
+                      "kind": "scalar"
+                    },
+                    "type": {
+                      "kind": "scalar"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "partial": {
+          "kind": "scalar"
+        },
+        "as_of": {
+          "kind": "scalar"
+        },
+        "access": {
+          "kind": "error",
+          "properties": {
+            "type": {
+              "kind": "scalar"
+            },
+            "code": {
+              "kind": "scalar"
+            },
+            "reason": {
+              "kind": "scalar"
+            },
+            "message": {
+              "kind": "scalar"
+            },
+            "param": {
+              "kind": "scalar"
+            },
+            "gate": {
+              "kind": "scalar"
+            },
+            "resource": {
+              "kind": "object",
+              "properties": {
+                "kind": {
+                  "kind": "scalar"
+                },
+                "beyond_row": {
+                  "kind": "scalar"
+                },
+                "window_days": {
+                  "kind": "scalar"
+                },
+                "cutoff": {
+                  "kind": "scalar"
+                },
+                "section": {
+                  "kind": "scalar"
+                },
+                "param": {
+                  "kind": "scalar"
+                },
+                "what": {
+                  "kind": "scalar"
+                },
+                "feature": {
+                  "kind": "scalar"
+                },
+                "requested": {
+                  "kind": "scalar"
+                },
+                "remaining": {
+                  "kind": "scalar"
+                },
+                "scope": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "retry_after_seconds": {
+              "kind": "scalar"
+            },
+            "details": {
+              "kind": "object",
+              "properties": {
+                "quote": {
+                  "kind": "object",
+                  "properties": {
+                    "quarters": {
+                      "kind": "scalar"
+                    },
+                    "rows": {
+                      "kind": "scalar"
+                    },
+                    "charge": {
+                      "kind": "object",
+                      "properties": {
+                        "unit": {
+                          "kind": "scalar"
+                        },
+                        "amount": {
+                          "kind": "scalar"
+                        },
+                        "from": {
+                          "kind": "scalar"
+                        }
+                      }
+                    },
+                    "max_on_demand_cents": {
+                      "kind": "scalar"
+                    }
+                  }
+                },
+                "existing_id": {
+                  "kind": "scalar"
+                },
+                "limit": {
+                  "kind": "scalar"
+                },
+                "count": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "doc_url": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "note": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -355,6 +980,219 @@
         "entity_id"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "mentions": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "id": {
+                "kind": "scalar"
+              },
+              "entity": {
+                "kind": "object",
+                "properties": {
+                  "id": {
+                    "kind": "scalar"
+                  },
+                  "name": {
+                    "kind": "scalar"
+                  },
+                  "type": {
+                    "kind": "scalar"
+                  },
+                  "slug": {
+                    "kind": "scalar"
+                  },
+                  "page": {
+                    "kind": "scalar"
+                  }
+                }
+              },
+              "media": {
+                "kind": "object",
+                "properties": {
+                  "video_id": {
+                    "kind": "scalar"
+                  },
+                  "title": {
+                    "kind": "scalar"
+                  },
+                  "url": {
+                    "kind": "scalar"
+                  },
+                  "published_at": {
+                    "kind": "scalar"
+                  },
+                  "channel_id": {
+                    "kind": "scalar"
+                  },
+                  "view_count": {
+                    "kind": "scalar"
+                  },
+                  "source_channel": {
+                    "kind": "object",
+                    "properties": {
+                      "id": {
+                        "kind": "scalar"
+                      },
+                      "name": {
+                        "kind": "scalar"
+                      },
+                      "url": {
+                        "kind": "scalar"
+                      }
+                    }
+                  }
+                }
+              },
+              "start_seconds": {
+                "kind": "scalar"
+              },
+              "end_seconds": {
+                "kind": "scalar"
+              },
+              "is_appearance": {
+                "kind": "scalar"
+              },
+              "description": {
+                "kind": "scalar"
+              },
+              "confidence": {
+                "kind": "scalar"
+              },
+              "sentiment_score": {
+                "kind": "scalar"
+              },
+              "sentiment": {
+                "kind": "scalar"
+              },
+              "referenced_url": {
+                "kind": "scalar"
+              },
+              "referenced_platform": {
+                "kind": "scalar"
+              },
+              "extracted_content": {
+                "kind": "scalar"
+              },
+              "recommendations": {
+                "kind": "object",
+                "properties": {
+                  "items": {
+                    "kind": "array",
+                    "items": {
+                      "kind": "object",
+                      "properties": {
+                        "id": {
+                          "kind": "scalar"
+                        },
+                        "class": {
+                          "kind": "scalar"
+                        },
+                        "verbatim_quote": {
+                          "kind": "scalar"
+                        },
+                        "promo_code": {
+                          "kind": "scalar"
+                        },
+                        "offer": {
+                          "kind": "scalar"
+                        },
+                        "confidence": {
+                          "kind": "scalar"
+                        },
+                        "start_seconds": {
+                          "kind": "scalar"
+                        },
+                        "end_seconds": {
+                          "kind": "scalar"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "has_more": {
+          "kind": "scalar"
+        },
+        "next_cursor": {
+          "kind": "scalar"
+        },
+        "entity": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "scalar"
+            },
+            "canonical_id": {
+              "kind": "scalar"
+            },
+            "name": {
+              "kind": "scalar"
+            },
+            "type": {
+              "kind": "scalar"
+            },
+            "platform": {
+              "kind": "scalar"
+            },
+            "url": {
+              "kind": "scalar"
+            },
+            "image_url": {
+              "kind": "scalar"
+            },
+            "appearance_count": {
+              "kind": "scalar"
+            },
+            "owner_entity_id": {
+              "kind": "scalar"
+            },
+            "is_canonical": {
+              "kind": "scalar"
+            },
+            "merged_from_id": {
+              "kind": "scalar"
+            },
+            "slug": {
+              "kind": "scalar"
+            },
+            "route": {
+              "kind": "scalar"
+            },
+            "page": {
+              "kind": "scalar"
+            },
+            "appearances_page": {
+              "kind": "scalar"
+            },
+            "mentions_page": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "window": {
+          "kind": "object",
+          "properties": {
+            "after": {
+              "kind": "scalar"
+            },
+            "before": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "note": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -464,6 +1302,176 @@
         "entity_id"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "recommendations": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "id": {
+                "kind": "scalar"
+              },
+              "class": {
+                "kind": "scalar"
+              },
+              "entity": {
+                "kind": "object",
+                "properties": {
+                  "id": {
+                    "kind": "scalar"
+                  },
+                  "name": {
+                    "kind": "scalar"
+                  },
+                  "type": {
+                    "kind": "scalar"
+                  },
+                  "slug": {
+                    "kind": "scalar"
+                  },
+                  "page": {
+                    "kind": "scalar"
+                  }
+                }
+              },
+              "media": {
+                "kind": "object",
+                "properties": {
+                  "video_id": {
+                    "kind": "scalar"
+                  },
+                  "title": {
+                    "kind": "scalar"
+                  },
+                  "published_at": {
+                    "kind": "scalar"
+                  },
+                  "channel_id": {
+                    "kind": "scalar"
+                  },
+                  "source_channel": {
+                    "kind": "object",
+                    "properties": {
+                      "id": {
+                        "kind": "scalar"
+                      },
+                      "name": {
+                        "kind": "scalar"
+                      }
+                    }
+                  }
+                }
+              },
+              "start_seconds": {
+                "kind": "scalar"
+              },
+              "end_seconds": {
+                "kind": "scalar"
+              },
+              "verbatim_quote": {
+                "kind": "scalar"
+              },
+              "promo_code": {
+                "kind": "scalar"
+              },
+              "offer": {
+                "kind": "scalar"
+              },
+              "sentiment": {
+                "kind": "scalar"
+              },
+              "sentiment_score": {
+                "kind": "scalar"
+              },
+              "confidence": {
+                "kind": "scalar"
+              },
+              "speaker_role": {
+                "kind": "scalar"
+              },
+              "conflict_status": {
+                "kind": "scalar"
+              },
+              "resolution": {
+                "kind": "scalar"
+              }
+            }
+          }
+        },
+        "has_more": {
+          "kind": "scalar"
+        },
+        "next_cursor": {
+          "kind": "scalar"
+        },
+        "entity": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "scalar"
+            },
+            "canonical_id": {
+              "kind": "scalar"
+            },
+            "name": {
+              "kind": "scalar"
+            },
+            "type": {
+              "kind": "scalar"
+            },
+            "platform": {
+              "kind": "scalar"
+            },
+            "url": {
+              "kind": "scalar"
+            },
+            "image_url": {
+              "kind": "scalar"
+            },
+            "appearance_count": {
+              "kind": "scalar"
+            },
+            "owner_entity_id": {
+              "kind": "scalar"
+            },
+            "is_canonical": {
+              "kind": "scalar"
+            },
+            "merged_from_id": {
+              "kind": "scalar"
+            },
+            "slug": {
+              "kind": "scalar"
+            },
+            "route": {
+              "kind": "scalar"
+            },
+            "page": {
+              "kind": "scalar"
+            },
+            "appearances_page": {
+              "kind": "scalar"
+            },
+            "mentions_page": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "window": {
+          "kind": "object",
+          "properties": {
+            "after": {
+              "kind": "scalar"
+            },
+            "before": {
+              "kind": "scalar"
+            }
+          }
+        }
+      }
     }
   },
   {
@@ -531,6 +1539,208 @@
         "channel_id"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "channel": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "scalar"
+            },
+            "youtube_channel_id": {
+              "kind": "scalar"
+            },
+            "name": {
+              "kind": "scalar"
+            },
+            "page": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "sponsors": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "entity": {
+                "kind": "object",
+                "properties": {
+                  "id": {
+                    "kind": "scalar"
+                  },
+                  "name": {
+                    "kind": "scalar"
+                  },
+                  "type": {
+                    "kind": "scalar"
+                  },
+                  "slug": {
+                    "kind": "scalar"
+                  },
+                  "page": {
+                    "kind": "scalar"
+                  }
+                }
+              },
+              "ad_reads": {
+                "kind": "scalar"
+              },
+              "videos": {
+                "kind": "scalar"
+              },
+              "first_seen": {
+                "kind": "scalar"
+              },
+              "last_seen": {
+                "kind": "scalar"
+              },
+              "sponsor_status": {
+                "kind": "object",
+                "properties": {
+                  "status": {
+                    "kind": "scalar"
+                  },
+                  "ad_count": {
+                    "kind": "scalar"
+                  },
+                  "first_ad_date": {
+                    "kind": "scalar"
+                  },
+                  "last_ad_date": {
+                    "kind": "scalar"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "meta": {
+          "kind": "object",
+          "properties": {
+            "min_ad_reads": {
+              "kind": "scalar"
+            },
+            "count": {
+              "kind": "scalar"
+            },
+            "total": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "access": {
+          "kind": "error",
+          "properties": {
+            "type": {
+              "kind": "scalar"
+            },
+            "code": {
+              "kind": "scalar"
+            },
+            "reason": {
+              "kind": "scalar"
+            },
+            "message": {
+              "kind": "scalar"
+            },
+            "param": {
+              "kind": "scalar"
+            },
+            "gate": {
+              "kind": "scalar"
+            },
+            "resource": {
+              "kind": "object",
+              "properties": {
+                "kind": {
+                  "kind": "scalar"
+                },
+                "beyond_row": {
+                  "kind": "scalar"
+                },
+                "window_days": {
+                  "kind": "scalar"
+                },
+                "cutoff": {
+                  "kind": "scalar"
+                },
+                "section": {
+                  "kind": "scalar"
+                },
+                "param": {
+                  "kind": "scalar"
+                },
+                "what": {
+                  "kind": "scalar"
+                },
+                "feature": {
+                  "kind": "scalar"
+                },
+                "requested": {
+                  "kind": "scalar"
+                },
+                "remaining": {
+                  "kind": "scalar"
+                },
+                "scope": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "retry_after_seconds": {
+              "kind": "scalar"
+            },
+            "details": {
+              "kind": "object",
+              "properties": {
+                "quote": {
+                  "kind": "object",
+                  "properties": {
+                    "quarters": {
+                      "kind": "scalar"
+                    },
+                    "rows": {
+                      "kind": "scalar"
+                    },
+                    "charge": {
+                      "kind": "object",
+                      "properties": {
+                        "unit": {
+                          "kind": "scalar"
+                        },
+                        "amount": {
+                          "kind": "scalar"
+                        },
+                        "from": {
+                          "kind": "scalar"
+                        }
+                      }
+                    },
+                    "max_on_demand_cents": {
+                      "kind": "scalar"
+                    }
+                  }
+                },
+                "existing_id": {
+                  "kind": "scalar"
+                },
+                "limit": {
+                  "kind": "scalar"
+                },
+                "count": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "doc_url": {
+              "kind": "scalar"
+            }
+          }
+        }
+      }
     }
   },
   {
@@ -564,6 +1774,212 @@
         "id"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "entity": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "scalar"
+            },
+            "name": {
+              "kind": "scalar"
+            },
+            "type": {
+              "kind": "scalar"
+            },
+            "slug": {
+              "kind": "scalar"
+            },
+            "page": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "verdict": {
+          "kind": "scalar"
+        },
+        "as_of": {
+          "kind": "scalar"
+        },
+        "coverage": {
+          "kind": "scalar"
+        },
+        "volume": {
+          "kind": "object",
+          "properties": {
+            "mentions_7d": {
+              "kind": "scalar"
+            },
+            "mentions_30d": {
+              "kind": "scalar"
+            },
+            "mentions_prior_30d": {
+              "kind": "scalar"
+            },
+            "delta_30d_absolute": {
+              "kind": "scalar"
+            },
+            "delta_30d_pct": {
+              "kind": "scalar"
+            },
+            "mentions_90d": {
+              "kind": "scalar"
+            },
+            "total": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "top_shows": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "channel_id": {
+                "kind": "scalar"
+              },
+              "channel_name": {
+                "kind": "scalar"
+              },
+              "channel_page": {
+                "kind": "scalar"
+              },
+              "mentions": {
+                "kind": "scalar"
+              }
+            }
+          }
+        },
+        "paid_vs_organic": {
+          "kind": "object",
+          "properties": {
+            "ad_reads": {
+              "kind": "scalar"
+            },
+            "endorsements": {
+              "kind": "scalar"
+            },
+            "organic": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "access": {
+          "kind": "error",
+          "properties": {
+            "type": {
+              "kind": "scalar"
+            },
+            "code": {
+              "kind": "scalar"
+            },
+            "reason": {
+              "kind": "scalar"
+            },
+            "message": {
+              "kind": "scalar"
+            },
+            "param": {
+              "kind": "scalar"
+            },
+            "gate": {
+              "kind": "scalar"
+            },
+            "resource": {
+              "kind": "object",
+              "properties": {
+                "kind": {
+                  "kind": "scalar"
+                },
+                "beyond_row": {
+                  "kind": "scalar"
+                },
+                "window_days": {
+                  "kind": "scalar"
+                },
+                "cutoff": {
+                  "kind": "scalar"
+                },
+                "section": {
+                  "kind": "scalar"
+                },
+                "param": {
+                  "kind": "scalar"
+                },
+                "what": {
+                  "kind": "scalar"
+                },
+                "feature": {
+                  "kind": "scalar"
+                },
+                "requested": {
+                  "kind": "scalar"
+                },
+                "remaining": {
+                  "kind": "scalar"
+                },
+                "scope": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "retry_after_seconds": {
+              "kind": "scalar"
+            },
+            "details": {
+              "kind": "object",
+              "properties": {
+                "quote": {
+                  "kind": "object",
+                  "properties": {
+                    "quarters": {
+                      "kind": "scalar"
+                    },
+                    "rows": {
+                      "kind": "scalar"
+                    },
+                    "charge": {
+                      "kind": "object",
+                      "properties": {
+                        "unit": {
+                          "kind": "scalar"
+                        },
+                        "amount": {
+                          "kind": "scalar"
+                        },
+                        "from": {
+                          "kind": "scalar"
+                        }
+                      }
+                    },
+                    "max_on_demand_cents": {
+                      "kind": "scalar"
+                    }
+                  }
+                },
+                "existing_id": {
+                  "kind": "scalar"
+                },
+                "limit": {
+                  "kind": "scalar"
+                },
+                "count": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "doc_url": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "note": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -597,6 +2013,45 @@
         "channel_id"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "channel": {
+          "kind": "object",
+          "properties": {
+            "youtube_channel_id": {
+              "kind": "scalar"
+            },
+            "searchable_videos": {
+              "kind": "scalar"
+            },
+            "indexed_through": {
+              "kind": "scalar"
+            },
+            "search_indexed_through": {
+              "kind": "scalar"
+            },
+            "source_mix": {
+              "kind": "object",
+              "properties": {
+                "arcmira_premium": {
+                  "kind": "scalar"
+                },
+                "creator_captions": {
+                  "kind": "scalar"
+                },
+                "third_party_quick": {
+                  "kind": "scalar"
+                }
+              }
+            }
+          }
+        },
+        "note": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -665,6 +2120,95 @@
         "channel_id"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "channel": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "scalar"
+            },
+            "youtube_channel_id": {
+              "kind": "scalar"
+            },
+            "name": {
+              "kind": "scalar"
+            },
+            "page": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "episodes": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "video_id": {
+                "kind": "scalar"
+              },
+              "title": {
+                "kind": "scalar"
+              },
+              "published_at": {
+                "kind": "scalar"
+              },
+              "duration_seconds": {
+                "kind": "scalar"
+              },
+              "view_count": {
+                "kind": "scalar"
+              },
+              "channel_id": {
+                "kind": "scalar"
+              },
+              "channel_name": {
+                "kind": "scalar"
+              },
+              "channel_page": {
+                "kind": "scalar"
+              },
+              "watch_url": {
+                "kind": "scalar"
+              }
+            }
+          }
+        },
+        "returned": {
+          "kind": "scalar"
+        },
+        "has_more": {
+          "kind": "scalar"
+        },
+        "next_cursor": {
+          "kind": "scalar"
+        },
+        "window": {
+          "kind": "object",
+          "properties": {
+            "after": {
+              "kind": "scalar"
+            },
+            "before": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "indexed_through": {
+          "kind": "scalar"
+        },
+        "index_age_days": {
+          "kind": "scalar"
+        },
+        "as_of": {
+          "kind": "scalar"
+        },
+        "note": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -761,6 +2305,154 @@
       },
       "required": [],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "mode": {
+          "kind": "scalar"
+        },
+        "window": {
+          "kind": "object",
+          "properties": {
+            "after": {
+              "kind": "scalar"
+            },
+            "before": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "channel_ids": {
+          "kind": "array",
+          "items": {
+            "kind": "scalar"
+          }
+        },
+        "video_ids": {
+          "kind": "array",
+          "items": {
+            "kind": "scalar"
+          }
+        },
+        "rows": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "entity_id": {
+                "kind": "scalar"
+              },
+              "name": {
+                "kind": "scalar"
+              },
+              "type": {
+                "kind": "scalar"
+              },
+              "page": {
+                "kind": "scalar"
+              },
+              "appearances_page": {
+                "kind": "scalar"
+              },
+              "mentions_page": {
+                "kind": "scalar"
+              },
+              "slug": {
+                "kind": "scalar"
+              },
+              "channel_id": {
+                "kind": "scalar"
+              },
+              "channel_name": {
+                "kind": "scalar"
+              },
+              "channel_page": {
+                "kind": "scalar"
+              },
+              "count": {
+                "kind": "scalar"
+              },
+              "occurrences": {
+                "kind": "scalar"
+              },
+              "as_of": {
+                "kind": "scalar"
+              }
+            }
+          }
+        },
+        "returned": {
+          "kind": "scalar"
+        },
+        "has_more": {
+          "kind": "scalar"
+        },
+        "shared": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "entity_id": {
+                "kind": "scalar"
+              },
+              "name": {
+                "kind": "scalar"
+              },
+              "type": {
+                "kind": "scalar"
+              },
+              "page": {
+                "kind": "scalar"
+              },
+              "appearances_page": {
+                "kind": "scalar"
+              },
+              "mentions_page": {
+                "kind": "scalar"
+              },
+              "slug": {
+                "kind": "scalar"
+              },
+              "channel_count": {
+                "kind": "scalar"
+              },
+              "by_channel": {
+                "kind": "array",
+                "items": {
+                  "kind": "object",
+                  "properties": {
+                    "channel_id": {
+                      "kind": "scalar"
+                    },
+                    "channel_name": {
+                      "kind": "scalar"
+                    },
+                    "channel_page": {
+                      "kind": "scalar"
+                    },
+                    "count": {
+                      "kind": "scalar"
+                    },
+                    "occurrences": {
+                      "kind": "scalar"
+                    },
+                    "as_of": {
+                      "kind": "scalar"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "as_of": {
+          "kind": "scalar"
+        },
+        "note": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -862,6 +2554,364 @@
         "video_id"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "state": {
+          "kind": "scalar"
+        },
+        "video": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "scalar"
+            },
+            "title": {
+              "kind": "scalar"
+            },
+            "channel_id": {
+              "kind": "scalar"
+            },
+            "channel_name": {
+              "kind": "scalar"
+            },
+            "published_at": {
+              "kind": "scalar"
+            },
+            "duration_seconds": {
+              "kind": "scalar"
+            },
+            "watch_url": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "quality": {
+          "kind": "scalar"
+        },
+        "source": {
+          "kind": "scalar"
+        },
+        "language": {
+          "kind": "scalar"
+        },
+        "languages": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "code": {
+                "kind": "scalar"
+              },
+              "name": {
+                "kind": "scalar"
+              },
+              "generated": {
+                "kind": "scalar"
+              }
+            }
+          }
+        },
+        "lines": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "start": {
+                "kind": "scalar"
+              },
+              "end": {
+                "kind": "scalar"
+              },
+              "text": {
+                "kind": "scalar"
+              },
+              "speaker": {
+                "kind": "scalar"
+              },
+              "index": {
+                "kind": "scalar"
+              }
+            }
+          }
+        },
+        "paragraphs": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "start": {
+                "kind": "scalar"
+              },
+              "text": {
+                "kind": "scalar"
+              },
+              "speaker": {
+                "kind": "scalar"
+              }
+            }
+          }
+        },
+        "speakers": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "id": {
+                "kind": "scalar"
+              },
+              "name": {
+                "kind": "scalar"
+              },
+              "entity_id": {
+                "kind": "scalar"
+              },
+              "confidence": {
+                "kind": "scalar"
+              }
+            }
+          }
+        },
+        "revision": {
+          "kind": "scalar"
+        },
+        "range": {
+          "kind": "object",
+          "properties": {
+            "start": {
+              "kind": "scalar"
+            },
+            "end": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "rows_billed": {
+          "kind": "scalar"
+        },
+        "as_of": {
+          "kind": "scalar"
+        },
+        "premium_job": {
+          "kind": "object",
+          "properties": {
+            "video_id": {
+              "kind": "scalar"
+            },
+            "state": {
+              "kind": "scalar"
+            },
+            "status": {
+              "kind": "scalar"
+            },
+            "stage": {
+              "kind": "scalar"
+            },
+            "charge": {
+              "kind": "object",
+              "properties": {
+                "unit": {
+                  "kind": "scalar"
+                },
+                "amount": {
+                  "kind": "scalar"
+                },
+                "from": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "eta_seconds": {
+              "kind": "scalar"
+            },
+            "next_poll_seconds": {
+              "kind": "scalar"
+            },
+            "error": {
+              "kind": "scalar"
+            },
+            "refunded": {
+              "kind": "scalar"
+            },
+            "status_url": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "access": {
+          "kind": "error",
+          "properties": {
+            "type": {
+              "kind": "scalar"
+            },
+            "code": {
+              "kind": "scalar"
+            },
+            "reason": {
+              "kind": "scalar"
+            },
+            "message": {
+              "kind": "scalar"
+            },
+            "param": {
+              "kind": "scalar"
+            },
+            "gate": {
+              "kind": "scalar"
+            },
+            "resource": {
+              "kind": "object",
+              "properties": {
+                "kind": {
+                  "kind": "scalar"
+                },
+                "beyond_row": {
+                  "kind": "scalar"
+                },
+                "window_days": {
+                  "kind": "scalar"
+                },
+                "cutoff": {
+                  "kind": "scalar"
+                },
+                "section": {
+                  "kind": "scalar"
+                },
+                "param": {
+                  "kind": "scalar"
+                },
+                "what": {
+                  "kind": "scalar"
+                },
+                "feature": {
+                  "kind": "scalar"
+                },
+                "requested": {
+                  "kind": "scalar"
+                },
+                "remaining": {
+                  "kind": "scalar"
+                },
+                "scope": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "retry_after_seconds": {
+              "kind": "scalar"
+            },
+            "details": {
+              "kind": "object",
+              "properties": {
+                "quote": {
+                  "kind": "object",
+                  "properties": {
+                    "quarters": {
+                      "kind": "scalar"
+                    },
+                    "rows": {
+                      "kind": "scalar"
+                    },
+                    "charge": {
+                      "kind": "object",
+                      "properties": {
+                        "unit": {
+                          "kind": "scalar"
+                        },
+                        "amount": {
+                          "kind": "scalar"
+                        },
+                        "from": {
+                          "kind": "scalar"
+                        }
+                      }
+                    },
+                    "max_on_demand_cents": {
+                      "kind": "scalar"
+                    }
+                  }
+                },
+                "existing_id": {
+                  "kind": "scalar"
+                },
+                "limit": {
+                  "kind": "scalar"
+                },
+                "count": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "doc_url": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "note": {
+          "kind": "scalar"
+        },
+        "video_id": {
+          "kind": "scalar"
+        },
+        "job": {
+          "kind": "object",
+          "properties": {
+            "video_id": {
+              "kind": "scalar"
+            },
+            "state": {
+              "kind": "scalar"
+            },
+            "status": {
+              "kind": "scalar"
+            },
+            "stage": {
+              "kind": "scalar"
+            },
+            "charge": {
+              "kind": "object",
+              "properties": {
+                "unit": {
+                  "kind": "scalar"
+                },
+                "amount": {
+                  "kind": "scalar"
+                },
+                "from": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "eta_seconds": {
+              "kind": "scalar"
+            },
+            "next_poll_seconds": {
+              "kind": "scalar"
+            },
+            "error": {
+              "kind": "scalar"
+            },
+            "refunded": {
+              "kind": "scalar"
+            },
+            "status_url": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "last_attempt": {
+          "kind": "object",
+          "properties": {
+            "status": {
+              "kind": "scalar"
+            },
+            "error": {
+              "kind": "scalar"
+            }
+          }
+        }
+      }
     }
   },
   {
@@ -895,6 +2945,63 @@
         "video_id"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "video_id": {
+          "kind": "scalar"
+        },
+        "duration_seconds": {
+          "kind": "scalar"
+        },
+        "billing_scope": {
+          "kind": "scalar"
+        },
+        "owned": {
+          "kind": "scalar"
+        },
+        "eligible": {
+          "kind": "scalar"
+        },
+        "quote": {
+          "kind": "object",
+          "properties": {
+            "quarters": {
+              "kind": "scalar"
+            },
+            "rows": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "charge": {
+          "kind": "object",
+          "properties": {
+            "unit": {
+              "kind": "scalar"
+            },
+            "amount": {
+              "kind": "scalar"
+            },
+            "from": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "credits_per_row": {
+          "kind": "scalar"
+        },
+        "max_on_demand_cents": {
+          "kind": "scalar"
+        },
+        "on_demand_cents_per_unit": {
+          "kind": "scalar"
+        },
+        "refund_policy": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -916,6 +3023,133 @@
       "properties": {},
       "required": [],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "monitors": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "id": {
+                "kind": "scalar"
+              },
+              "name": {
+                "kind": "scalar"
+              },
+              "paused": {
+                "kind": "scalar"
+              },
+              "notify_emails": {
+                "kind": "array",
+                "items": {
+                  "kind": "scalar"
+                }
+              },
+              "email_recipients": {
+                "kind": "array",
+                "items": {
+                  "kind": "object",
+                  "properties": {
+                    "email": {
+                      "kind": "scalar"
+                    },
+                    "role": {
+                      "kind": "scalar"
+                    },
+                    "status": {
+                      "kind": "scalar"
+                    },
+                    "invitation_status": {
+                      "kind": "scalar"
+                    }
+                  }
+                }
+              },
+              "notify_frequency": {
+                "kind": "scalar"
+              },
+              "digest_day": {
+                "kind": "scalar"
+              },
+              "digest_time": {
+                "kind": "scalar"
+              },
+              "notify_webhook": {
+                "kind": "scalar"
+              },
+              "webhook_url": {
+                "kind": "scalar"
+              },
+              "webhook_secret_set": {
+                "kind": "scalar"
+              },
+              "webhook_failures": {
+                "kind": "scalar"
+              },
+              "webhook_disabled_at": {
+                "kind": "scalar"
+              },
+              "webhook_disabled_reason": {
+                "kind": "scalar"
+              },
+              "notify_slack": {
+                "kind": "scalar"
+              },
+              "slack_integration_id": {
+                "kind": "scalar"
+              },
+              "slack_channel_id": {
+                "kind": "scalar"
+              },
+              "created_at": {
+                "kind": "scalar"
+              },
+              "updated_at": {
+                "kind": "scalar"
+              },
+              "team": {
+                "kind": "object",
+                "properties": {
+                  "id": {
+                    "kind": "scalar"
+                  },
+                  "name": {
+                    "kind": "scalar"
+                  }
+                }
+              },
+              "access": {
+                "kind": "scalar"
+              },
+              "muted": {
+                "kind": "scalar"
+              },
+              "tracker_count": {
+                "kind": "scalar"
+              },
+              "alerts_this_month": {
+                "kind": "scalar"
+              },
+              "slack_integration": {
+                "kind": "object",
+                "properties": {
+                  "id": {
+                    "kind": "scalar"
+                  },
+                  "team_name": {
+                    "kind": "scalar"
+                  },
+                  "channel_name": {
+                    "kind": "scalar"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   {
@@ -949,6 +3183,52 @@
         "id"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "trackers": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "id": {
+                "kind": "scalar"
+              },
+              "entity_name": {
+                "kind": "scalar"
+              },
+              "entity_type": {
+                "kind": "scalar"
+              },
+              "display_name": {
+                "kind": "scalar"
+              },
+              "paused": {
+                "kind": "scalar"
+              },
+              "paused_at": {
+                "kind": "scalar"
+              },
+              "last_notified_at": {
+                "kind": "scalar"
+              },
+              "created_at": {
+                "kind": "scalar"
+              },
+              "updated_at": {
+                "kind": "scalar"
+              },
+              "monitor_id": {
+                "kind": "scalar"
+              }
+            }
+          }
+        },
+        "count": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -970,6 +3250,42 @@
       "properties": {},
       "required": [],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "integrations": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "id": {
+                "kind": "scalar"
+              },
+              "team_name": {
+                "kind": "scalar"
+              },
+              "default_channel_id": {
+                "kind": "scalar"
+              },
+              "channels": {
+                "kind": "array",
+                "items": {
+                  "kind": "object",
+                  "properties": {
+                    "id": {
+                      "kind": "scalar"
+                    },
+                    "name": {
+                      "kind": "scalar"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   {
@@ -1068,6 +3384,116 @@
         "idempotency_key"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "monitor": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "scalar"
+            },
+            "name": {
+              "kind": "scalar"
+            },
+            "paused": {
+              "kind": "scalar"
+            },
+            "notify_emails": {
+              "kind": "array",
+              "items": {
+                "kind": "scalar"
+              }
+            },
+            "email_recipients": {
+              "kind": "array",
+              "items": {
+                "kind": "object",
+                "properties": {
+                  "email": {
+                    "kind": "scalar"
+                  },
+                  "role": {
+                    "kind": "scalar"
+                  },
+                  "status": {
+                    "kind": "scalar"
+                  },
+                  "invitation_status": {
+                    "kind": "scalar"
+                  }
+                }
+              }
+            },
+            "notify_frequency": {
+              "kind": "scalar"
+            },
+            "digest_day": {
+              "kind": "scalar"
+            },
+            "digest_time": {
+              "kind": "scalar"
+            },
+            "notify_webhook": {
+              "kind": "scalar"
+            },
+            "webhook_url": {
+              "kind": "scalar"
+            },
+            "webhook_secret_set": {
+              "kind": "scalar"
+            },
+            "webhook_failures": {
+              "kind": "scalar"
+            },
+            "webhook_disabled_at": {
+              "kind": "scalar"
+            },
+            "webhook_disabled_reason": {
+              "kind": "scalar"
+            },
+            "notify_slack": {
+              "kind": "scalar"
+            },
+            "slack_integration_id": {
+              "kind": "scalar"
+            },
+            "slack_channel_id": {
+              "kind": "scalar"
+            },
+            "created_at": {
+              "kind": "scalar"
+            },
+            "updated_at": {
+              "kind": "scalar"
+            },
+            "team": {
+              "kind": "object",
+              "properties": {
+                "id": {
+                  "kind": "scalar"
+                },
+                "name": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "access": {
+              "kind": "scalar"
+            },
+            "muted": {
+              "kind": "scalar"
+            },
+            "tracker_count": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "message": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -1172,6 +3598,116 @@
         "idempotency_key"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "monitor": {
+          "kind": "object",
+          "properties": {
+            "id": {
+              "kind": "scalar"
+            },
+            "name": {
+              "kind": "scalar"
+            },
+            "paused": {
+              "kind": "scalar"
+            },
+            "notify_emails": {
+              "kind": "array",
+              "items": {
+                "kind": "scalar"
+              }
+            },
+            "email_recipients": {
+              "kind": "array",
+              "items": {
+                "kind": "object",
+                "properties": {
+                  "email": {
+                    "kind": "scalar"
+                  },
+                  "role": {
+                    "kind": "scalar"
+                  },
+                  "status": {
+                    "kind": "scalar"
+                  },
+                  "invitation_status": {
+                    "kind": "scalar"
+                  }
+                }
+              }
+            },
+            "notify_frequency": {
+              "kind": "scalar"
+            },
+            "digest_day": {
+              "kind": "scalar"
+            },
+            "digest_time": {
+              "kind": "scalar"
+            },
+            "notify_webhook": {
+              "kind": "scalar"
+            },
+            "webhook_url": {
+              "kind": "scalar"
+            },
+            "webhook_secret_set": {
+              "kind": "scalar"
+            },
+            "webhook_failures": {
+              "kind": "scalar"
+            },
+            "webhook_disabled_at": {
+              "kind": "scalar"
+            },
+            "webhook_disabled_reason": {
+              "kind": "scalar"
+            },
+            "notify_slack": {
+              "kind": "scalar"
+            },
+            "slack_integration_id": {
+              "kind": "scalar"
+            },
+            "slack_channel_id": {
+              "kind": "scalar"
+            },
+            "created_at": {
+              "kind": "scalar"
+            },
+            "updated_at": {
+              "kind": "scalar"
+            },
+            "team": {
+              "kind": "object",
+              "properties": {
+                "id": {
+                  "kind": "scalar"
+                },
+                "name": {
+                  "kind": "scalar"
+                }
+              }
+            },
+            "access": {
+              "kind": "scalar"
+            },
+            "muted": {
+              "kind": "scalar"
+            },
+            "tracker_count": {
+              "kind": "scalar"
+            }
+          }
+        },
+        "message": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -1233,6 +3769,20 @@
         "idempotency_key"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "attached_count": {
+          "kind": "scalar"
+        },
+        "message": {
+          "kind": "scalar"
+        },
+        "monitor_id": {
+          "kind": "scalar"
+        }
+      }
     }
   },
   {
@@ -1338,6 +3888,49 @@
         "idempotency_key"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "monitor_id": {
+          "kind": "scalar"
+        },
+        "results": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "entity_id": {
+                "kind": "scalar"
+              },
+              "name": {
+                "kind": "scalar"
+              },
+              "type": {
+                "kind": "scalar"
+              },
+              "canonical_entity_id": {
+                "kind": "scalar"
+              },
+              "tracker_id": {
+                "kind": "scalar"
+              },
+              "created": {
+                "kind": "scalar"
+              },
+              "attached": {
+                "kind": "scalar"
+              },
+              "reason": {
+                "kind": "scalar"
+              },
+              "current_monitor_id": {
+                "kind": "scalar"
+              }
+            }
+          }
+        }
+      }
     }
   },
   {
@@ -1721,6 +4314,52 @@
         "idempotency_key"
       ],
       "additionalProperties": false
+    },
+    "outputFields": {
+      "kind": "object",
+      "properties": {
+        "feedback_id": {
+          "kind": "scalar"
+        },
+        "type": {
+          "kind": "scalar"
+        },
+        "applied": {
+          "kind": "scalar"
+        },
+        "unchanged": {
+          "kind": "scalar"
+        },
+        "failed": {
+          "kind": "scalar"
+        },
+        "logged": {
+          "kind": "scalar"
+        },
+        "corrections": {
+          "kind": "array",
+          "items": {
+            "kind": "object",
+            "properties": {
+              "item_id": {
+                "kind": "scalar"
+              },
+              "item_kind": {
+                "kind": "scalar"
+              },
+              "status": {
+                "kind": "scalar"
+              },
+              "reason": {
+                "kind": "scalar"
+              },
+              "message": {
+                "kind": "scalar"
+              }
+            }
+          }
+        }
+      }
     }
   }
 ]
