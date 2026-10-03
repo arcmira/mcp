@@ -44,7 +44,9 @@
     "sandbox:build": "node --experimental-strip-types scripts/build-sandbox.ts",
     "sandbox:check": "node --experimental-strip-types scripts/build-sandbox.ts --check",
     "operations:build": "node --experimental-strip-types scripts/build-operation-catalog.ts",
-    "operations:check": "node --experimental-strip-types scripts/build-operation-catalog.ts --check"
+    "operations:check": "node --experimental-strip-types scripts/build-operation-catalog.ts --check",
+    "operations:backend:check": "node --experimental-strip-types scripts/check-operation-backend.ts",
+    "operations:release:check": "pnpm operations:backend:check && pnpm operations:check && pnpm typecheck && pnpm test"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",
