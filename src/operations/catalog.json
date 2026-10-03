@@ -1,0 +1,1726 @@
+[
+  {
+    "id": "get_me",
+    "name": "arcmira_get_me",
+    "title": "Account access",
+    "description": "Read the connected account and its current API access and usage.",
+    "method": "GET",
+    "path": "/v1/me",
+    "parameters": [],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "resolve_entity",
+    "name": "arcmira_resolve_entity",
+    "title": "Resolve a name",
+    "description": "Find the indexed person, organization, product, topic or channel matching a name. Use returned IDs in research filters; ambiguous names may need clarification.",
+    "method": "GET",
+    "path": "/v1/entities/resolve",
+    "parameters": [
+      {
+        "name": "q",
+        "location": "query"
+      },
+      {
+        "name": "type",
+        "location": "query"
+      },
+      {
+        "name": "limit",
+        "location": "query"
+      },
+      {
+        "name": "context",
+        "location": "query"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "q": {
+          "type": "string",
+          "minLength": 2,
+          "description": "A name, @handle, YouTube URL or channel id (UC...). One thing per call."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "person",
+            "organization",
+            "product",
+            "topic",
+            "channel"
+          ],
+          "description": "Restrict candidates to one type. Pass channel for a show and read best.youtube_channel_id."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 15,
+          "default": 8,
+          "description": "Candidates to return, 1 to 15. Default 8."
+        },
+        "context": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 300,
+          "description": "What the user said about the name, in their words (\"the startup bank\", \"Canada's prime minister\", \"on My First Million\"). Ranks candidates by their description and by the episodes they share with what the context names; a clear winner comes back as suggested with reason context."
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "get_entity",
+    "name": "arcmira_get_entity",
+    "title": "Read entity details",
+    "description": "Read indexed metadata for one entity ID.",
+    "method": "GET",
+    "path": "/v1/entities/{id}",
+    "parameters": [
+      {
+        "name": "id",
+        "location": "path"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Entity id, ent_{n} or the numeric id. Merged ids follow their redirect."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "search",
+    "name": "arcmira_search",
+    "title": "Search YouTube transcripts",
+    "description": "Find spoken passages about one topic across indexed YouTube videos and livestreams. Returns text and timestamped source links. Filters use resolved IDs; coverage and speaker attribution can be incomplete.",
+    "method": "GET",
+    "path": "/v1/search",
+    "parameters": [
+      {
+        "name": "q",
+        "location": "query"
+      },
+      {
+        "name": "channel_ids",
+        "location": "query"
+      },
+      {
+        "name": "channel",
+        "location": "query"
+      },
+      {
+        "name": "entity_ids",
+        "location": "query"
+      },
+      {
+        "name": "about",
+        "location": "query"
+      },
+      {
+        "name": "by",
+        "location": "query"
+      },
+      {
+        "name": "kind",
+        "location": "query"
+      },
+      {
+        "name": "after",
+        "location": "query"
+      },
+      {
+        "name": "before",
+        "location": "query"
+      },
+      {
+        "name": "source",
+        "location": "query"
+      },
+      {
+        "name": "limit",
+        "location": "query"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "q": {
+          "type": "string",
+          "minLength": 2,
+          "description": "One topic or phrase. Do not concatenate unrelated names; make one call per topic."
+        },
+        "channel_ids": {
+          "type": "string",
+          "description": "Comma-separated YouTube channel ids (UC...), at most 8. Pass every show in scope unless drilling into one. Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve."
+        },
+        "channel": {
+          "type": "string",
+          "description": "Alias of channel_ids for code-mode clients; the union of both is the scope."
+        },
+        "entity_ids": {
+          "type": "string",
+          "description": "Comma-separated entity ids (ent_{n}), at most 8. A person id filters to that person's appearances; a channel id widens channel_ids. Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve."
+        },
+        "about": {
+          "type": "string",
+          "description": "Comma-separated entity ids (ent_{n}), at most 8. Only passages about these entities: excerpt pins, exact-name mentions and ad verdicts. Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve."
+        },
+        "by": {
+          "type": "string",
+          "description": "Comma-separated person ids (ent_{n}), at most 8. Only passages where one of these people says the query words (each line of a chunk is labeled with its speaker); a non-person id is refused with invalid_query naming its type. Speaker labels cover a minority of shows; an empty result carries a note saying whether the person is labeled anywhere. Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Comma-separated passage classes: sponsored, organic, mention. Combine with about to read what was said about a brand in ad reads or in organic talk."
+        },
+        "after": {
+          "type": "string",
+          "description": "Only media published at or after this instant. An after later than your plan's freshness gate is refused with freshness_requires_paid rather than widened. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
+        },
+        "before": {
+          "type": "string",
+          "description": "Only media published before this instant, so before=2026-09-02 includes all of 2026-09-01. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "arcmira_premium",
+            "creator_captions",
+            "third_party_quick"
+          ],
+          "description": "Restrict to one transcript source class. arcmira_premium on a plan without Premium transcripts is refused with filter_requires_paid."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 5,
+          "description": "Chunks to return, 1 to 20. Default 5."
+        }
+      },
+      "required": [
+        "q"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "list_mentions",
+    "name": "arcmira_list_mentions",
+    "title": "Find mentions",
+    "description": "Find where an indexed entity was mentioned, with source context and pagination.",
+    "method": "GET",
+    "path": "/v1/mentions",
+    "parameters": [
+      {
+        "name": "limit",
+        "location": "query"
+      },
+      {
+        "name": "cursor",
+        "location": "query"
+      },
+      {
+        "name": "entity_id",
+        "location": "query"
+      },
+      {
+        "name": "channel_id",
+        "location": "query"
+      },
+      {
+        "name": "q",
+        "location": "query"
+      },
+      {
+        "name": "sentiment",
+        "location": "query"
+      },
+      {
+        "name": "is_appearance",
+        "location": "query"
+      },
+      {
+        "name": "after",
+        "location": "query"
+      },
+      {
+        "name": "before",
+        "location": "query"
+      },
+      {
+        "name": "details",
+        "location": "query"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Signed continuation from next_cursor. Bound to this route, normalized query, caller and visibility; invalid or old tokens return invalid_cursor."
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The entity, as an id like ent_14. Required. Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve."
+        },
+        "channel_id": {
+          "type": "string",
+          "description": "Only media from this YouTube channel id (UC plus 22 characters). Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve."
+        },
+        "q": {
+          "type": "string"
+        },
+        "sentiment": {
+          "type": "string",
+          "enum": [
+            "positive",
+            "neutral",
+            "negative"
+          ]
+        },
+        "is_appearance": {
+          "type": "boolean"
+        },
+        "after": {
+          "type": "string",
+          "description": "Only media published at or after this instant. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
+        },
+        "before": {
+          "type": "string",
+          "description": "Only media published before this instant, so before=2026-09-02 includes all of 2026-09-01. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
+        },
+        "details": {
+          "type": "string",
+          "enum": [
+            "full"
+          ]
+        }
+      },
+      "required": [
+        "entity_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "list_recommendations",
+    "name": "arcmira_list_recommendations",
+    "title": "Find recommendations",
+    "description": "Find recommendations of an entity and their organic or sponsored classification. Check the cited source; classifications can be incomplete or wrong.",
+    "method": "GET",
+    "path": "/v1/recommendations",
+    "parameters": [
+      {
+        "name": "limit",
+        "location": "query"
+      },
+      {
+        "name": "cursor",
+        "location": "query"
+      },
+      {
+        "name": "entity_id",
+        "location": "query"
+      },
+      {
+        "name": "channel_id",
+        "location": "query"
+      },
+      {
+        "name": "class",
+        "location": "query"
+      },
+      {
+        "name": "min_confidence",
+        "location": "query"
+      },
+      {
+        "name": "after",
+        "location": "query"
+      },
+      {
+        "name": "before",
+        "location": "query"
+      },
+      {
+        "name": "include_disputed",
+        "location": "query"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Signed continuation from next_cursor. Bound to this route, normalized query, caller and visibility; invalid or old tokens return invalid_cursor."
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The entity, as an id like ent_14. Required. Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve."
+        },
+        "channel_id": {
+          "type": "string",
+          "description": "Only media from this YouTube channel id (UC plus 22 characters). Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve."
+        },
+        "class": {
+          "type": "string",
+          "enum": [
+            "sponsored",
+            "organic",
+            "mention"
+          ],
+          "description": "The commercial class to return. Omit for all three. Values: sponsored (an ad-style promotion heard at that moment: a paid sponsor read, promo code, affiliate plug, thanks for supplied goods or venue, or a show promoting its own product as an ad), organic (an unpaid personal recommendation), mention (a neutral commercial mention)."
+        },
+        "min_confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7
+        },
+        "after": {
+          "type": "string",
+          "description": "Only media published at or after this instant. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
+        },
+        "before": {
+          "type": "string",
+          "description": "Only media published before this instant, so before=2026-09-02 includes all of 2026-09-01. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
+        },
+        "include_disputed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "entity_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "list_channel_sponsors",
+    "name": "arcmira_list_channel_sponsors",
+    "title": "Find channel sponsors",
+    "description": "Find recurring sponsors and ad reads in an indexed channel. Results describe observed evidence, not proof of a private commercial agreement.",
+    "method": "GET",
+    "path": "/v1/channels/{channel_id}/sponsors",
+    "parameters": [
+      {
+        "name": "channel_id",
+        "location": "path"
+      },
+      {
+        "name": "min_ad_reads",
+        "location": "query"
+      },
+      {
+        "name": "status",
+        "location": "query"
+      },
+      {
+        "name": "limit",
+        "location": "query"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "description": "YouTube channel id, the UC... form."
+        },
+        "min_ad_reads": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Sponsors with fewer ad reads are excluded. Default 3. Pro+ only; on other plans passing it is refused with filter_requires_paid."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "lapsed",
+            "ended",
+            "uncertain"
+          ],
+          "description": "Filter against the curated known-advertisers dataset. Pro+ only."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "description": "Sponsors to return. Default 100. Pro+ only; other plans receive the free slice."
+        }
+      },
+      "required": [
+        "channel_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "get_entity_momentum",
+    "name": "arcmira_get_entity_momentum",
+    "title": "Read entity momentum",
+    "description": "Read mention momentum for one entity in the indexed catalog.",
+    "method": "GET",
+    "path": "/v1/entities/{id}/momentum",
+    "parameters": [
+      {
+        "name": "id",
+        "location": "path"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Entity id, ent_{n} or the numeric id. Merged ids follow their redirect."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "get_channel_coverage",
+    "name": "arcmira_get_channel_coverage",
+    "title": "Check channel coverage",
+    "description": "Read how much of a channel is indexed before interpreting missing results.",
+    "method": "GET",
+    "path": "/v1/channels/{channel_id}/coverage",
+    "parameters": [
+      {
+        "name": "channel_id",
+        "location": "path"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "description": "YouTube channel id, the UC... form."
+        }
+      },
+      "required": [
+        "channel_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "list_channel_videos",
+    "name": "arcmira_list_channel_videos",
+    "title": "List channel videos",
+    "description": "List the indexed videos of a channel within a publication window.",
+    "method": "GET",
+    "path": "/v1/channels/{channel_id}/videos",
+    "parameters": [
+      {
+        "name": "channel_id",
+        "location": "path"
+      },
+      {
+        "name": "limit",
+        "location": "query"
+      },
+      {
+        "name": "cursor",
+        "location": "query"
+      },
+      {
+        "name": "after",
+        "location": "query"
+      },
+      {
+        "name": "before",
+        "location": "query"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "description": "YouTube channel id, the UC... form."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25,
+          "default": 10,
+          "description": "Videos to return, 1 to 25, newest first. Default 10. Pass 1 for the latest episode."
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Opaque continuation from next_cursor. Bound to the channel, filters, caller, and visibility; limit may change between pages. Invalid or old tokens return invalid_cursor."
+        },
+        "after": {
+          "type": "string",
+          "description": "Only media published at or after this instant. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
+        },
+        "before": {
+          "type": "string",
+          "description": "Only media published before this instant, so before=2026-09-02 includes all of 2026-09-01. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
+        }
+      },
+      "required": [
+        "channel_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "count_mentions",
+    "name": "arcmira_count_mentions",
+    "title": "Count mentions",
+    "description": "Rank entity mentions within specified channels, videos or entities. Counts describe indexed coverage.",
+    "method": "GET",
+    "path": "/v1/mentions/counts",
+    "parameters": [
+      {
+        "name": "channel_ids",
+        "location": "query"
+      },
+      {
+        "name": "entity_ids",
+        "location": "query"
+      },
+      {
+        "name": "video_ids",
+        "location": "query"
+      },
+      {
+        "name": "entity_types",
+        "location": "query"
+      },
+      {
+        "name": "mode",
+        "location": "query"
+      },
+      {
+        "name": "after",
+        "location": "query"
+      },
+      {
+        "name": "before",
+        "location": "query"
+      },
+      {
+        "name": "limit",
+        "location": "query"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "channel_ids": {
+          "type": "string",
+          "description": "Comma-separated YouTube channel ids (UC...), at most 8. Two or more also return shared, the entities on more than one of them."
+        },
+        "entity_ids": {
+          "type": "string",
+          "description": "Comma-separated entity ids (ent_{n}), at most 20. Counts only these entities."
+        },
+        "video_ids": {
+          "type": "string",
+          "description": "Comma-separated 11-character YouTube video ids, at most 20. Counts only these episodes; take the ids from GET /v1/channels/{channel_id}/videos."
+        },
+        "entity_types": {
+          "type": "string",
+          "description": "Comma-separated entity types to count: person, organization, product, topic, channel. Subjects are topic; guests are person; brands are organization,product. Omit and organizations dominate."
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "mentions",
+            "appearances",
+            "both"
+          ],
+          "default": "mentions",
+          "description": "mentions counts talk about an entity; appearances counts a person being present; both counts either. Default mentions."
+        },
+        "after": {
+          "type": "string",
+          "description": "Only media published at or after this instant. Counts are all-time without it. An after later than your plan's freshness gate is refused with freshness_requires_paid rather than widened. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
+        },
+        "before": {
+          "type": "string",
+          "description": "Only media published before this instant, so before=2026-09-02 includes all of 2026-09-01. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 40,
+          "default": 20,
+          "description": "Rows in the ranked table, 1 to 40. Default 20."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "get_transcript",
+    "name": "arcmira_get_transcript",
+    "title": "Get a video transcript",
+    "description": "Retrieve the requested transcript source for a YouTube video. A Premium request can start whole-video transcription and spend included credits or on-demand budget. Pending and failed responses contain no finished transcript. Never substitute captions for requested Premium. A retry can purchase again after failure.",
+    "method": "GET",
+    "path": "/v1/transcripts/{video_id}",
+    "parameters": [
+      {
+        "name": "video_id",
+        "location": "path"
+      },
+      {
+        "name": "quality",
+        "location": "query"
+      },
+      {
+        "name": "language",
+        "location": "query"
+      },
+      {
+        "name": "timestamps",
+        "location": "query"
+      },
+      {
+        "name": "start",
+        "location": "query"
+      },
+      {
+        "name": "end",
+        "location": "query"
+      },
+      {
+        "name": "retry",
+        "location": "query"
+      },
+      {
+        "name": "refresh",
+        "location": "query"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "video_id": {
+          "type": "string",
+          "description": "YouTube video id, 11 characters."
+        },
+        "quality": {
+          "type": "string",
+          "enum": [
+            "captions",
+            "premium"
+          ],
+          "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read: an owned transcript returns 200 state ready at zero rows; otherwise the read buys the whole video within the account's plan and on-demand budget (included credits first, then on-demand money up to the account limit) and returns 202 state pending with the job until it is ready. When the last purchase for the video failed it answers 200 state failed and buys again only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings."
+        },
+        "language": {
+          "type": "string",
+          "description": "Comma-separated caption language priority list, at most 5, tried in order (e.g. \"de,en\"). Use asr for the first automatic track and asr-<code> for a specific one. Default en. languages[] in the response lists every track the video offers."
+        },
+        "timestamps": {
+          "type": "boolean",
+          "description": "false returns paragraphs[] of { start, text, speaker? } instead of lines[], for reading rather than citing. Default true."
+        },
+        "start": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Window start in seconds from the beginning of the video. Send start and end together. On captions the window bills only its own started 15-minute blocks; on Premium it trims the returned content. An explicit Premium read can purchase the whole video within the account plan and budget; a window does not reduce that purchase price."
+        },
+        "end": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Window end in seconds, greater than start and no greater than the video duration. Send start and end together."
+        },
+        "retry": {
+          "type": "boolean",
+          "description": "Premium only; captions with retry=true returns invalid_query. When the last Premium purchase for this video failed, a read answers 200 state failed with the job and last_attempt and buys nothing; retry=true buys it again under the same quote, budget and one-purchase rules as the first read. While that refund is still settling (job.status refund_pending) even retry=true answers state failed. Without a failed purchase it changes nothing."
+        },
+        "refresh": {
+          "type": "boolean",
+          "description": "Captions only; Premium with refresh=true returns invalid_query. Refetch the caption track from YouTube instead of serving the stored copy. Available only for videos outside our index; a pipeline-owned video refuses it with invalid_query."
+        }
+      },
+      "required": [
+        "video_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "quote_transcription",
+    "name": "arcmira_quote_transcription",
+    "title": "Quote Premium transcription",
+    "description": "Preview the whole-video Premium transcription price without buying or starting transcription.",
+    "method": "GET",
+    "path": "/v1/transcripts/{video_id}/quote",
+    "parameters": [
+      {
+        "name": "video_id",
+        "location": "path"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "video_id": {
+          "type": "string",
+          "description": "YouTube video id, 11 characters."
+        }
+      },
+      "required": [
+        "video_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "list_monitors",
+    "name": "arcmira_list_monitors",
+    "title": "List saved monitors",
+    "description": "List the connected account’s saved research monitors before changing one.",
+    "method": "GET",
+    "path": "/v1/monitors",
+    "parameters": [],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "list_monitor_trackers",
+    "name": "arcmira_list_monitor_trackers",
+    "title": "List monitor trackers",
+    "description": "Read the trackers attached to a saved monitor.",
+    "method": "GET",
+    "path": "/v1/monitors/{id}/trackers",
+    "parameters": [
+      {
+        "name": "id",
+        "location": "path"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Monitor id."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "list_slack_integrations",
+    "name": "arcmira_list_slack_integrations",
+    "title": "List Slack destinations",
+    "description": "List Slack workspaces already connected to the account for monitor delivery. Does not connect a new workspace.",
+    "method": "GET",
+    "path": "/v1/integrations/slack",
+    "parameters": [],
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "create_monitor",
+    "name": "arcmira_create_monitor",
+    "title": "Create a monitor",
+    "description": "Save a research monitor with the user’s chosen delivery destinations and frequency. Can enable future email, Slack or webhook notifications. Ask for delivery preferences before creating it.",
+    "method": "POST",
+    "path": "/v1/monitors",
+    "parameters": [],
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "description": "Display name (1-100 characters). Required on create."
+            },
+            "notify_emails": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "email"
+              },
+              "maxItems": 20,
+              "description": "Desired email recipients. External recipients must confirm before delivery. Free includes one additional recipient per monitor; paid plans allow up to 20 total. Default []."
+            },
+            "notify_frequency": {
+              "type": "string",
+              "enum": [
+                "realtime",
+                "hourly",
+                "daily"
+              ],
+              "description": "Delivery cadence. Default realtime. Values: realtime (as analysis completes), hourly (hourly digest), daily (daily digest)."
+            },
+            "digest_day": {
+              "type": "string",
+              "description": "Digest day of week. Default \"monday\". Consulted only by weekly digests, which are dashboard-configured today; inert for API-set frequencies."
+            },
+            "digest_time": {
+              "type": "string",
+              "description": "Digest send hour as HH:MM (account timezone). Default \"09:00\". Applies to daily digests."
+            },
+            "notify_webhook": {
+              "type": "boolean",
+              "description": "Enable HMAC-signed webhook delivery (paid plans). When enabled together with webhook_url, the response returns the signing secret (monitor.webhook_secret), recoverable with the original Idempotency-Key during the valid recovery window. PATCHing true also re-enables an auto-disabled webhook and resets its failure counter."
+            },
+            "webhook_url": {
+              "type": "string",
+              "description": "Destination URL for webhook alert deliveries."
+            },
+            "notify_slack": {
+              "type": "boolean",
+              "description": "Enable Slack delivery. Requires a Slack integration connected in the dashboard."
+            },
+            "slack_integration_id": {
+              "type": "string",
+              "description": "Slack integration id from the dashboard OAuth flow."
+            },
+            "slack_channel_id": {
+              "type": "string",
+              "description": "Slack channel id to deliver to."
+            },
+            "team_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Create the monitor in this team, which the caller must belong to. The team owner pays for it and its plan sets the limits. A member may not set a webhook. Create only."
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "description": "Reuse the same key only when retrying the same write with the same body."
+        }
+      },
+      "required": [
+        "body",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "update_monitor",
+    "name": "arcmira_update_monitor",
+    "title": "Update a monitor",
+    "description": "Change or pause an existing monitor. Can overwrite settings and change future email, Slack or webhook delivery. Use the monitor ID returned by the account’s monitor list.",
+    "method": "PATCH",
+    "path": "/v1/monitors/{id}",
+    "parameters": [
+      {
+        "name": "id",
+        "location": "path"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Monitor id."
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "description": "Display name (1-100 characters). Required on create."
+            },
+            "notify_emails": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "email"
+              },
+              "maxItems": 20,
+              "description": "Desired email recipients. External recipients must confirm before delivery. Free includes one additional recipient per monitor; paid plans allow up to 20 total. Default []."
+            },
+            "notify_frequency": {
+              "type": "string",
+              "enum": [
+                "realtime",
+                "hourly",
+                "daily"
+              ],
+              "description": "Delivery cadence. Default realtime. Values: realtime (as analysis completes), hourly (hourly digest), daily (daily digest)."
+            },
+            "digest_day": {
+              "type": "string",
+              "description": "Digest day of week. Default \"monday\". Consulted only by weekly digests, which are dashboard-configured today; inert for API-set frequencies."
+            },
+            "digest_time": {
+              "type": "string",
+              "description": "Digest send hour as HH:MM (account timezone). Default \"09:00\". Applies to daily digests."
+            },
+            "notify_webhook": {
+              "type": "boolean",
+              "description": "Enable HMAC-signed webhook delivery (paid plans). When enabled together with webhook_url, the response returns the signing secret (monitor.webhook_secret), recoverable with the original Idempotency-Key during the valid recovery window. PATCHing true also re-enables an auto-disabled webhook and resets its failure counter."
+            },
+            "webhook_url": {
+              "type": "string",
+              "description": "Destination URL for webhook alert deliveries."
+            },
+            "notify_slack": {
+              "type": "boolean",
+              "description": "Enable Slack delivery. Requires a Slack integration connected in the dashboard."
+            },
+            "slack_integration_id": {
+              "type": "string",
+              "description": "Slack integration id from the dashboard OAuth flow."
+            },
+            "slack_channel_id": {
+              "type": "string",
+              "description": "Slack channel id to deliver to."
+            },
+            "paused": {
+              "type": "boolean",
+              "description": "Paused monitors accept config changes but do not deliver; alerts that would have fired are not queued."
+            }
+          },
+          "additionalProperties": false
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "description": "Reuse the same key only when retrying the same write with the same body."
+        }
+      },
+      "required": [
+        "id",
+        "body",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "add_monitor_trackers",
+    "name": "arcmira_add_monitor_trackers",
+    "title": "Attach monitor trackers",
+    "description": "Attach existing account trackers to a monitor. Future matches may trigger its configured notifications.",
+    "method": "POST",
+    "path": "/v1/monitors/{id}/trackers",
+    "parameters": [
+      {
+        "name": "id",
+        "location": "path"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Monitor id."
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "tracker_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "maxItems": 90,
+              "description": "Ids of existing trackers (\"trk_...\") to attach to this monitor. Create trackers first via POST /v1/trackers. At most 90 IDs per request; duplicates count once. All IDs must belong to the account or none are attached."
+            }
+          },
+          "required": [
+            "tracker_ids"
+          ],
+          "additionalProperties": false
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "description": "Reuse the same key only when retrying the same write with the same body."
+        }
+      },
+      "required": [
+        "id",
+        "body",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "add_monitor_entities",
+    "name": "arcmira_add_monitor_entities",
+    "title": "Follow entities in a monitor",
+    "description": "Create or reuse account trackers for entity IDs or exact names and attach them to a monitor. Future matches may trigger its configured notifications.",
+    "method": "POST",
+    "path": "/v1/monitors/{id}/entities",
+    "parameters": [
+      {
+        "name": "id",
+        "location": "path"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Monitor id."
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "entity_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^ent_[1-9][0-9]*$"
+              },
+              "description": "Entity ids (\"ent_...\") to follow in this monitor, from GET /v1/entities/resolve or search. Duplicates count once. A merged id follows its redirect to the canonical entity."
+            },
+            "names": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The exact name to watch, matched case-insensitively against analyzed media, so it can be followed before the entity is indexed. For a channel, the YouTube channel id (UC plus 22 characters); a channel name answers 400 id_required naming GET /v1/entities/resolve?q=...&type=channel."
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "person",
+                      "organization",
+                      "org",
+                      "product",
+                      "topic",
+                      "channel"
+                    ],
+                    "description": "person, organization (org is accepted), product, topic or channel."
+                  },
+                  "person_match_mode": {
+                    "type": "string",
+                    "enum": [
+                      "mentions",
+                      "appearances",
+                      "both"
+                    ],
+                    "description": "For a person tracker this request creates; defaults to the top-level person_match_mode. Other types ignore it."
+                  }
+                },
+                "required": [
+                  "name",
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              "description": "Exact names to follow in this monitor, for a name not yet indexed or one you have no id for. The tracker is created under the monitor's account (the team owner on a team monitor) and attached in the same call; the account's tracker for the same name (compared case-insensitively) and type is reused. Duplicates count once."
+            },
+            "person_match_mode": {
+              "type": "string",
+              "enum": [
+                "mentions",
+                "appearances",
+                "both"
+              ],
+              "description": "For person trackers this request creates: mentions (default) matches others talking about the person; appearances matches the person present as a speaker, host or guest; both accepts either. Other types ignore it, and a tracker that already exists keeps its own setting (change it with PATCH /v1/trackers/{id})."
+            }
+          },
+          "additionalProperties": false
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "description": "Reuse the same key only when retrying the same write with the same body."
+        }
+      },
+      "required": [
+        "id",
+        "body",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "submit_feedback",
+    "name": "arcmira_submit_feedback",
+    "title": "Send research feedback",
+    "description": "Persist feedback or a correction for a prior API result. Send only the relevant issue, never credentials or unrelated personal details. Repeated requests without the same idempotency key may create separate records.",
+    "method": "POST",
+    "path": "/v1/feedback",
+    "parameters": [
+      {
+        "name": "type",
+        "location": "query"
+      },
+      {
+        "name": "query",
+        "location": "query"
+      }
+    ],
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "recommendations",
+            "channel_sponsors",
+            "mentions",
+            "entities_search",
+            "entities",
+            "channels",
+            "monitor_alert",
+            "appearances",
+            "search",
+            "experience"
+          ],
+          "description": "Feedback type when omitted from the JSON body. Provide type in either location; the body takes precedence."
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Query being reviewed when omitted from the JSON body. Body query fields override matching query-string fields."
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "recommendations",
+                "channel_sponsors",
+                "mentions",
+                "entities_search",
+                "entities",
+                "channels",
+                "monitor_alert",
+                "appearances",
+                "search",
+                "experience"
+              ],
+              "description": "The surface being reviewed. Values: recommendations (/v1/recommendations rows by com_* id; requires a Pro+ plan), channel_sponsors (sponsor entities on a channel; requires a Pro+ plan), mentions (/v1/mentions rows by men_* id), entities_search (/v1/entities/resolve candidates), entities (/v1/entities/{id} payloads), channels (/v1/channels/{channel_id}/videos rows), monitor_alert (fired alert rows from /v1/monitors/{id}/alerts or /v1/trackers/{id}/alerts; corrections target the alert row id), appearances (person appearance rows from /v1/mentions with is_appearance=true), search (/v1/search passages), experience (how a task went as a whole, not one row: requires category and notes, takes no corrections, and query is optional)."
+            },
+            "query": {
+              "type": "object",
+              "additionalProperties": {},
+              "description": "The query object that produced the result you are reviewing, echoed back verbatim so reviewers can replay it. For monitor_alert feedback, carry monitor_id and/or tracker_id and/or alert_id."
+            },
+            "endpoint": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "POST",
+                "PATCH",
+                "PUT",
+                "DELETE"
+              ]
+            },
+            "request_id": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "result_url": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "source_url": {
+              "type": "string",
+              "maxLength": 2000
+            },
+            "notes": {
+              "type": "string",
+              "maxLength": 4000,
+              "description": "Free text for the reviewer. Required when type is experience: say what the user asked for and what went wrong, slow, or missing."
+            },
+            "corrections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Public id of the row being corrected, from the response you received: men_* (mentions, appearances), com_* (recommendations), ent_* (entities, sponsors), or the alert row id (monitor_alert). Omit for missed_alert and missing_result corrections, which have no row to target."
+                  },
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "sponsored",
+                      "organic",
+                      "mention"
+                    ],
+                    "description": "On recommendations feedback, the class the row should carry. Values: sponsored (an ad-style promotion heard at that moment: a paid sponsor read, promo code, affiliate plug, thanks for supplied goods or venue, or a show promoting its own product as an ad), organic (an unpaid personal recommendation), mention (a neutral commercial mention)."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "false_positive_ad_read",
+                      "false_positive_endorsement",
+                      "missed_ad_read",
+                      "missed_endorsement",
+                      "wrong_classification",
+                      "wrong_entity",
+                      "other"
+                    ]
+                  },
+                  "issue_type": {
+                    "type": "string",
+                    "enum": [
+                      "wrong_entity_type",
+                      "wrong_entity",
+                      "duplicate_entity",
+                      "merge_suggestion",
+                      "missing_result",
+                      "stale_metadata",
+                      "wrong_classification",
+                      "bad_ranking",
+                      "false_positive_alert",
+                      "wrong_media",
+                      "wrong_timestamp",
+                      "duplicate_alert",
+                      "missed_alert",
+                      "delivery_issue",
+                      "person_not_present",
+                      "wrong_person",
+                      "wrong_appearance_role",
+                      "other"
+                    ],
+                    "description": "Issue classification for the correction. Entity-family values: wrong_entity_type (right entity, wrong type), wrong_entity (the row points at the wrong canonical entity), duplicate_entity (results split across variants of the same entity), merge_suggestion (propose the canonical merge for split variants), missing_result (a result you know should exist is absent), stale_metadata (name/website/channel metadata is outdated), wrong_classification (class-level error on a commercial row), bad_ranking (duplicates or aliases ranking above the canonical entity). monitor_alert values: false_positive_alert (the alert should not have fired), wrong_media (fired against the wrong video), wrong_timestamp (fired at the wrong position in the video), duplicate_alert (the same occurrence fired more than once), missed_alert (an expectation: an alert that should have fired but did not; no row to target), delivery_issue (the delivery itself was wrong: wrong channel, not received). appearances values: person_not_present (the person does not appear in the media), wrong_person (the appearance is attributed to the wrong person), wrong_appearance_role (right person, wrong role, e.g. guest vs host). other (escape hatch; detail in notes)."
+                  },
+                  "suggested_change": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "source_entity_id": {
+                            "type": "string",
+                            "description": "Public id (\"ent_{n}\") of the duplicate/variant entity to merge away."
+                          },
+                          "target_entity_id": {
+                            "type": "string",
+                            "description": "Public id (\"ent_{n}\") of the canonical entity to merge into."
+                          },
+                          "source_name": {
+                            "type": "string",
+                            "description": "Name of the duplicate entity when you do not have its id."
+                          },
+                          "merge_into": {
+                            "type": "string",
+                            "description": "Name or public id of the canonical entity when you do not have target_entity_id."
+                          },
+                          "scope_type": {
+                            "type": "string",
+                            "description": "Scope of the merge rule, e.g. \"global\"."
+                          }
+                        },
+                        "additionalProperties": {},
+                        "description": "For issue_type merge_suggestion (and duplicate_entity): the canonical merge you are proposing. Provide ids when you have them, names otherwise."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "entity_id": {
+                            "type": "string",
+                            "description": "Public id (\"ent_{n}\") of the entity the row should point at."
+                          },
+                          "entity_name": {
+                            "type": "string",
+                            "description": "Name of the correct entity when you do not have its id."
+                          },
+                          "entity_type": {
+                            "type": "string",
+                            "description": "Type of the correct entity: person, organization, product, topic, or channel."
+                          }
+                        },
+                        "additionalProperties": {},
+                        "description": "For issue_type wrong_entity (and wrong_person): the entity the row should have been attributed to."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "enum": [
+                              "type"
+                            ],
+                            "description": "Always \"type\"."
+                          },
+                          "value": {
+                            "type": "string",
+                            "description": "The correct entity type: person, organization, product, topic, or channel."
+                          }
+                        },
+                        "additionalProperties": {},
+                        "description": "For issue_type wrong_entity_type: { \"field\": \"type\", \"value\": \"organization\" }."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "Name of the missing entity or result."
+                          },
+                          "entity_type": {
+                            "type": "string",
+                            "description": "Type of the missing entity: person, organization, product, topic, or channel."
+                          },
+                          "source_url": {
+                            "type": "string",
+                            "description": "URL evidencing the missing result (video, channel, or article)."
+                          }
+                        },
+                        "additionalProperties": {},
+                        "description": "For issue_type missing_result: what should have been returned. Put video/channel/timestamp context in notes."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "class": {
+                            "type": "string",
+                            "enum": [
+                              "sponsored",
+                              "organic",
+                              "mention"
+                            ],
+                            "description": "The correct commercial class. Values: sponsored (an ad-style promotion heard at that moment: a paid sponsor read, promo code, affiliate plug, thanks for supplied goods or venue, or a show promoting its own product as an ad), organic (an unpaid personal recommendation), mention (a neutral commercial mention)."
+                          }
+                        },
+                        "additionalProperties": {},
+                        "description": "For issue_type wrong_classification: the commercial class the row should carry."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string",
+                            "description": "The metadata field that is outdated, e.g. \"website\" or \"name\"."
+                          },
+                          "value": {
+                            "description": "The current, correct value."
+                          },
+                          "source_url": {
+                            "type": "string",
+                            "description": "URL evidencing the correct value."
+                          }
+                        },
+                        "additionalProperties": {},
+                        "description": "For issue_type stale_metadata: the field and its correct value, with a source URL when you have one."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "expected_rank": {
+                            "type": "integer",
+                            "description": "Where the row should have ranked (1-based)."
+                          },
+                          "observed_rank": {
+                            "type": "integer",
+                            "description": "Where the row actually ranked (1-based). Most useful on search feedback."
+                          }
+                        },
+                        "additionalProperties": {},
+                        "description": "For issue_type bad_ranking: the expected and observed positions of the row."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "source_url": {
+                            "type": "string",
+                            "description": "URL of the media that should have produced an alert."
+                          },
+                          "approximate_timestamp_seconds": {
+                            "type": "number",
+                            "description": "Approximate position of the missed occurrence, in seconds from the start of the media."
+                          },
+                          "entity_id": {
+                            "type": "string",
+                            "description": "Public id (\"ent_{n}\") of the tracked entity the missed alert concerns."
+                          }
+                        },
+                        "required": [
+                          "source_url"
+                        ],
+                        "additionalProperties": {},
+                        "description": "For issue_type missed_alert: an expectation with no alert row to target. Omit the correction id and describe where the alert should have fired."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "channel": {
+                            "type": "string",
+                            "enum": [
+                              "email",
+                              "webhook",
+                              "slack"
+                            ],
+                            "description": "The delivery channel the issue concerns. Values: email, webhook, slack."
+                          }
+                        },
+                        "required": [
+                          "channel"
+                        ],
+                        "additionalProperties": {},
+                        "description": "For issue_type delivery_issue: targets the delivery row (the correction id) and names the channel that was wrong or never received."
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "description": "Any other object shape. Accepted and logged verbatim for human review; prefer the typed shapes above when one fits your issue_type."
+                      }
+                    ],
+                    "description": "Your concrete proposed fix, shaped by issue_type: merge_suggestion → MergeSuggestionChange, wrong_entity/wrong_person → WrongEntityChange, wrong_entity_type → WrongEntityTypeChange, missing_result → MissingResultChange, wrong_classification → WrongClassificationChange, stale_metadata → StaleMetadataChange, bad_ranking → BadRankingChange, missed_alert → MissedAlertChange, delivery_issue → DeliveryIssueChange. Unknown keys are accepted and logged verbatim; only non-object values are rejected. Omit suggested_change entirely when you do not have a concrete fix."
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              },
+              "maxItems": 100,
+              "description": "Per-row corrections. Not allowed when type is experience."
+            },
+            "category": {
+              "type": "string",
+              "enum": [
+                "wrong_entity",
+                "bad_data",
+                "missing",
+                "slow",
+                "confusing",
+                "other"
+              ],
+              "description": "What kind of problem this is. Values: wrong_entity (a name resolved to the wrong person, company or thing), bad_data (a row or field is wrong), missing (something that should exist was not found), slow (the task took too long), confusing (the answer or an error was hard to act on), other (anything else; say what in notes). Required when type is experience."
+            },
+            "mcp_call_id": {
+              "type": "string",
+              "pattern": "^mcpc_[0-9a-f]{32}$",
+              "description": "The MCP tool call this feedback is about, as the Arcmira MCP server names it (mcpc_ and 32 hex digits). Joins the feedback to that call in product analytics."
+            }
+          }
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9_.:-]+$",
+          "description": "Reuse the same key only when retrying the same write with the same body."
+        }
+      },
+      "required": [
+        "body",
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

@@ -11,6 +11,7 @@ export function fakeApi(answers: Record<string, ApiResult>): ApiClient & { calls
   return {
     calls,
     async post() { throw new Error('post not configured in fixture'); },
+    async patch() { throw new Error('patch not configured in fixture'); },
     rateLimit: () => null,
     upstreamBuild: () => null,
     setClient() {},
