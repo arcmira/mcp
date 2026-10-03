@@ -1,6 +1,6 @@
 {
   "name": "@arcmira/mcp",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Search YouTube and podcast transcripts. Mentions, momentum, sponsors, and organic recommendations.",
   "keywords": [
     "mcp",
