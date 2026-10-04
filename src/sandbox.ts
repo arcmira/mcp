@@ -232,7 +232,7 @@ export async function runProgram(host: SandboxHost, code: string): Promise<Execu
             unknownOutcome(
               'TimeoutError',
               'timeout',
-              'The program exceeded 30 seconds. Its call count and final outcome are unknown. Requests may still finish and consume rows; a Premium purchase or monitor change it started may have gone through. Retry with a smaller program, or check arcmira.status({ jobId }) or arcmira.monitors.list() before repeating a change.',
+              'The program exceeded 30 seconds. Its call count and final outcome are unknown. Requests may still finish and count toward usage; a Premium transcription or monitor change it started may have gone through. Retry with a smaller program: a repeated Premium read never uses credits twice. Check arcmira.monitors.list() before repeating a monitor change.',
             ),
           ),
         TIME_LIMIT_MS,

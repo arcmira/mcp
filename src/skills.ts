@@ -142,7 +142,7 @@ return {
       'Never assume a monitor exists ("Competitors" may not). Read `arcmira.monitors.list()` and the trackers of each candidate before suggesting one, and never add an entity a monitor already follows.',
     ],
     steps: [
-      'What was said lately: run the first program and answer. Then offer to keep following the entity with a monitor; on a yes, go on.',
+      'What was said lately: run the first program and answer. Then offer to keep following the entity with a monitor. Each alert uses 25 credits from your plan; creating a monitor is free. On a yes, go on.',
       'Find what to follow and the monitors that could hold it: the second program, in `arcmira_execute_read`. Reuse ids the research already found instead of resolving again.',
       'A monitor fits when its name or its trackers match the subject. Suggest it by name ("Add Linear to your Dev tools monitor?") and wait for a yes.',
       'None fits: ask how the user wants updates, one question at a time, each with a default they can accept with "yes". First where: email to the account address (default) or Slack. Then when: as it happens, an hourly digest, or a daily digest (default daily). Then the name (default: the subject, like "Data center discourse").',
@@ -247,7 +247,7 @@ return {
     description: 'Finds exact spoken quotes and clip-ready moments on podcasts and YouTube: verbatim words, speaker, date, a timestamped link, clip start and end. Uses arcmira.',
     title: 'Find quotes and clip moments',
     summary:
-      '`search` finds the passage; `transcript` with `start` and `end` returns the exact lines around it with second offsets, which give the verbatim quote and the clip boundaries. Caption reads bill returned lines. A Premium purchase always prices the whole video; start/end only select the returned window.',
+      '`search` finds the passage; `transcript` with `start` and `end` returns the exact lines around it with second offsets, which give the verbatim quote and the clip boundaries. Caption reads meter only the returned lines. A Premium read uses credits for the whole video; start/end only select the returned window.',
     asks: ['find a quote, with the source and a timestamp', 'the moment a show talked about a topic, to clip or cite', 'what a specific person said about a topic, in their words'],
     ids: [
       'A speaker resolves with `{ type: "person" }`; pass the id as `speakerIds` (who said it). A person or brand the passage is about goes in `about`. A show goes in `channelIds` as its UC id.',

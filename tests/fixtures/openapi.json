@@ -2,6 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Arcmira API",
+    "description": "Search YouTube transcripts for timestamped passages. Find mentions of people, organizations, products and topics; research channel sponsors and recommendations; retrieve creator captions or Premium transcripts with speaker identification; and monitor entities for new mentions. Official API guides: https://arcmira.com/docs. An explicit Premium read uses credits from the account's plan, then its on-demand budget.",
     "version": "1.0.0",
     "contact": {
       "name": "Arcmira",
@@ -13,6 +14,10 @@
       "url": "https://api.arcmira.com"
     }
   ],
+  "externalDocs": {
+    "description": "Official Arcmira API documentation",
+    "url": "https://arcmira.com/docs"
+  },
   "components": {
     "headers": {
       "X-Request-Id": {
@@ -328,6 +333,14 @@
                   "existing_id": {
                     "type": "string",
                     "description": "On tracker_already_exists, the existing tracker id. Reuse it instead of creating another tracker."
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "On tracker_limit, the trackers the plan holds."
+                  },
+                  "count": {
+                    "type": "integer",
+                    "description": "On tracker_limit, the trackers the account holds now."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -587,7 +600,7 @@
           {
             "code": "spend_limit_exceeded",
             "type": "quota_exceeded",
-            "description": "The purchase would take on-demand spending past the account or seat spend limit this period. Nothing was charged. Raise the limit or wait for the next period, then send a new intent."
+            "description": "The request would take on-demand usage past the account or seat spend limit this period. Nothing was charged. Raise the limit or wait for the next period, then read again or send a new intent."
           },
           {
             "code": "team_not_found",
@@ -598,6 +611,11 @@
             "code": "tracker_already_exists",
             "type": "conflict_error",
             "description": "The account already tracks this entity. error.details.existing_id identifies the existing tracker."
+          },
+          {
+            "code": "tracker_limit",
+            "type": "permission_error",
+            "description": "The plan's tracker limit is reached. error.details carries limit and count."
           },
           {
             "code": "tracker_not_found",
@@ -945,11 +963,11 @@
                   "amount",
                   "from"
                 ],
-                "description": "What the purchase would charge at the current balance. Absent when no current price could be read."
+                "description": "What the request would charge at the current balance. Absent when no current price could be read."
               },
               "max_on_demand_cents": {
                 "type": "integer",
-                "description": "The on-demand money, in whole cents, this purchase needs beyond included credits at the current balance."
+                "description": "The on-demand usage, in whole cents, this request needs beyond the plan's credits at the current balance."
               }
             }
           }
@@ -965,13 +983,130 @@
           },
           "rows": {
             "type": "integer",
-            "description": "Total unlock cost in rows: 75 rows per 15-minute block."
+            "description": "Rows the whole video uses, 75 rows per 15-minute block."
           }
         },
         "required": [
           "quarters",
           "rows"
         ]
+      },
+      "TranscriptionJob": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Transcription request id (UUID)."
+          },
+          "video_id": {
+            "type": "string",
+            "description": "YouTube video id (11 characters)."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "failed",
+              "refunded"
+            ],
+            "description": "Coarse outcome: pending until the Premium transcript is servable (ready), the job failed, or it was refunded."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "downloading",
+              "transcribing",
+              "analyzing",
+              "complete",
+              "failed",
+              "refund_pending",
+              "refunded"
+            ],
+            "description": "Request status. Values: queued (accepted; audio download not started), downloading (fetching the video audio), transcribing (premium speech-to-text is running), analyzing (entity/commercial analysis is running), complete (premium transcript is servable via GET /v1/transcripts/{video_id}), failed (rejected intent, or a legacy request needing accounting review), refund_pending (refund transaction must still complete), refunded (terminal failure; the charged rows were returned and the unlock this request granted was revoked)."
+          },
+          "stage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "queued",
+              "transcribing",
+              "analyzing",
+              null
+            ],
+            "description": "User-facing stage: downloading folds into transcribing. Values: queued (waiting to start), transcribing (downloading or transcribing), analyzing (analysis running). Null for terminal statuses and refund_pending."
+          },
+          "charge": {
+            "type": "object",
+            "properties": {
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "credits"
+                ]
+              },
+              "amount": {
+                "type": "number",
+                "description": "Credits this job charged. 0 when a prior unlock made it free."
+              },
+              "from": {
+                "type": "string",
+                "enum": [
+                  "included",
+                  "on_demand",
+                  "mixed"
+                ],
+                "description": "Where the credits came from. included is the plan's credits, on_demand is the on-demand budget, mixed is both. Present once the job is funded."
+              }
+            },
+            "required": [
+              "unit",
+              "amount"
+            ],
+            "description": "What the job charged. Absent only on legacy requests."
+          },
+          "eta_seconds": {
+            "type": "integer",
+            "description": "Estimated seconds until completion, re-derived from live pipeline telemetry on every poll. Only present while the request is in flight; absent on refund_pending, which has no completion ETA."
+          },
+          "next_poll_seconds": {
+            "type": "integer",
+            "description": "Seconds to sleep before the next poll (also sent as the Retry-After header). Only present while the request is in flight."
+          },
+          "error": {
+            "type": "string",
+            "description": "Failure reason. Only present when state is failed or refunded, or status is refund_pending."
+          },
+          "refunded": {
+            "type": "boolean",
+            "description": "True when the charge was returned. Only present when state is failed or refunded, or status is refund_pending (false until the refund lands)."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "When the request was submitted."
+          },
+          "completed_at": {
+            "type": "string",
+            "description": "When the request reached a terminal status. Absent while in flight."
+          },
+          "status_url": {
+            "type": "string",
+            "description": "Absolute URL to read again for this job: GET /v1/transcripts/{video_id}?quality=premium, which answers 202 while it transcribes, 200 ready once it is done, and 200 failed if it failed."
+          }
+        },
+        "required": [
+          "id",
+          "video_id",
+          "state",
+          "status",
+          "stage",
+          "created_at",
+          "status_url"
+        ],
+        "description": "A Premium transcript job with its processing state, charge and URL for reading the transcript again."
       },
       "HealthResponse": {
         "type": "object",
@@ -1136,7 +1271,7 @@
           },
           "tier": {
             "type": "string",
-            "description": "Plan tier, e.g. free, hobby, pro, enterprise."
+            "description": "Plan tier, e.g. free, pro, pro_plus, ultra, enterprise."
           },
           "scopes": {
             "type": "array",
@@ -3039,6 +3174,14 @@
                   "existing_id": {
                     "type": "string",
                     "description": "On tracker_already_exists, the existing tracker id. Reuse it instead of creating another tracker."
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "On tracker_limit, the trackers the plan holds."
+                  },
+                  "count": {
+                    "type": "integer",
+                    "description": "On tracker_limit, the trackers the account holds now."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -3382,6 +3525,14 @@
                   "existing_id": {
                     "type": "string",
                     "description": "On tracker_already_exists, the existing tracker id. Reuse it instead of creating another tracker."
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "On tracker_limit, the trackers the plan holds."
+                  },
+                  "count": {
+                    "type": "integer",
+                    "description": "On tracker_limit, the trackers the account holds now."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -3888,6 +4039,14 @@
                   "existing_id": {
                     "type": "string",
                     "description": "On tracker_already_exists, the existing tracker id. Reuse it instead of creating another tracker."
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "On tracker_limit, the trackers the plan holds."
+                  },
+                  "count": {
+                    "type": "integer",
+                    "description": "On tracker_limit, the trackers the account holds now."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -4748,7 +4907,7 @@
           "notify_frequency": {
             "type": "string",
             "default": "realtime",
-            "description": "Delivery cadence. Values: realtime (deliver immediately), hourly (hourly digest), daily (daily digest). Free tier is limited to daily."
+            "description": "Delivery cadence. Values: realtime (deliver immediately), hourly (hourly digest), daily (daily digest)."
           },
           "digest_day": {
             "type": "string",
@@ -5743,11 +5902,11 @@
               "start",
               "end"
             ],
-            "description": "Echoed when you sent start and end. Lines overlapping the window are returned. On captions only the window is billed; Premium retrieval is free."
+            "description": "Echoed when you sent start and end. Lines overlapping the window are returned. On captions only the window is billed. An explicit Premium read is charged for the whole video, from the account's plan credits and then its on-demand budget; the window only trims the returned content."
           },
           "rows_billed": {
             "type": "integer",
-            "description": "Rows this call charged. 0 on a repeat of the same video, quality, language, and range inside the 7 day dedupe window, and always 0 on Premium retrieval."
+            "description": "Caption retrieval rows charged by this call. 0 on a repeat of the same video, quality, language, and range inside the 7 day dedupe window. Premium responses report 0 here even when the read was charged for the whole video; this field does not report Premium charges."
           },
           "as_of": {
             "type": [
@@ -5757,7 +5916,14 @@
             "description": "When the transcript was produced."
           },
           "premium_job": {
-            "$ref": "#/components/schemas/TranscriptionJob"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionJob"
+              },
+              {
+                "description": "Your open Premium transcript job for this video, when captions were served while it transcribes."
+              }
+            ]
           },
           "access": {
             "type": "object",
@@ -5872,6 +6038,14 @@
                   "existing_id": {
                     "type": "string",
                     "description": "On tracker_already_exists, the existing tracker id. Reuse it instead of creating another tracker."
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "description": "On tracker_limit, the trackers the plan holds."
+                  },
+                  "count": {
+                    "type": "integer",
+                    "description": "On tracker_limit, the trackers the account holds now."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -6077,123 +6251,6 @@
           "generated"
         ]
       },
-      "TranscriptionJob": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Transcription request id (UUID)."
-          },
-          "video_id": {
-            "type": "string",
-            "description": "YouTube video id (11 characters)."
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "ready",
-              "failed",
-              "refunded"
-            ],
-            "description": "Coarse outcome: pending until the Premium transcript is servable (ready), the purchase failed, or it was refunded."
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "queued",
-              "downloading",
-              "transcribing",
-              "analyzing",
-              "complete",
-              "failed",
-              "refund_pending",
-              "refunded"
-            ],
-            "description": "Request status. Values: queued (accepted; audio download not started), downloading (fetching the video audio), transcribing (premium speech-to-text is running), analyzing (entity/commercial analysis is running), complete (premium transcript is servable via GET /v1/transcripts/{video_id}), failed (rejected intent or legacy purchase requiring accounting review), refund_pending (refund transaction must still complete), refunded (terminal failure; the charged rows were returned and the unlock this submission bought was revoked)."
-          },
-          "stage": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "queued",
-              "transcribing",
-              "analyzing",
-              null
-            ],
-            "description": "User-facing stage: downloading folds into transcribing. Values: queued (waiting to start), transcribing (downloading or transcribing), analyzing (analysis running). Null for terminal statuses and refund_pending."
-          },
-          "charge": {
-            "type": "object",
-            "properties": {
-              "unit": {
-                "type": "string",
-                "enum": [
-                  "credits"
-                ]
-              },
-              "amount": {
-                "type": "number",
-                "description": "Credits this purchase charged. 0 when a prior unlock made it free."
-              },
-              "from": {
-                "type": "string",
-                "enum": [
-                  "included",
-                  "on_demand",
-                  "mixed"
-                ],
-                "description": "Where the credits came from: the included allowance, on-demand usage, or both. Present once the purchase is funded."
-              }
-            },
-            "required": [
-              "unit",
-              "amount"
-            ],
-            "description": "What the purchase charged. Present on durable purchases; absent only on legacy requests."
-          },
-          "eta_seconds": {
-            "type": "integer",
-            "description": "Estimated seconds until completion, re-derived from live pipeline telemetry on every poll. Only present while the request is in flight; absent on refund_pending, which has no completion ETA."
-          },
-          "next_poll_seconds": {
-            "type": "integer",
-            "description": "Seconds to sleep before the next poll (also sent as the Retry-After header). Only present while the request is in flight."
-          },
-          "error": {
-            "type": "string",
-            "description": "Failure reason. Only present when state is failed or refunded, or status is refund_pending."
-          },
-          "refunded": {
-            "type": "boolean",
-            "description": "True when the charge was returned. Only present when state is failed or refunded, or status is refund_pending (false until the refund lands)."
-          },
-          "created_at": {
-            "type": "string",
-            "description": "When the request was submitted."
-          },
-          "completed_at": {
-            "type": "string",
-            "description": "When the request reached a terminal status. Absent while in flight."
-          },
-          "status_url": {
-            "type": "string",
-            "description": "Absolute URL to read again for this job: GET /v1/transcripts/{video_id}?quality=premium, which answers 202 while it transcribes, 200 ready once it is done, and 200 failed if it failed."
-          }
-        },
-        "required": [
-          "id",
-          "video_id",
-          "state",
-          "status",
-          "stage",
-          "created_at",
-          "status_url"
-        ],
-        "description": "Your open Premium purchase for this video, when captions were served while it transcribes."
-      },
       "TranscriptFailed": {
         "type": "object",
         "properties": {
@@ -6218,7 +6275,7 @@
                 "$ref": "#/components/schemas/TranscriptionJob"
               },
               {
-                "description": "The last Premium purchase for this video. Its state is failed or refunded, or its status is refund_pending while the refund settles."
+                "description": "The last Premium transcript job for this video. Its state is failed or refunded, or its status is refund_pending while the refund settles."
               }
             ]
           },
@@ -6232,7 +6289,7 @@
                   "refund_pending",
                   "refunded"
                 ],
-                "description": "How the last purchase ended: failed, refunded (the charge was returned), or refund_pending (the refund is still settling)."
+                "description": "How the last job ended: failed, refunded (the charge was returned), or refund_pending (the refund is still settling)."
               },
               "error": {
                 "type": "string",
@@ -6243,11 +6300,11 @@
               "status",
               "error"
             ],
-            "description": "The failed purchase in brief: job.status and job.error."
+            "description": "The failed job in brief, as job.status and job.error."
           },
           "note": {
             "type": "string",
-            "description": "What to do next: read again with retry=true to buy the video again, or wait while the refund settles."
+            "description": "The next step. Read again with retry=true to start a new Premium transcript, or wait while the refund settles."
           }
         },
         "required": [
@@ -6283,7 +6340,7 @@
                 "$ref": "#/components/schemas/TranscriptionJob"
               },
               {
-                "description": "The Premium purchase this read started or joined. Read this transcript again after Retry-After (job.status_url is that read); later reads join the same purchase."
+                "description": "The Premium transcript job this read started or joined. Read this transcript again after Retry-After (job.status_url is that read); later reads join the same job."
               }
             ]
           }
@@ -6330,7 +6387,7 @@
               "label",
               "href"
             ],
-            "description": "Present when eligible is false: the plan checkout that can buy this transcript, as a button label and an absolute link."
+            "description": "Present when eligible is false. Names the plan that includes Premium transcripts, as a button label and an absolute link to its checkout."
           },
           "quote": {
             "$ref": "#/components/schemas/TranscriptQuote"
@@ -6416,7 +6473,8 @@
                     "title"
                   ]
                 }
-              ]
+              ],
+              "description": "A Premium transcript job with its processing state, charge and URL for reading the transcript again."
             },
             "description": "Your requests in descending creation time and id order, up to the requested limit."
           },
@@ -6646,7 +6704,7 @@
                           "captions",
                           "premium"
                         ],
-                        "description": "Default transcript quality for this account: captions or premium. premium reads require an existing purchase. Owned transcripts remain readable after a plan downgrade; new purchases require an eligible plan."
+                        "description": "Default transcript quality for this account: captions or premium. As a default, premium reads only transcripts the account already owns. Owned transcripts remain readable after a plan downgrade; starting new ones requires an eligible plan."
                       },
                       "language": {
                         "type": "string",
@@ -8799,7 +8857,7 @@
                       "hourly",
                       "daily"
                     ],
-                    "description": "Delivery cadence. Default realtime. Values: realtime (as analysis completes), hourly (hourly digest), daily (daily digest). Free-tier email delivery is coerced to daily regardless of the value sent."
+                    "description": "Delivery cadence. Default realtime. Values: realtime (as analysis completes), hourly (hourly digest), daily (daily digest)."
                   },
                   "digest_day": {
                     "type": "string",
@@ -9006,7 +9064,7 @@
                       "hourly",
                       "daily"
                     ],
-                    "description": "Delivery cadence. Default realtime. Values: realtime (as analysis completes), hourly (hourly digest), daily (daily digest). Free-tier email delivery is coerced to daily regardless of the value sent."
+                    "description": "Delivery cadence. Default realtime. Values: realtime (as analysis completes), hourly (hourly digest), daily (daily digest)."
                   },
                   "digest_day": {
                     "type": "string",
@@ -10466,7 +10524,7 @@
         ],
         "operationId": "get_transcript",
         "summary": "Get a video transcript",
-        "description": "Caption retrieval costs one row per started 15 minutes. quality=premium is one read: an owned transcript answers 200 ready at zero rows; otherwise this call buys the whole video within the account's plan and on-demand budget, included credits first and then on-demand money up to the account limit, and answers 202 pending with the job and Retry-After until the transcript is ready. Read again after Retry-After; repeated reads join the same purchase and never buy twice. When the last purchase for the video failed, the read answers 200 state failed with the job and last_attempt and buys nothing; retry=true buys it again. When the plan or the budget blocks, 403 paid_plan_required (with unlock) or 402 quota_exceeded or spend_limit_exceeded carries the price in quote and nothing is charged. A default-premium account with nothing owned reads captions with a note. start/end only trim the returned content; language selects caption tracks, timestamps=false returns paragraphs. Premium lines carry speaker and index, and the body carries speakers and revision.",
+        "description": "Caption reads use one row per started 15 minutes. quality=premium is one read. An owned transcript answers 200 ready at zero rows. Otherwise this call starts a Premium transcript of the whole video, using credits from the account's plan first and then the account's on-demand budget up to its limit, and answers 202 pending with the job and Retry-After until the transcript is ready. Read again after Retry-After; repeated reads join the same job and never charge twice. When the last Premium transcript for the video failed, the read answers 200 state failed with the job and last_attempt and charges nothing; retry=true starts a new one. When the plan or the budget blocks, 403 paid_plan_required (with unlock) or 402 quota_exceeded or spend_limit_exceeded carries the price in quote and nothing is charged. A default-premium account with nothing owned reads captions with a note. start/end only trim the returned content; language selects caption tracks, timestamps=false returns paragraphs. Premium lines carry speaker and index, and the body carries speakers and revision.",
         "security": [
           {
             "bearerAuth": []
@@ -10490,10 +10548,10 @@
                 "captions",
                 "premium"
               ],
-              "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read: an owned transcript returns 200 state ready at zero rows; otherwise the read buys the whole video within the account's plan and on-demand budget (included credits first, then on-demand money up to the account limit) and returns 202 state pending with the job until it is ready. When the last purchase for the video failed it answers 200 state failed and buys again only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings."
+              "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read. An owned transcript returns 200 state ready at zero rows. Otherwise the read starts a Premium transcript of the whole video, using credits from the account's plan first and then the account's on-demand budget up to its limit, and returns 202 state pending with the job until it is ready. When the last Premium transcript for the video failed it answers 200 state failed and starts a new one only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings."
             },
             "required": false,
-            "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read: an owned transcript returns 200 state ready at zero rows; otherwise the read buys the whole video within the account's plan and on-demand budget (included credits first, then on-demand money up to the account limit) and returns 202 state pending with the job until it is ready. When the last purchase for the video failed it answers 200 state failed and buys again only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings.",
+            "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read. An owned transcript returns 200 state ready at zero rows. Otherwise the read starts a Premium transcript of the whole video, using credits from the account's plan first and then the account's on-demand budget up to its limit, and returns 202 state pending with the job until it is ready. When the last Premium transcript for the video failed it answers 200 state failed and starts a new one only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings.",
             "name": "quality",
             "in": "query"
           },
@@ -10524,10 +10582,10 @@
                 "null"
               ],
               "minimum": 0,
-              "description": "Window start in seconds from the beginning of the video. Send start and end together. On captions the window bills only its own started 15-minute blocks; on Premium it trims an already purchased transcript; this GET does not charge."
+              "description": "Window start in seconds from the beginning of the video. Send start and end together. On captions the window bills only its own started 15-minute blocks; on Premium it trims the returned content. An explicit Premium read is charged for the whole video from the account's plan credits and then its on-demand budget; a window does not reduce that charge."
             },
             "required": false,
-            "description": "Window start in seconds from the beginning of the video. Send start and end together. On captions the window bills only its own started 15-minute blocks; on Premium it trims an already purchased transcript; this GET does not charge.",
+            "description": "Window start in seconds from the beginning of the video. Send start and end together. On captions the window bills only its own started 15-minute blocks; on Premium it trims the returned content. An explicit Premium read is charged for the whole video from the account's plan credits and then its on-demand budget; a window does not reduce that charge.",
             "name": "start",
             "in": "query"
           },
@@ -10548,10 +10606,10 @@
           {
             "schema": {
               "type": "boolean",
-              "description": "Premium only; captions with retry=true returns invalid_query. When the last Premium purchase for this video failed, a read answers 200 state failed with the job and last_attempt and buys nothing; retry=true buys it again under the same quote, budget and one-purchase rules as the first read. While that refund is still settling (job.status refund_pending) even retry=true answers state failed. Without a failed purchase it changes nothing."
+              "description": "Premium only; captions with retry=true returns invalid_query. When the last Premium transcript for this video failed, a read answers 200 state failed with the job and last_attempt and charges nothing; retry=true starts a new one under the same quote, budget and one-job-per-video rules as the first read. While that refund is still settling (job.status refund_pending) even retry=true answers state failed. Without a failed job it changes nothing."
             },
             "required": false,
-            "description": "Premium only; captions with retry=true returns invalid_query. When the last Premium purchase for this video failed, a read answers 200 state failed with the job and last_attempt and buys nothing; retry=true buys it again under the same quote, budget and one-purchase rules as the first read. While that refund is still settling (job.status refund_pending) even retry=true answers state failed. Without a failed purchase it changes nothing.",
+            "description": "Premium only; captions with retry=true returns invalid_query. When the last Premium transcript for this video failed, a read answers 200 state failed with the job and last_attempt and charges nothing; retry=true starts a new one under the same quote, budget and one-job-per-video rules as the first read. While that refund is still settling (job.status refund_pending) even retry=true answers state failed. Without a failed job it changes nothing.",
             "name": "retry",
             "in": "query"
           },
@@ -10581,7 +10639,7 @@
         ],
         "responses": {
           "200": {
-            "description": "state ready: the transcript (video, quality, source, language, languages, lines or paragraphs, speakers and revision on Premium, rows_billed, as_of, note). state failed (Premium only): the last purchase for this video failed; job and last_attempt say why, nothing was bought, and retry=true buys again.",
+            "description": "state ready: the transcript (video, quality, source, language, languages, lines or paragraphs, speakers and revision on Premium, rows_billed, as_of, note). state failed (Premium only): the last Premium transcript for this video failed; job and last_attempt say why, nothing was charged, and retry=true starts a new one.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -10622,7 +10680,7 @@
             }
           },
           "202": {
-            "description": "state pending: the Premium purchase this read started or joined is in flight; job carries its status and poll interval. No transcript content yet.",
+            "description": "state pending: the Premium transcript this read started or joined is in flight; job carries its status and poll interval. No transcript content yet.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -10655,7 +10713,7 @@
             "$ref": "#/components/responses/AuthenticationError"
           },
           "402": {
-            "description": "quota_exceeded or spend_limit_exceeded. The plan allows Premium but the included credits and the on-demand budget do not cover this video; quote carries the refused price and nothing was charged.",
+            "description": "quota_exceeded or spend_limit_exceeded. The plan includes Premium but the credits left on the plan and the on-demand budget do not cover this video; quote carries the refused price and nothing was charged.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -10673,7 +10731,7 @@
             }
           },
           "403": {
-            "description": "paid_plan_required. error.unlock names the plan that buys Premium; quote carries the price.",
+            "description": "paid_plan_required. error.unlock names the plan that includes Premium; quote carries the price.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -10729,8 +10787,8 @@
           "Transcripts"
         ],
         "operationId": "quote_transcription",
-        "summary": "Quote a whole-video Premium purchase",
-        "description": "Optional free quote: the price a Premium read of this video would charge right now, as rows and credits, where the credits would come from, and max_on_demand_cents, the on-demand money the read would need beyond included credits within the account limit. It does not reserve funds or start generation. A video with no known duration, or one past the 12 hour cap, answers 400 invalid_query with param video_id.",
+        "summary": "Quote a whole-video Premium transcript",
+        "description": "Optional free quote: what a Premium read of this video would use right now, as rows and credits, where the credits would come from, and max_on_demand_cents, the on-demand budget the read would need beyond the plan's credits within the account limit. It does not reserve credits or budget and does not start a transcript. A video with no known duration, or one past the 12 hour cap, answers 400 invalid_query with param video_id.",
         "security": [
           {
             "bearerAuth": []
@@ -10804,7 +10862,7 @@
         ],
         "operationId": "list_transcriptions",
         "summary": "List your transcription requests",
-        "description": "Your transcription requests in descending creation time and id order. limit defaults to 20 and accepts 1–100. Follow next_cursor with the same video_id, limit and credential; has_more is false and next_cursor is null on the last page. A traversal excludes requests inserted after its first page. Each entry has the same shape as the status poll plus a `title` field (the video title, null when unknown). The scheduled reconciler advances requests; reading this list never dispatches work or changes billing. In-flight entries carry `eta_seconds` and `next_poll_seconds`.",
+        "description": "Your transcription requests in descending creation time and id order. limit defaults to 20 and accepts 1–100. Follow next_cursor with the same video_id, limit and credential; has_more is false and next_cursor is null on the last page. A traversal excludes requests inserted after its first page. Each entry is a Premium transcript job with its processing and billing state, a `status_url` for the Premium transcript GET, and a `title` field (the video title, null when unknown). The scheduled reconciler advances requests; reading this list never dispatches work or changes billing. In-flight entries carry `eta_seconds` and `next_poll_seconds`.",
         "security": [
           {
             "bearerAuth": []
