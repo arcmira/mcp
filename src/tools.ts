@@ -89,8 +89,8 @@ export const executeReadTool = tool({
   name: 'arcmira_execute_read',
   title: 'Research with a program',
   description: `Runs JavaScript against the Arcmira API through the arcmira client: indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, coverage, Premium transcripts (a Premium read of an untranscribed video uses credits from the user's plan, then the on-demand budget; never ask for cents), and the user's monitors. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then call/rate/build facts and capped logs. Methods and examples: arcmira_describe. Filters require entity, channel, or video IDs. ${LIMITS}`,
-  // Premium retrieval can start paid work for an arbitrary public video.
-  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  // Not read-only: a Premium read can start a transcription that uses credits. Not destructive: it only adds.
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   inputSchema: z.object({ code, intent: intentParam }),
   async run(input, context) {
     return execute(input.code, 'read', context);
