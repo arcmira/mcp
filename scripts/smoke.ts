@@ -156,7 +156,7 @@ const afterRaw = await spend();
 const refusedCode = /"code":"([a-z_]+)"/.exec(rawText)?.[1];
 const rawOk = refusedCode === 'outbound_refused' && afterRaw === afterQuote;
 if (!rawOk) failed = true;
-console.log(`${(rawOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'raw purchase POST'.padEnd(22)} execute  spend ${afterQuote} -> ${afterRaw}  ${refusedCode ?? rawText.replace(/\s+/g, ' ').slice(0, 90)}`);
+console.log(`${(rawOk ? 'ok' : 'UNEXPECTED').padEnd(10)} ${'raw transcription POST'.padEnd(22)} execute  spend ${afterQuote} -> ${afterRaw}  ${refusedCode ?? rawText.replace(/\s+/g, ' ').slice(0, 90)}`);
 
 for (const [name, args, replacement] of [
   ['resolve_entities', { q: 'Ramp' }, 'arcmira_describe'],

@@ -1,6 +1,6 @@
 {
   "name": "arcmira",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Search YouTube transcripts for timestamps, speaker appearances, sponsors and recommendations.",
   "mcpServers": {
     "arcmira": {

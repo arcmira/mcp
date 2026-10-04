@@ -261,7 +261,7 @@ describe('Premium reads in the sandbox client', () => {
     assert.equal(t.state, 'pending');
     assert.equal(t.job.id, job.id);
     assert.equal(t.eta_seconds, 172);
-    assert.match(t.note, /about 3 min left.*never buys twice/);
+    assert.match(t.note, /about 3 min left.*never uses credits twice/);
     assert.deepEqual(slept, [12, 10]);
     assert.equal(sent.length, 3);
   });

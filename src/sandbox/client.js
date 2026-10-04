@@ -87,8 +87,8 @@ const MAX_WAIT_SECONDS = 22;
 /** With less left than this, a pending Premium read returns instead of sleeping for one more read. */
 const MIN_LAST_WAIT_MS = 5_000;
 const TERMINAL = new Set(['failed', 'refunded']);
-const FAILED_NOTE = 'The Premium transcript was not produced; job.error or last_attempt.error says why. Report it, and never substitute captions. Buy again only when the user asks: arcmira.transcript(video, { quality: "premium", retry: true }).';
-const RETIRED_PREMIUM = 'arcmira.prepare and arcmira.wait are gone: arcmira.transcript(video, { quality: "premium" }) returns the lines, buying the transcript within the account\'s on-demand budget when it is not transcribed yet.';
+const FAILED_NOTE = 'The Premium transcript was not produced; job.error or last_attempt.error says why. Report it, and never substitute captions. Transcribe again only when the user asks, which uses credits from the plan again: arcmira.transcript(video, { quality: "premium", retry: true }).';
+const RETIRED_PREMIUM = 'arcmira.prepare and arcmira.wait are gone: arcmira.transcript(video, { quality: "premium" }) returns the lines. When the video is not transcribed yet, that read uses credits from the account\'s plan, then its on-demand budget.';
 
 /** recommendations kind to /v1 class; all sends no class. */
 const KINDS = { sponsored: 'sponsored', organic: 'organic', all: undefined };
@@ -286,7 +286,7 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         if (remaining < MIN_LAST_WAIT_MS) {
           const eta = Number.isFinite(body.job?.eta_seconds) ? body.job.eta_seconds : undefined;
           const left = eta === undefined ? '' : `, about ${Math.max(1, Math.round(eta / 60))} min left`;
-          return { ...body, eta_seconds: eta, note: `Still transcribing${left}. Tell the user, then run the same read again later; it never buys twice.` };
+          return { ...body, eta_seconds: eta, note: `Still transcribing${left}. Tell the user, then run the same read again later; it never uses credits twice.` };
         }
         const poll = Number(headers.get('retry-after') ?? body.job?.next_poll_seconds);
         await sleep(Math.min((Number.isFinite(poll) ? Math.max(1, poll) : 10) * 1000, remaining));
