@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.3
+
+The reference prices a Premium transcript at 300 credits per 15-minute quarter, and alerts use credits from your plan, then your on-demand budget.
+
 ## 0.10.2
 
 Paid reads, Premium transcripts included, use credits from your plan, then your on-demand budget. You set that budget in the dashboard, and it is the approval, so an agent never asks you for a cents amount.
