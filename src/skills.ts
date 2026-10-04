@@ -247,7 +247,7 @@ return {
     description: 'Finds exact spoken quotes and clip-ready moments on podcasts and YouTube: verbatim words, speaker, date, a timestamped link, clip start and end. Uses arcmira.',
     title: 'Find quotes and clip moments',
     summary:
-      '`search` finds the passage; `transcript` with `start` and `end` returns the exact lines around it with second offsets, which give the verbatim quote and the clip boundaries. Caption reads bill returned lines. A Premium purchase always prices the whole video; start/end only select the returned window.',
+      '`search` finds the passage; `transcript` with `start` and `end` returns the exact lines around it with second offsets, which give the verbatim quote and the clip boundaries. Caption reads meter only the returned lines. A Premium read uses credits for the whole video; start/end only select the returned window.',
     asks: ['find a quote, with the source and a timestamp', 'the moment a show talked about a topic, to clip or cite', 'what a specific person said about a topic, in their words'],
     ids: [
       'A speaker resolves with `{ type: "person" }`; pass the id as `speakerIds` (who said it). A person or brand the passage is about goes in `about`. A show goes in `channelIds` as its UC id.',

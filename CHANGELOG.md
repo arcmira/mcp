@@ -1,7 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.10.2
 
+Paid reads read as metered usage of the account's plan (owner ruling 2026-10-04). Every string an agent or a person reads says a paid read uses credits from the plan, then the on-demand budget the account set in the dashboard. That budget is the approval. No agent-facing text says a read buys or purchases anything.
+
+- The PREMIUM note, the budget rule, the access guidance, the `quote` note, the `arcmira_execute_read` description, the generated skills, `llms.txt` and the README use that wording.
+- A pending Premium read's note ends "it never uses credits twice". A failed one says a retry uses credits again. `arcmira.prepare` and `arcmira.wait` still throw `method_retired`; only the message changed.
+- The 30-second timeout message no longer points at `arcmira.status({ jobId })`, which 0.10.0 removed. It says a repeated Premium read never uses credits twice.
 - Correct the portable Agent Plugins MCP configuration to declare its schema and use `streamable-http`. Cursor continues using the existing host-specific `.mcp.json`; the remote server and other host configurations are unchanged. Kiro client validation and catalog submission remain pending.
 
 ## 0.10.1

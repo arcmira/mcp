@@ -137,7 +137,7 @@ for (const tool of TOOLS) {
   const referenceOnly = tool.name === 'arcmira_describe';
   const executesProgram = tool.name === 'arcmira_execute_read' || tool.name === 'arcmira_execute_write';
   if (hints.readOnlyHint !== referenceOnly) fail(`${label}: only reference lookup is guaranteed not to persist data or start paid work`);
-  if (hints.destructiveHint !== executesProgram) fail(`${label}: programs can purchase Premium work or change existing monitors`);
+  if (hints.destructiveHint !== executesProgram) fail(`${label}: programs can start Premium transcription that uses credits, or change existing monitors`);
   if (hints.openWorldHint !== executesProgram) fail(`${label}: programs can request arbitrary public videos`);
   if (hints.idempotentHint !== referenceOnly) fail(`${label}: only reference lookup is guaranteed safe to repeat unchanged`);
   if (!tool.name.startsWith('arcmira_')) fail(`${label}: tool names carry the arcmira_ prefix`);
