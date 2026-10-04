@@ -368,7 +368,7 @@
           {
             "code": "alert_not_found",
             "type": "not_found",
-            "description": "A referenced alert row does not exist or belongs to another account."
+            "description": "A referenced alert does not exist or belongs to another account."
           },
           {
             "code": "api_not_enabled",
@@ -531,7 +531,7 @@
             "code": "pagination_gated",
             "type": "permission_error",
             "gate": "pagination",
-            "description": "Rows past the free window need a paid plan."
+            "description": "Results past the free window need a paid plan."
           },
           {
             "code": "paid_plan_required",
@@ -548,7 +548,7 @@
             "code": "quota_exceeded",
             "type": "quota_exceeded",
             "gate": "rows",
-            "description": "The row pool is spent. unlock.url upgrades or raises the limit."
+            "description": "The read needs more credits than your plan, then your on-demand budget, have left. unlock.url upgrades the plan or raises the budget."
           },
           {
             "code": "rate_limited",
@@ -983,7 +983,7 @@
           },
           "rows": {
             "type": "integer",
-            "description": "Rows the whole video uses, 75 rows per 15-minute block."
+            "description": "Rows the whole video uses, 75 rows per 15-minute block. A row is 4 credits, so Premium uses 300 credits per block."
           }
         },
         "required": [
@@ -1024,7 +1024,7 @@
               "refund_pending",
               "refunded"
             ],
-            "description": "Request status. Values: queued (accepted; audio download not started), downloading (fetching the video audio), transcribing (premium speech-to-text is running), analyzing (entity/commercial analysis is running), complete (premium transcript is servable via GET /v1/transcripts/{video_id}), failed (rejected intent, or a legacy request needing accounting review), refund_pending (refund transaction must still complete), refunded (terminal failure; the charged rows were returned and the unlock this request granted was revoked)."
+            "description": "Request status. Values: queued (accepted; audio download not started), downloading (fetching the video audio), transcribing (premium speech-to-text is running), analyzing (entity/commercial analysis is running), complete (premium transcript is servable via GET /v1/transcripts/{video_id}), failed (rejected intent, or a legacy request needing accounting review), refund_pending (refund transaction must still complete), refunded (terminal failure; the charge was returned and the unlock this request granted was revoked)."
           },
           "stage": {
             "type": [
@@ -1267,7 +1267,7 @@
               "string",
               "null"
             ],
-            "description": "ISO 8601 time the monthly row pool resets: 00:00 UTC on the first of next month. Null on the free plan, whose rows are a lifetime pool."
+            "description": "ISO 8601 time the plan credits reset: 00:00 UTC on the first of next month. Null on the free plan, whose 1,000 credits a month reset on usage.credits.plan.resets_at."
           },
           "tier": {
             "type": "string",
@@ -1293,15 +1293,15 @@
             "properties": {
               "rows_used": {
                 "type": "integer",
-                "description": "Premium rows consumed this period."
+                "description": "Plan credits used this month, in rows: usage.credits.plan.used divided by 4, rounded up. A row is 4 credits."
               },
               "rows_remaining": {
                 "type": "integer",
-                "description": "Premium rows left this period."
+                "description": "Credits left from the plan, grants and top-ups, on-demand excluded, in rows: divided by 4, rounded up. A row is 4 credits."
               },
               "monthly_rows": {
                 "type": "integer",
-                "description": "Total premium rows included per period."
+                "description": "The plan credits a month, in rows: usage.credits.plan.credits divided by 4 when the plan has a limit. A row is 4 credits."
               },
               "current_spend_cents": {
                 "type": "integer",
@@ -1362,7 +1362,7 @@
                           "integer",
                           "null"
                         ],
-                        "description": "The on-demand cap in credits, at $0.002 a credit. Null when uncapped or off."
+                        "description": "The on-demand budget in credits. On-demand usage costs $0.002 a credit, so this is the dollar budget divided by 0.002. Null when uncapped or off."
                       },
                       "used": {
                         "type": "integer",
@@ -1383,7 +1383,7 @@
                   "purchased",
                   "on_demand"
                 ],
-                "description": "The month in credits (1 credit is $0.001; a row is 4 credits). Present only when the credits ledger decides access."
+                "description": "The month in credits, the primary measure of usage. Every read uses credits from the plan, then the on-demand budget. An included plan credit is valued at $0.001; on-demand usage costs $0.002 a credit. A row is 4 credits. Present only when the credits ledger decides access."
               }
             },
             "required": [
@@ -1524,7 +1524,7 @@
           },
           "rows_allotted": {
             "type": "integer",
-            "description": "The pool this key draws on: a free account's lifetime credits, a paid plan's monthly rows."
+            "description": "On a paid plan, its monthly allowance in rows; a row is 4 credits. On the free plan, the account's row allotment from before credits (1,000 for a new account). The free plan uses 1,000 credits a month, read from usage.credits on GET /v1/me."
           },
           "next": {
             "type": "string",
@@ -1569,7 +1569,7 @@
               "fuzzy",
               "none"
             ],
-            "description": "exact: one row is named q (or the handle, id or alias), and no better-known person carries the name. single_fuzzy: the only row returned, not an exact name. ambiguous: several exact rows, or an exact row next to a better-known person sharing the name (Jordan the brand vs Michael Jordan). fuzzy: only loose matches. none: no row."
+            "description": "exact: one entity is named q (or the handle, id or alias), and no better-known person carries the name. single_fuzzy: the only entity returned, not an exact name. ambiguous: several exact matches, or an exact match next to a better-known person sharing the name (Jordan the brand vs Michael Jordan). fuzzy: only loose matches. none: no match."
           },
           "best": {
             "$ref": "#/components/schemas/ResolveCandidate"
@@ -1618,14 +1618,14 @@
               "question",
               "options"
             ],
-            "description": "Set when best and suggested are both null and several rows fit: show the options to the user, or check every option id against the data and answer per row."
+            "description": "Set when best and suggested are both null and several entities fit: show the options to the user, or check every option id against the data and answer per entity."
           },
           "candidates": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ResolveCandidate"
             },
-            "description": "Rows considered: exact names first, then initials, whole-word, spelling and substring matches, each by appearance count."
+            "description": "Entities considered: exact names first, then initials, whole-word, spelling and substring matches, each by appearance count."
           },
           "note": {
             "type": "string",
@@ -1701,12 +1701,12 @@
           },
           "type": {
             "type": "string",
-            "description": "Entity type. Values: person (an individual), organization (a company or institution; legacy rows may read company or brand), product (a product or service), topic (a subject or theme), channel (a media source such as a YouTube channel), unknown (type was never classified)."
+            "description": "Entity type. Values: person (an individual), organization (a company or institution; legacy entities may read company or brand), product (a product or service), topic (a subject or theme), channel (a media source such as a YouTube channel), unknown (type was never classified)."
           },
           "appearance_count": {
             "type": "integer",
             "default": 0,
-            "description": "Number of indexed appearance/mention rows. Results are ordered by this, descending."
+            "description": "Number of indexed appearances and mentions. Results are ordered by this, descending."
           },
           "youtube_channel_id": {
             "type": [
@@ -1720,7 +1720,7 @@
               "string",
               "null"
             ],
-            "description": "One catalog sentence that tells rows with the same name apart, for example \"Common gender-neutral given name or nickname\". Null when the catalog has none."
+            "description": "One catalog sentence that tells entities with the same name apart, for example \"Common gender-neutral given name or nickname\". Null when the catalog has none."
           },
           "page": {
             "type": [
@@ -1738,7 +1738,7 @@
               "acronym",
               "spelling"
             ],
-            "description": "How the row's name relates to q: the whole name, a run of its words (Michael Jordan for Jordan), characters inside a word, the show's initials (My First Million for MFM), or a near spelling."
+            "description": "How the entity's name relates to q: the whole name, a run of its words (Michael Jordan for Jordan), characters inside a word, the show's initials (My First Million for MFM), or a near spelling."
           }
         },
         "required": [
@@ -1751,7 +1751,7 @@
           "page",
           "match"
         ],
-        "description": "The one row q means. Set on exact and single_fuzzy only. Name it in the answer."
+        "description": "The one entity q means. Set on exact and single_fuzzy only. Name it in the answer."
       },
       "ResolveSuggestion": {
         "allOf": [
@@ -1773,7 +1773,7 @@
                   "acronym",
                   "spelling"
                 ],
-                "description": "Why this row stands out: dominant (10x the appearances of the next match), only_word_match, context (the context parameter points at it), acronym, spelling."
+                "description": "Why this entity stands out: dominant (10x the appearances of the next match), only_word_match, context (the context parameter points at it), acronym, spelling."
               },
               "evidence": {
                 "type": "string",
@@ -1794,7 +1794,7 @@
             ]
           }
         ],
-        "description": "Set when best is null but one row stands out, with the reason and evidence. Use it and tell the user you assumed it."
+        "description": "Set when best is null but one entity stands out, with the reason and evidence. Use it and tell the user you assumed it."
       },
       "EntityDetailResponse": {
         "type": "object",
@@ -1827,7 +1827,7 @@
           },
           "type": {
             "type": "string",
-            "description": "Entity type. Values: person (an individual), organization (a company or institution; legacy rows may read company or brand), product (a product or service), topic (a subject or theme), channel (a media source such as a YouTube channel), unknown (type was never classified)."
+            "description": "Entity type. Values: person (an individual), organization (a company or institution; legacy entities may read company or brand), product (a product or service), topic (a subject or theme), channel (a media source such as a YouTube channel), unknown (type was never classified)."
           },
           "platform": {
             "type": [
@@ -1860,7 +1860,7 @@
           "appearance_count": {
             "type": "integer",
             "default": 0,
-            "description": "Number of indexed appearance/mention rows for this entity. 0 when never counted."
+            "description": "Number of indexed appearances and mentions of this entity. 0 when never counted."
           },
           "owner_entity_id": {
             "type": [
@@ -1940,11 +1940,11 @@
         "properties": {
           "total_ad_reads": {
             "type": "integer",
-            "description": "Total ad_read rows across all channels. 0 when none."
+            "description": "Total ad_read recommendations across all channels. 0 when none."
           },
           "total_endorsements": {
             "type": "integer",
-            "description": "Total endorsement rows across all channels. 0 when none."
+            "description": "Total endorsement recommendations across all channels. 0 when none."
           },
           "unique_shows": {
             "type": "integer",
@@ -1991,7 +1991,7 @@
           },
           "has_more": {
             "type": "boolean",
-            "description": "True when more rows exist past this page."
+            "description": "True when more results exist past this page."
           },
           "next_cursor": {
             "type": [
@@ -2169,7 +2169,7 @@
               "number",
               "null"
             ],
-            "description": "Analyzer confidence between 0 and 1. Null for legacy rows analyzed before confidence scoring."
+            "description": "Analyzer confidence between 0 and 1. Null for legacy mentions analyzed before confidence scoring."
           },
           "sentiment_score": {
             "type": [
@@ -2254,7 +2254,7 @@
           },
           "type": {
             "type": "string",
-            "description": "Entity type. Values: person (an individual), organization (a company or institution; legacy rows may read company or brand), product (a product or service), topic (a subject or theme), channel (a media source such as a YouTube channel), unknown (type was never classified)."
+            "description": "Entity type. Values: person (an individual), organization (a company or institution; legacy entities may read company or brand), product (a product or service), topic (a subject or theme), channel (a media source such as a YouTube channel), unknown (type was never classified)."
           },
           "slug": {
             "type": [
@@ -2382,7 +2382,7 @@
           },
           "has_more": {
             "type": "boolean",
-            "description": "True when more rows exist past this page."
+            "description": "True when more results exist past this page."
           },
           "next_cursor": {
             "type": [
@@ -2541,11 +2541,11 @@
               "number",
               "null"
             ],
-            "description": "Raw sentiment score between -1 and 1, same semantics as sentiment_score on mention rows. Null when not computed."
+            "description": "Raw sentiment score between -1 and 1, same semantics as sentiment_score on mentions. Null when not computed."
           },
           "confidence": {
             "type": "number",
-            "description": "Classifier confidence between 0 and 1. Rows below the min_confidence filter (default 0.7) are excluded from list responses."
+            "description": "Classifier confidence between 0 and 1. Recommendations below the min_confidence filter (default 0.7) are excluded from list responses."
           },
           "speaker_role": {
             "type": "string",
@@ -2556,7 +2556,7 @@
               "string",
               "null"
             ],
-            "description": "Set when community feedback disputes the classification (e.g. \"disputed\"). Null when undisputed. Disputed rows are excluded unless include_disputed=true."
+            "description": "Set when community feedback disputes the classification (e.g. \"disputed\"). Null when undisputed. Disputed recommendations are excluded unless include_disputed=true."
           },
           "resolution": {
             "type": [
@@ -2704,7 +2704,7 @@
         "properties": {
           "entity_id": {
             "type": "string",
-            "description": "Public id (\"ent_{n}\") of the entity the row should point at."
+            "description": "Public id (\"ent_{n}\") of the entity the result should point at."
           },
           "entity_name": {
             "type": "string",
@@ -2716,7 +2716,7 @@
           }
         },
         "additionalProperties": {},
-        "description": "For issue_type wrong_entity (and wrong_person): the entity the row should have been attributed to."
+        "description": "For issue_type wrong_entity (and wrong_person): the entity the result should have been attributed to."
       },
       "WrongEntityTypeChange": {
         "type": "object",
@@ -2769,7 +2769,7 @@
           }
         },
         "additionalProperties": {},
-        "description": "For issue_type wrong_classification: the commercial class the row should carry."
+        "description": "For issue_type wrong_classification: the commercial class the result should carry."
       },
       "StaleMetadataChange": {
         "type": "object",
@@ -2794,15 +2794,15 @@
         "properties": {
           "expected_rank": {
             "type": "integer",
-            "description": "Where the row should have ranked (1-based)."
+            "description": "Where the result should have ranked (1-based)."
           },
           "observed_rank": {
             "type": "integer",
-            "description": "Where the row actually ranked (1-based). Most useful on search feedback."
+            "description": "Where the result actually ranked (1-based). Most useful on search feedback."
           }
         },
         "additionalProperties": {},
-        "description": "For issue_type bad_ranking: the expected and observed positions of the row."
+        "description": "For issue_type bad_ranking: the expected and observed positions of the result."
       },
       "MissedAlertChange": {
         "type": "object",
@@ -2824,7 +2824,7 @@
           "source_url"
         ],
         "additionalProperties": {},
-        "description": "For issue_type missed_alert: an expectation with no alert row to target. Omit the correction id and describe where the alert should have fired."
+        "description": "For issue_type missed_alert: an expectation with no alert to target. Omit the correction id and describe where the alert should have fired."
       },
       "DeliveryIssueChange": {
         "type": "object",
@@ -2843,7 +2843,7 @@
           "channel"
         ],
         "additionalProperties": {},
-        "description": "For issue_type delivery_issue: targets the delivery row (the correction id) and names the channel that was wrong or never received."
+        "description": "For issue_type delivery_issue: targets the alert delivery (the correction id) and names the channel that was wrong or never received."
       },
       "FreeformSuggestedChange": {
         "type": "object",
@@ -2899,7 +2899,7 @@
             "items": {
               "$ref": "#/components/schemas/FeedbackReadbackCorrection"
             },
-            "description": "Per-correction rows with their individual review statuses, in submission order."
+            "description": "The corrections, each with its own review status, in submission order."
           }
         },
         "required": [
@@ -2978,7 +2978,7 @@
               "string",
               "null"
             ],
-            "description": "When the correction row was created."
+            "description": "When the correction was created."
           }
         },
         "required": [
@@ -3224,7 +3224,7 @@
           },
           "ad_reads": {
             "type": "integer",
-            "description": "Number of ad_read recommendation rows for this sponsor on the channel."
+            "description": "Number of ad_read recommendations for this sponsor on the channel."
           },
           "videos": {
             "type": "integer",
@@ -3673,7 +3673,7 @@
               "string",
               "null"
             ],
-            "description": "Entity type. Values: person (an individual), organization (a company or institution; legacy rows may read company or brand), product (a product or service), topic (a subject or theme), channel (a media source such as a YouTube channel), unknown (type was never classified)."
+            "description": "Entity type. Values: person (an individual), organization (a company or institution; legacy entities may read company or brand), product (a product or service), topic (a subject or theme), channel (a media source such as a YouTube channel), unknown (type was never classified)."
           }
         },
         "required": [
@@ -5250,14 +5250,14 @@
               "string",
               "null"
             ],
-            "description": "Public id (\"ent_{n}\") of the entity that triggered the alert, when recorded. Null on older rows that were written before entity_id was stored on alert_delivery. Resolve the entity through mention_id or the embedded tracker when this is null."
+            "description": "Public id (\"ent_{n}\") of the entity that triggered the alert, when recorded. Null on older alerts recorded before entity_id was stored. Resolve the entity through mention_id or the embedded tracker when this is null."
           },
           "mention_id": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Public id (\"men_{n}\") of the mention/appearance row that triggered the alert. Joins directly against mention rows (e.g. /v1/mentions). Null when not appearance-scoped."
+            "description": "Public id (\"men_{n}\") of the mention or appearance that triggered the alert. Matches the id on /v1/mentions results. Null when not appearance-scoped."
           },
           "video_id": {
             "type": [
@@ -5282,7 +5282,7 @@
               "excerpt",
               null
             ],
-            "description": "Which evidence layer was sent. Null on older rows."
+            "description": "Which evidence layer was sent. Null on older alerts."
           },
           "channel": {
             "type": "string",
@@ -5322,7 +5322,7 @@
           },
           "created_at": {
             "type": "string",
-            "description": "When the alert row was created."
+            "description": "When the alert was created."
           },
           "tracker": {
             "type": "object",
@@ -5362,7 +5362,7 @@
               "entity_type",
               "display_name"
             ],
-            "description": "The tracker the alert belongs to. Fields are null when the tracker row was deleted."
+            "description": "The tracker the alert belongs to. Fields are null when the tracker was deleted."
           },
           "monitor": {
             "type": [
@@ -5407,7 +5407,8 @@
           "created_at",
           "tracker",
           "monitor"
-        ]
+        ],
+        "description": "One delivery of an alert. Each alert uses 25 credits once, however many channels and recipients deliver it."
       },
       "MonitorAddTrackersResponse": {
         "type": "object",
@@ -5906,7 +5907,7 @@
           },
           "rows_billed": {
             "type": "integer",
-            "description": "Caption retrieval rows charged by this call. 0 on a repeat of the same video, quality, language, and range inside the 7 day dedupe window. Premium responses report 0 here even when the read was charged for the whole video; this field does not report Premium charges."
+            "description": "Rows this captions read used: 1 row per started 15 minutes, and a row is 4 credits. 0 on a repeat of the same video, quality, language, and range inside the 7 day dedupe window. Premium reads report 0, because the Premium transcript job carries their charge."
           },
           "as_of": {
             "type": [
@@ -6212,7 +6213,7 @@
               "number",
               "null"
             ],
-            "description": "Video length in seconds. Null when unknown, which also means the row estimate was unknown."
+            "description": "Video length in seconds. Null when unknown, which also means the credit estimate was unknown."
           },
           "watch_url": {
             "type": "string",
@@ -6352,7 +6353,7 @@
           "job"
         ]
       },
-      "TranscriptPurchaseQuote": {
+      "PremiumQuote": {
         "type": "object",
         "properties": {
           "video_id": {
@@ -6422,13 +6423,15 @@
             ]
           },
           "credits_per_row": {
-            "type": "number"
+            "type": "number",
+            "description": "Credits in a row: 4."
           },
           "max_on_demand_cents": {
             "type": "number"
           },
           "on_demand_cents_per_unit": {
-            "type": "number"
+            "type": "number",
+            "description": "What one unit of charge.unit costs as on-demand usage, in US cents: 0.2 a credit ($0.002)."
           },
           "refund_policy": {
             "type": "string"
@@ -6621,7 +6624,7 @@
         ],
         "operationId": "get_me",
         "summary": "Current API key context",
-        "description": "Available even when the account has exhausted its usage allowance. Returns the credential making the request (key_id, key_label, credential_kind), the masked account email, the tier, scopes, rate limit, row usage with period_resets_at, and account settings. settings.transcripts is what a transcript request that names no parameter of its own receives: every key of the account resolves against it.",
+        "description": "Available even when the account has exhausted its usage allowance. Returns the credential making the request (key_id, key_label, credential_kind), the masked account email, the tier, scopes, rate limit, usage with period_resets_at, and account settings. usage.credits is the primary measure: credits from the plan, then the on-demand budget. The row fields restate it at 4 credits a row. settings.transcripts is what a transcript request that names no parameter of its own receives: every key of the account resolves against it.",
         "security": [
           {
             "bearerAuth": []
@@ -6887,7 +6890,7 @@
         ],
         "operationId": "verify_signup",
         "summary": "Exchange a verification code for an account key",
-        "description": "Consumes the code POST /v1/signups sent, creates the account when the address has none, and mints an arc_sk_ key on it: the read scope, the free tier's lifetime row pool, no expiry. A wrong, expired, or spent code is 400 signup_code_invalid on param code, naming the attempts left; its unlock action is a new send. Send { \"email\": \"agent@example.com\", \"code\": \"482913\" }.",
+        "description": "Consumes the code POST /v1/signups sent, creates the account when the address has none, and mints an arc_sk_ key on it: the read scope, the free plan's 1,000 credits a month, no expiry. A wrong, expired, or spent code is 400 signup_code_invalid on param code, naming the attempts left; its unlock action is a new send. Send { \"email\": \"agent@example.com\", \"code\": \"482913\" }.",
         "security": [],
         "requestBody": {
           "content": {
@@ -6973,7 +6976,7 @@
         ],
         "operationId": "resolve_entity",
         "summary": "A name to one id, before any filter",
-        "description": "Call this before passing an id to about, by, entity_ids, channel_ids or channel; those filters refuse names with id_required. Pass context with the user's own words about the name (\"the startup bank\", \"on My First Million\"). The answer is one of three: best (the name means one row: use it and name it), suggested (no row is certain but one stands out, with reason and evidence: use it and tell the user you assumed it), or ask (several rows fit: show ask.options, or check every option id and answer per row). For a show pass type=channel and use the youtube_channel_id; for a brand or a person use the id. Free; bills no rows.",
+        "description": "Call this before passing an id to about, by, entity_ids, channel_ids or channel; those filters refuse names with id_required. Pass context with the user's own words about the name (\"the startup bank\", \"on My First Million\"). The answer is one of three: best (the name means one entity: use it and name it), suggested (no entity is certain but one stands out, with reason and evidence: use it and tell the user you assumed it), or ask (several entities fit: show ask.options, or check every option id and answer per entity). For a show pass type=channel and use the youtube_channel_id; for a brand or a person use the id. Free; uses no credits.",
         "security": [
           {
             "bearerAuth": []
@@ -7180,7 +7183,7 @@
         ],
         "operationId": "list_mentions",
         "summary": "Search mentions across media",
-        "description": "Cursor-paginated mentions filtered by entity (entity_id is required; resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter), channel (channel_id), text query, sentiment, appearance flag, and publication window [after, before). The signed continuation binds the route, filters, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing rows remain live. Positions are start_seconds and end_seconds (integer seconds; 0 means full episode). is_appearance filtering applies to person entities only; passing is_appearance=true for any other type returns a 400 (appearances_person_only). details=full attaches per-mention commercial recommendations and requires a Pro+ plan.",
+        "description": "Cursor-paginated mentions filtered by entity (entity_id is required; resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter), channel (channel_id), text query, sentiment, appearance flag, and publication window [after, before). The signed continuation binds the route, filters, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing mentions remain live. Positions are start_seconds and end_seconds (integer seconds; 0 means full episode). is_appearance filtering applies to person entities only; passing is_appearance=true for any other type returns a 400 (appearances_person_only). details=full attaches per-mention commercial recommendations and requires a Pro+ plan.",
         "security": [
           {
             "bearerAuth": []
@@ -7271,10 +7274,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Only media published before this instant, so before=2026-09-02 includes all of 2026-09-01. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
+              "description": "Only media published before this instant, so before=2026-09-02 includes all of 2026-09-01. Needs a paid plan: the free plan refuses it with filter_requires_paid. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive."
             },
             "required": false,
-            "description": "Only media published before this instant, so before=2026-09-02 includes all of 2026-09-01. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive.",
+            "description": "Only media published before this instant, so before=2026-09-02 includes all of 2026-09-01. Needs a paid plan: the free plan refuses it with filter_requires_paid. An ISO 8601 date (2026-09-01) or datetime with offset (2026-09-01T00:00:00Z), read in UTC. The window is half-open: after is inclusive, before is exclusive.",
             "name": "before",
             "in": "query"
           },
@@ -7362,7 +7365,7 @@
         ],
         "operationId": "list_recommendations",
         "summary": "Search recommendations across media",
-        "description": "Cursor-paginated commercial mentions (sponsored, organic and neutral mentions) filtered by entity (entity_id is required; resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter), channel (channel_id), class, confidence, and publication window [after, before). The signed continuation binds the route, filters, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing rows remain live. Requires a Pro+ plan. Positions are start_seconds and end_seconds (integer seconds).",
+        "description": "Cursor-paginated commercial mentions (sponsored, organic and neutral mentions) filtered by entity (entity_id is required; resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter), channel (channel_id), class, confidence, and publication window [after, before). The signed continuation binds the route, filters, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing recommendations remain live. Requires a Pro+ plan. Positions are start_seconds and end_seconds (integer seconds).",
         "security": [
           {
             "bearerAuth": []
@@ -7541,7 +7544,7 @@
         ],
         "operationId": "submit_feedback",
         "summary": "Submit feedback and corrections for a prior API query",
-        "description": "Attach corrections to the exact query you ran: pass the feedback type, the query object you sent, and optional per-item corrections. Public submissions are recorded for human review (status \"logged\"); nothing is auto-applied. Read the review status back later via GET /v1/feedback/{feedback_id}. recommendations and channel_sponsors feedback types require a Pro+ plan; every other type needs read. monitor_alert feedback targets fired alert rows: query carries monitor_id and/or tracker_id and/or alert_id, corrections target the alert row id, and every referenced alert row must belong to the caller (otherwise 404 alert_not_found). missed_alert corrections are expectations with no row to target: omit the correction id and put { source_url, approximate_timestamp_seconds?, entity_id? } in suggested_change. delivery_issue corrections may carry { channel } in suggested_change. experience feedback says how a task went as a whole rather than correcting a row: it requires category and notes, refuses corrections (400 invalid_feedback_request), and needs no query. category and mcp_call_id, when sent, are recorded in the stored query.",
+        "description": "Attach corrections to the exact query you ran: pass the feedback type, the query object you sent, and optional per-item corrections. Public submissions are recorded for human review (status \"logged\"); nothing is auto-applied. Read the review status back later via GET /v1/feedback/{feedback_id}. recommendations and channel_sponsors feedback types require a Pro+ plan; every other type needs read. monitor_alert feedback targets fired alerts: query carries monitor_id and/or tracker_id and/or alert_id, corrections target the alert id, and every referenced alert must belong to the caller (otherwise 404 alert_not_found). missed_alert corrections are expectations with nothing to target: omit the correction id and put { source_url, approximate_timestamp_seconds?, entity_id? } in suggested_change. delivery_issue corrections may carry { channel } in suggested_change. experience feedback says how a task went as a whole rather than correcting a result: it requires category and notes, refuses corrections (400 invalid_feedback_request), and needs no query. category and mcp_call_id, when sent, are recorded in the stored query.",
         "security": [
           {
             "bearerAuth": []
@@ -7612,7 +7615,7 @@
                       "search",
                       "experience"
                     ],
-                    "description": "The surface being reviewed. Values: recommendations (/v1/recommendations rows by com_* id; requires a Pro+ plan), channel_sponsors (sponsor entities on a channel; requires a Pro+ plan), mentions (/v1/mentions rows by men_* id), entities_search (/v1/entities/resolve candidates), entities (/v1/entities/{id} payloads), channels (/v1/channels/{channel_id}/videos rows), monitor_alert (fired alert rows from /v1/monitors/{id}/alerts or /v1/trackers/{id}/alerts; corrections target the alert row id), appearances (person appearance rows from /v1/mentions with is_appearance=true), search (/v1/search passages), experience (how a task went as a whole, not one row: requires category and notes, takes no corrections, and query is optional)."
+                    "description": "The surface being reviewed. Values: recommendations (/v1/recommendations results by com_* id; requires a Pro+ plan), channel_sponsors (sponsor entities on a channel; requires a Pro+ plan), mentions (/v1/mentions results by men_* id), entities_search (/v1/entities/resolve candidates), entities (/v1/entities/{id} payloads), channels (/v1/channels/{channel_id}/videos results), monitor_alert (fired alerts from /v1/monitors/{id}/alerts or /v1/trackers/{id}/alerts; corrections target the alert id), appearances (person appearances from /v1/mentions with is_appearance=true), search (/v1/search passages), experience (how a task went as a whole, not one result: requires category and notes, takes no corrections, and query is optional)."
                   },
                   "query": {
                     "type": "object",
@@ -7658,7 +7661,7 @@
                         "id": {
                           "type": "string",
                           "minLength": 1,
-                          "description": "Public id of the row being corrected, from the response you received: men_* (mentions, appearances), com_* (recommendations), ent_* (entities, sponsors), or the alert row id (monitor_alert). Omit for missed_alert and missing_result corrections, which have no row to target."
+                          "description": "Public id of the result being corrected, from the response you received: men_* (mentions, appearances), com_* (recommendations), ent_* (entities, sponsors), or the alert id (monitor_alert). Omit for missed_alert and missing_result corrections, which have nothing to target."
                         },
                         "class": {
                           "type": "string",
@@ -7667,7 +7670,7 @@
                             "organic",
                             "mention"
                           ],
-                          "description": "On recommendations feedback, the class the row should carry. Values: sponsored (an ad-style promotion heard at that moment: a paid sponsor read, promo code, affiliate plug, thanks for supplied goods or venue, or a show promoting its own product as an ad), organic (an unpaid personal recommendation), mention (a neutral commercial mention)."
+                          "description": "On recommendations feedback, the class the result should carry. Values: sponsored (an ad-style promotion heard at that moment: a paid sponsor read, promo code, affiliate plug, thanks for supplied goods or venue, or a show promoting its own product as an ad), organic (an unpaid personal recommendation), mention (a neutral commercial mention)."
                         },
                         "reason": {
                           "type": "string",
@@ -7703,7 +7706,7 @@
                             "wrong_appearance_role",
                             "other"
                           ],
-                          "description": "Issue classification for the correction. Entity-family values: wrong_entity_type (right entity, wrong type), wrong_entity (the row points at the wrong canonical entity), duplicate_entity (results split across variants of the same entity), merge_suggestion (propose the canonical merge for split variants), missing_result (a result you know should exist is absent), stale_metadata (name/website/channel metadata is outdated), wrong_classification (class-level error on a commercial row), bad_ranking (duplicates or aliases ranking above the canonical entity). monitor_alert values: false_positive_alert (the alert should not have fired), wrong_media (fired against the wrong video), wrong_timestamp (fired at the wrong position in the video), duplicate_alert (the same occurrence fired more than once), missed_alert (an expectation: an alert that should have fired but did not; no row to target), delivery_issue (the delivery itself was wrong: wrong channel, not received). appearances values: person_not_present (the person does not appear in the media), wrong_person (the appearance is attributed to the wrong person), wrong_appearance_role (right person, wrong role, e.g. guest vs host). other (escape hatch; detail in notes)."
+                          "description": "Issue classification for the correction. Entity-family values: wrong_entity_type (right entity, wrong type), wrong_entity (the result points at the wrong canonical entity), duplicate_entity (results split across variants of the same entity), merge_suggestion (propose the canonical merge for split variants), missing_result (a result you know should exist is absent), stale_metadata (name/website/channel metadata is outdated), wrong_classification (class-level error on a commercial result), bad_ranking (duplicates or aliases ranking above the canonical entity). monitor_alert values: false_positive_alert (the alert should not have fired), wrong_media (fired against the wrong video), wrong_timestamp (fired at the wrong position in the video), duplicate_alert (the same occurrence fired more than once), missed_alert (an expectation: an alert that should have fired but did not; nothing to target), delivery_issue (the delivery itself was wrong: wrong channel, not received). appearances values: person_not_present (the person does not appear in the media), wrong_person (the appearance is attributed to the wrong person), wrong_appearance_role (right person, wrong role, e.g. guest vs host). other (escape hatch; detail in notes)."
                         },
                         "suggested_change": {
                           "anyOf": [
@@ -7747,7 +7750,7 @@
                       }
                     },
                     "maxItems": 100,
-                    "description": "Per-row corrections. Not allowed when type is experience."
+                    "description": "Per-result corrections. Not allowed when type is experience."
                   },
                   "category": {
                     "type": "string",
@@ -7759,7 +7762,7 @@
                       "confusing",
                       "other"
                     ],
-                    "description": "What kind of problem this is. Values: wrong_entity (a name resolved to the wrong person, company or thing), bad_data (a row or field is wrong), missing (something that should exist was not found), slow (the task took too long), confusing (the answer or an error was hard to act on), other (anything else; say what in notes). Required when type is experience."
+                    "description": "What kind of problem this is. Values: wrong_entity (a name resolved to the wrong person, company or thing), bad_data (a result or field is wrong), missing (something that should exist was not found), slow (the task took too long), confusing (the answer or an error was hard to act on), other (anything else; say what in notes). Required when type is experience."
                   },
                   "mcp_call_id": {
                     "type": "string",
@@ -7848,7 +7851,7 @@
         ],
         "operationId": "get_feedback",
         "summary": "Read back a feedback submission and its review status",
-        "description": "Returns the submission (id, type, query, notes, created_at) plus its per-correction rows, each with a review status in the public vocabulary: pending_review, needs_information, accepted, accepted_with_changes, rejected, withdrawn, applied, reverted (accepted means a reviewer agreed; applied means the change is live in the index). Only the submitting user's keys can read a submission; unknown ids and other users' submissions both return 404 (never 403).",
+        "description": "Returns the submission (id, type, query, notes, created_at) plus its corrections, each with a review status in the public vocabulary: pending_review, needs_information, accepted, accepted_with_changes, rejected, withdrawn, applied, reverted (accepted means a reviewer agreed; applied means the change is live in the index). Only the submitting user's keys can read a submission; unknown ids and other users' submissions both return 404 (never 403).",
         "security": [
           {
             "bearerAuth": []
@@ -8052,7 +8055,7 @@
         ],
         "operationId": "search",
         "summary": "Retrieve spoken transcript slices for one topic",
-        "description": "Search indexed YouTube and podcast transcripts for short spoken slices. Each result includes spoken text, a watch URL, and a publish date. Scope with channel_ids (or channel) and entity_ids (a person id filters to that person's appearances); narrow to passages about entities with about, to a speaker with by, and to sponsored, organic or mention passages with kind. Every filter takes ids, never names: resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter. Results carry names beside ids (filters.about, filters.by, chunk about and speakers_by). Use one topic per call. Search results include text on every plan within the plan's publication-date window. Explicitly requesting source=arcmira_premium on a plan without Premium transcripts is refused with filter_requires_paid. An after later than the plan's freshness gate is refused with freshness_requires_paid rather than widened. Bills one row per chunk returned. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "Search indexed YouTube and podcast transcripts for short spoken slices. Each result includes spoken text, a watch URL, and a publish date. Scope with channel_ids (or channel) and entity_ids (a person id filters to that person's appearances); narrow to passages about entities with about, to a speaker with by, and to sponsored, organic or mention passages with kind. Every filter takes ids, never names: resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter. Results carry names beside ids (filters.about, filters.by, chunk about and speakers_by). Use one topic per call. Search results include text on every plan within the plan's publication-date window. Explicitly requesting source=arcmira_premium on a plan without Premium transcripts is refused with filter_requires_paid. An after later than the plan's freshness gate is refused with freshness_requires_paid rather than widened. Uses 4 credits per chunk returned past the first 5. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -8272,7 +8275,7 @@
         ],
         "operationId": "get_entity_momentum",
         "summary": "Spoken-web heat for one entity",
-        "description": "Mentions in the last 7 and 30 days against the prior 30, an absolute-delta verdict (accelerating, flat, fading, none), the newest media date, and the top shows in the window. It counts the shows we index, not the whole internet, and it is a count, not a score. On a Pro+ plan the card also carries paid_vs_organic; otherwise that field is absent and access names the gate. Bills one row. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "Mentions in the last 7 and 30 days against the prior 30, an absolute-delta verdict (accelerating, flat, fading, none), the newest media date, and the top shows in the window. It counts the shows we index, not the whole internet, and it is a count, not a score. On a Pro+ plan the card also carries paid_vs_organic; otherwise that field is absent and access names the gate. Free; uses no credits. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -8362,7 +8365,7 @@
         ],
         "operationId": "get_channel_coverage",
         "summary": "What the index holds for a channel",
-        "description": "How many videos of a YouTube channel are searchable, the newest publish date among them, and the split by transcript source class. Call it when a search or mention lookup came back empty, before telling anyone we do not cover a show, and cite indexed_through as the as-of date for mentions and search_indexed_through for transcript search. It cannot request indexing; channel backfill is not available yet. Free (0 rows). Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "How many videos of a YouTube channel are searchable, the newest publish date among them, and the split by transcript source class. Call it when a search or mention lookup came back empty, before telling anyone we do not cover a show, and cite indexed_through as the as-of date for mentions and search_indexed_through for transcript search. It cannot request indexing; channel backfill is not available yet. Free; uses no credits. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -8449,7 +8452,7 @@
         ],
         "operationId": "list_channel_videos",
         "summary": "Newest indexed videos of a channel",
-        "description": "The indexed videos of a YouTube channel, newest first, each with its video_id, title, publish date, duration, view count, and watch_url on arcmira.com. Pass next_cursor as cursor to continue. The signed token binds the route, filters, caller and visibility; invalid or old tokens return invalid_cursor. A first-page media ID fence excludes later insertions, including old-date backfills; edits and deletions to existing rows remain live. Call it for the latest or most recent episode of a show, or to list what a show published in a window, then pass a video_id to GET /v1/mentions/counts video_ids for what that episode mentions or to GET /v1/transcripts/{video_id} to read it. indexed_through is the newest date we hold for the channel. An empty list means nothing is indexed; channel backfill is not available yet. Bills one row per video returned. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "The indexed videos of a YouTube channel, newest first, each with its video_id, title, publish date, duration, view count, and watch_url on arcmira.com. Pass next_cursor as cursor to continue. The signed token binds the route, filters, caller and visibility; invalid or old tokens return invalid_cursor. A first-page media ID fence excludes later insertions, including old-date backfills; edits and deletions to existing videos remain live. Call it for the latest or most recent episode of a show, or to list what a show published in a window, then pass a video_id to GET /v1/mentions/counts video_ids for what that episode mentions or to GET /v1/transcripts/{video_id} to read it. indexed_through is the newest date we hold for the channel. An empty list means nothing is indexed; channel backfill is not available yet. Uses 4 credits per video returned past the first 5. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -8582,7 +8585,7 @@
         ],
         "operationId": "count_mentions",
         "summary": "Ranked catalog counts of who a set of channels mention",
-        "description": "A small ranked table of entity and channel counts, all-time unless after is set. Pass channel_ids for what shows talk about and entity_types to match the question (topic for subjects, person for guests, organization,product for brands). Pass video_ids with one id from GET /v1/channels/{channel_id}/videos for what a single episode mentions. Two or more channel_ids also return shared, the entities on more than one of them ranked by the smallest per-channel count, which is true overlap. An after later than the plan's freshness gate is refused with freshness_requires_paid rather than widened. Bills one row per table row returned. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "A small ranked table of entity and channel counts, all-time unless after is set. Pass channel_ids for what shows talk about and entity_types to match the question (topic for subjects, person for guests, organization,product for brands). Pass video_ids with one id from GET /v1/channels/{channel_id}/videos for what a single episode mentions. Two or more channel_ids also return shared, the entities on more than one of them ranked by the smallest per-channel count, which is true overlap. An after later than the plan's freshness gate is refused with freshness_requires_paid rather than widened. Uses 4 credits per ranked entry returned past the first 5. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -8811,7 +8814,7 @@
         ],
         "operationId": "create_monitor",
         "summary": "Create monitor",
-        "description": "Creating with notify_webhook: true and a webhook_url enables HMAC-signed webhook delivery and returns the signing secret (monitor.webhook_secret) in this response. Store it securely. A retry with the original Idempotency-Key recovers the same secret for up to 24 hours while it remains the current secret or the valid previous secret. An expired or displaced secret returns 409 idempotency_result_expired without rotating again. Reads do not expose the secret. All subsequent reads expose only webhook_secret_set and webhook_secret_hint.",
+        "description": "Creating with notify_webhook: true and a webhook_url enables HMAC-signed webhook delivery and returns the signing secret (monitor.webhook_secret) in this response. Store it securely. A retry with the original Idempotency-Key recovers the same secret for up to 24 hours while it remains the current secret or the valid previous secret. An expired or displaced secret returns 409 idempotency_result_expired without rotating again. Reads do not expose the secret. All subsequent reads expose only webhook_secret_set and webhook_secret_hint. Creating monitors and trackers is free. Each alert uses 25 credits once, however many channels and recipients deliver it: credits from your plan, then your on-demand budget. When the account is out of credits, alerts wait instead of sending.",
         "security": [
           {
             "bearerAuth": []
@@ -10524,7 +10527,7 @@
         ],
         "operationId": "get_transcript",
         "summary": "Get a video transcript",
-        "description": "Caption reads use one row per started 15 minutes. quality=premium is one read. An owned transcript answers 200 ready at zero rows. Otherwise this call starts a Premium transcript of the whole video, using credits from the account's plan first and then the account's on-demand budget up to its limit, and answers 202 pending with the job and Retry-After until the transcript is ready. Read again after Retry-After; repeated reads join the same job and never charge twice. When the last Premium transcript for the video failed, the read answers 200 state failed with the job and last_attempt and charges nothing; retry=true starts a new one. When the plan or the budget blocks, 403 paid_plan_required (with unlock) or 402 quota_exceeded or spend_limit_exceeded carries the price in quote and nothing is charged. A default-premium account with nothing owned reads captions with a note. start/end only trim the returned content; language selects caption tracks, timestamps=false returns paragraphs. Premium lines carry speaker and index, and the body carries speakers and revision.",
+        "description": "Caption reads use 4 credits per started 15 minutes. quality=premium is one read. An owned transcript answers 200 ready at no charge. Otherwise this call starts a Premium transcript of the whole video, 300 credits per started 15 minutes, using credits from the account's plan first and then the account's on-demand budget up to its limit, and answers 202 pending with the job and Retry-After until the transcript is ready. Read again after Retry-After; repeated reads join the same job and never charge twice. When the last Premium transcript for the video failed, the read answers 200 state failed with the job and last_attempt and charges nothing; retry=true starts a new one. When the plan or the budget blocks, 403 paid_plan_required (with unlock) or 402 quota_exceeded or spend_limit_exceeded carries the price in quote and nothing is charged. A default-premium account with nothing owned reads captions with a note. start/end only trim the returned content; language selects caption tracks, timestamps=false returns paragraphs. Premium lines carry speaker and index, and the body carries speakers and revision.",
         "security": [
           {
             "bearerAuth": []
@@ -10548,10 +10551,10 @@
                 "captions",
                 "premium"
               ],
-              "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read. An owned transcript returns 200 state ready at zero rows. Otherwise the read starts a Premium transcript of the whole video, using credits from the account's plan first and then the account's on-demand budget up to its limit, and returns 202 state pending with the job until it is ready. When the last Premium transcript for the video failed it answers 200 state failed and starts a new one only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings."
+              "description": "captions reads creator or automatic captions at 4 credits per started 15 minutes. premium is one read. An owned transcript returns 200 state ready at no charge. Otherwise the read starts a Premium transcript of the whole video, 300 credits per started 15 minutes, using credits from the account's plan first and then the account's on-demand budget up to its limit, and returns 202 state pending with the job until it is ready. When the last Premium transcript for the video failed it answers 200 state failed and starts a new one only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings."
             },
             "required": false,
-            "description": "captions reads creator or automatic captions at 1 row per started 15 minutes. premium is one read. An owned transcript returns 200 state ready at zero rows. Otherwise the read starts a Premium transcript of the whole video, using credits from the account's plan first and then the account's on-demand budget up to its limit, and returns 202 state pending with the job until it is ready. When the last Premium transcript for the video failed it answers 200 state failed and starts a new one only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings.",
+            "description": "captions reads creator or automatic captions at 4 credits per started 15 minutes. premium is one read. An owned transcript returns 200 state ready at no charge. Otherwise the read starts a Premium transcript of the whole video, 300 credits per started 15 minutes, using credits from the account's plan first and then the account's on-demand budget up to its limit, and returns 202 state pending with the job until it is ready. When the last Premium transcript for the video failed it answers 200 state failed and starts a new one only with retry=true. 402 quota_exceeded or spend_limit_exceeded and 403 paid_plan_required carry the price in quote. It never substitutes captions. Default captions unless changed in account settings.",
             "name": "quality",
             "in": "query"
           },
@@ -10788,7 +10791,7 @@
         ],
         "operationId": "quote_transcription",
         "summary": "Quote a whole-video Premium transcript",
-        "description": "Optional free quote: what a Premium read of this video would use right now, as rows and credits, where the credits would come from, and max_on_demand_cents, the on-demand budget the read would need beyond the plan's credits within the account limit. It does not reserve credits or budget and does not start a transcript. A video with no known duration, or one past the 12 hour cap, answers 400 invalid_query with param video_id.",
+        "description": "Optional free quote: what a Premium read of this video would use right now, as rows and credits (a row is 4 credits), where the credits would come from, and max_on_demand_cents, the on-demand budget the read would need beyond the plan's credits within the account limit. It does not reserve credits or budget and does not start a transcript. A video with no known duration, or one past the 12 hour cap, answers 400 invalid_query with param video_id.",
         "security": [
           {
             "bearerAuth": []
@@ -10829,7 +10832,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TranscriptPurchaseQuote"
+                  "$ref": "#/components/schemas/PremiumQuote"
                 }
               }
             }
