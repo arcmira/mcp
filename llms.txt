@@ -5,7 +5,7 @@ Arcmira is an SF-based AI company and the search engine for the spoken web.
 - MCP endpoint (Streamable HTTP): https://mcp.arcmira.com/mcp
 - Auth: sign in through the host (OAuth, no key), or Authorization: Bearer <arc_sk_ account key>
 - Tools: arcmira_describe returns the reference for a typed JavaScript client (resolve, search, mentions, momentum, sponsors, recommendations, episodes, transcript, occurrences, quote, status, monitors); arcmira_execute_read runs a program against it in a sandbox that reaches only api.arcmira.com, Premium transcripts included (a Premium read uses credits from the account's plan, then its on-demand budget); arcmira_execute_write adds monitor changes (create, update, add entities or exact names; nothing is deleted); arcmira_feedback reports what was wrong, slow or missing. Filters take ids; resolve a name first.
-- Plugin for Claude Code, Codex, Cursor and Gemini with one skill: https://github.com/arcmira/mcp/tree/master/plugins/arcmira
+- Plugin for Claude Code, Codex, Cursor and Gemini with six skills: https://github.com/arcmira/mcp/tree/master/plugins/arcmira
 - Sign up with an email address and no browser: POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"}, then POST https://api.arcmira.com/v1/signups/verify with the code from that inbox
 - HTTP API the tools front: https://api.arcmira.com/v1 (OpenAPI at /v1/openapi.json)
 - Install guide: https://arcmira.com/docs/mcp-server

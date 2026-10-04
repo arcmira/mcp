@@ -254,6 +254,6 @@ pnpm sandbox:check  # src/sandbox/client-source.ts matches src/sandbox/client.js
 ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/smoke.ts http://localhost:8790/mcp
 ```
 
-`src/reference.ts` is the steering surface: the `arcmira_describe` text, the server instructions and the plugin skill all come from it.
+`src/reference.ts` is the steering surface: the `arcmira_describe` text, the server instructions and the `arcmira` skill all come from it.
 
 Copyright Arcmira. All rights reserved for the server (see `LICENSE`); `plugins/arcmira` is Apache-2.0.
