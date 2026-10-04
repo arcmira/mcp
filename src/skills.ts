@@ -142,7 +142,7 @@ return {
       'Never assume a monitor exists ("Competitors" may not). Read `arcmira.monitors.list()` and the trackers of each candidate before suggesting one, and never add an entity a monitor already follows.',
     ],
     steps: [
-      'What was said lately: run the first program and answer. Then offer to keep following the entity with a monitor. Each alert uses 25 credits from your plan; creating a monitor is free. On a yes, go on.',
+      'What was said lately: run the first program and answer. Then offer to keep following the entity with a monitor. Each alert uses 25 credits from your plan, then your on-demand budget; creating a monitor is free. On a yes, go on.',
       'Find what to follow and the monitors that could hold it: the second program, in `arcmira_execute_read`. Reuse ids the research already found instead of resolving again.',
       'A monitor fits when its name or its trackers match the subject. Suggest it by name ("Add Linear to your Dev tools monitor?") and wait for a yes.',
       'None fits: ask how the user wants updates, one question at a time, each with a default they can accept with "yes". First where: email to the account address (default) or Slack. Then when: as it happens, an hourly digest, or a daily digest (default daily). Then the name (default: the subject, like "Data center discourse").',
