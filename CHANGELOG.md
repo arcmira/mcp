@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.4
+
+`arcmira_execute_read` is no longer marked destructive. A Premium read can start a transcription that uses credits, so the tool is still not read-only, but it only adds. `arcmira_execute_write` stays destructive, since it changes monitors you already have.
+
 ## 0.10.3
 
 The reference prices a Premium transcript at 300 credits per 15-minute quarter, and alerts use credits from your plan, then your on-demand budget.

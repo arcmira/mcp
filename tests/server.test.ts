@@ -107,7 +107,7 @@ describe('the four tools through the handler', () => {
       Object.fromEntries(tools.map((t) => [t.name, [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.idempotentHint, t.annotations.openWorldHint]])),
       {
         arcmira_describe: [true, false, true, false],
-        arcmira_execute_read: [false, true, false, true],
+        arcmira_execute_read: [false, false, false, true],
         arcmira_execute_write: [false, true, false, true],
         arcmira_feedback: [false, false, false, false],
       },

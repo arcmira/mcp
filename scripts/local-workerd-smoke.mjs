@@ -19,7 +19,7 @@ try {
  const discoveryEvent=discoveryText.split('\n').find(line=>line.startsWith('data: '));
  const listed=JSON.parse(discoveryEvent?discoveryEvent.slice(6):discoveryText).result.tools;
  assert.deepEqual(listed.map(tool=>tool.name).sort(),['arcmira_describe','arcmira_execute_read','arcmira_execute_write','arcmira_feedback']);
- for(const tool of listed){const referenceOnly=tool.name==='arcmira_describe';const executesProgram=tool.name==='arcmira_execute_read'||tool.name==='arcmira_execute_write';assert.equal(tool.annotations.readOnlyHint,referenceOnly);assert.equal(tool.annotations.destructiveHint,executesProgram);assert.equal(tool.annotations.idempotentHint,referenceOnly);assert.equal(tool.annotations.openWorldHint,executesProgram);}
+ for(const tool of listed){const referenceOnly=tool.name==='arcmira_describe';const executesProgram=tool.name==='arcmira_execute_read'||tool.name==='arcmira_execute_write';assert.equal(tool.annotations.readOnlyHint,referenceOnly);assert.equal(tool.annotations.destructiveHint,tool.name==='arcmira_execute_write');assert.equal(tool.annotations.idempotentHint,referenceOnly);assert.equal(tool.annotations.openWorldHint,executesProgram);}
  console.log('four-tool discovery and annotations passed');
  let result=await run('return await arcmira.status({});');assert.equal(result.calls,1);assert.equal(result.ok,true);
  result=await run('for(let i=0;i<40;i++) await fetch("http://127.0.0.1:18791/v1/me"); return "forty";');assert.equal(result.calls,40);assert.equal(result.ok,true);

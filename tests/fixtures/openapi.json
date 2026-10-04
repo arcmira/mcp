@@ -983,7 +983,7 @@
           },
           "rows": {
             "type": "integer",
-            "description": "Rows the whole video uses, 75 rows per 15-minute block. A row is 4 credits, so Premium uses 300 credits per block."
+            "description": "Credits the whole video uses, in rows: 300 credits per 15-minute block (75 rows; a row is 4 credits)."
           }
         },
         "required": [
@@ -1263,11 +1263,8 @@
             "description": "The account email with the local part masked after its first character, e.g. z***@example.com. Null when the account has none."
           },
           "period_resets_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "ISO 8601 time the plan credits reset: 00:00 UTC on the first of next month. Null on the free plan, whose 1,000 credits a month reset on usage.credits.plan.resets_at."
+            "type": "string",
+            "description": "ISO 8601 time the plan credits reset: 00:00 UTC on the first of next month, on every plan."
           },
           "tier": {
             "type": "string",
@@ -1293,15 +1290,15 @@
             "properties": {
               "rows_used": {
                 "type": "integer",
-                "description": "Plan credits used this month, in rows: usage.credits.plan.used divided by 4, rounded up. A row is 4 credits."
+                "description": "Plan credits used this month, in rows (a row is 4 credits): usage.credits.plan.used divided by 4, rounded up."
               },
               "rows_remaining": {
                 "type": "integer",
-                "description": "Credits left from the plan, grants and top-ups, on-demand excluded, in rows: divided by 4, rounded up. A row is 4 credits."
+                "description": "Credits left from the plan, grants and top-ups, on-demand excluded, in rows (a row is 4 credits): divided by 4, rounded up."
               },
               "monthly_rows": {
                 "type": "integer",
-                "description": "The plan credits a month, in rows: usage.credits.plan.credits divided by 4 when the plan has a limit. A row is 4 credits."
+                "description": "Plan credits a month, in rows (a row is 4 credits): usage.credits.plan.credits divided by 4 when the plan has a limit."
               },
               "current_spend_cents": {
                 "type": "integer",
@@ -1524,7 +1521,7 @@
           },
           "rows_allotted": {
             "type": "integer",
-            "description": "On a paid plan, its monthly allowance in rows; a row is 4 credits. On the free plan, the account's row allotment from before credits (1,000 for a new account). The free plan uses 1,000 credits a month, read from usage.credits on GET /v1/me."
+            "description": "Plan credits a month, in rows (a row is 4 credits), on a paid plan. On the free plan, the account's allotment from before credits (1,000 for a new account). The free plan has 1,000 credits a month; read the balance from usage.credits on GET /v1/me."
           },
           "next": {
             "type": "string",
@@ -3762,7 +3759,7 @@
           },
           "watch_url": {
             "type": "string",
-            "description": "Site-relative watch URL with the timestamp, e.g. /watch?v=...&t=4787."
+            "description": "Absolute watch URL on arcmira.com with the timestamp, e.g. https://arcmira.com/watch?v=...&t=4787."
           },
           "cite_line": {
             "type": [
@@ -5907,7 +5904,7 @@
           },
           "rows_billed": {
             "type": "integer",
-            "description": "Rows this captions read used: 1 row per started 15 minutes, and a row is 4 credits. 0 on a repeat of the same video, quality, language, and range inside the 7 day dedupe window. Premium reads report 0, because the Premium transcript job carries their charge."
+            "description": "Credits this captions read used, in rows (a row is 4 credits): 4 credits per started 15 minutes. 0 on a repeat of the same video, quality, language, and range inside the 7 day dedupe window. Premium reads report 0, because the Premium transcript job carries their charge."
           },
           "as_of": {
             "type": [
@@ -10791,7 +10788,7 @@
         ],
         "operationId": "quote_transcription",
         "summary": "Quote a whole-video Premium transcript",
-        "description": "Optional free quote: what a Premium read of this video would use right now, as rows and credits (a row is 4 credits), where the credits would come from, and max_on_demand_cents, the on-demand budget the read would need beyond the plan's credits within the account limit. It does not reserve credits or budget and does not start a transcript. A video with no known duration, or one past the 12 hour cap, answers 400 invalid_query with param video_id.",
+        "description": "Optional free quote: what a Premium read of this video would use right now, as credits (charge; quote.rows restates it in rows, and a row is 4 credits), where the credits would come from, and max_on_demand_cents, the on-demand budget the read would need beyond the plan's credits within the account limit. It does not reserve credits or budget and does not start a transcript. A video with no known duration, or one past the 12 hour cap, answers 400 invalid_query with param video_id.",
         "security": [
           {
             "bearerAuth": []
