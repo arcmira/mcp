@@ -91,7 +91,7 @@ for (const tool of tools.tools) {
   const hints = tool.annotations ?? {};
   const referenceOnly = tool.name === 'arcmira_describe';
   const executesProgram = tool.name === 'arcmira_execute_read' || tool.name === 'arcmira_execute_write';
-  if (!(hints.readOnlyHint === referenceOnly && hints.destructiveHint === executesProgram && hints.idempotentHint === referenceOnly && hints.openWorldHint === executesProgram)) {
+  if (!(hints.readOnlyHint === referenceOnly && hints.destructiveHint === (tool.name === 'arcmira_execute_write') && hints.idempotentHint === referenceOnly && hints.openWorldHint === executesProgram)) {
     failed = true;
     console.log(`  ${tool.name}: hints wrong ${JSON.stringify(hints)}`);
   }
