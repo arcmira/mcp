@@ -1,0 +1,87 @@
+name: Publish released skills to Tessl
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published MCP release tag to distribute
+        required: true
+        default: v0.10.4
+        type: string
+
+concurrency:
+  group: tessl-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a published stable release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,isDraft,isPrerelease > "$RUNNER_TEMP/release.json"
+          jq -e --arg tag "$RELEASE_TAG" \
+            '.tagName == $tag and .isDraft == false and .isPrerelease == false' \
+            "$RUNNER_TEMP/release.json"
+          object=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object')
+          for _ in {1..8}; do
+            type=$(jq -r '.type' <<< "$object")
+            sha=$(jq -r '.sha' <<< "$object")
+            [[ "$type" == commit ]] && break
+            [[ "$type" == tag ]]
+            object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$sha" --jq '.object')
+          done
+          [[ "$type" == commit && "$sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Publishing $RELEASE_TAG from commit $sha"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          persist-credentials: false
+      - name: Add Tessl metadata to the released plugin
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path("plugins/arcmira")
+          source = json.loads((root / ".claude-plugin/plugin.json").read_text())
+          if source["version"] != os.environ["RELEASE_TAG"].removeprefix("v"):
+              raise SystemExit("Plugin version does not match the published release")
+          metadata = {
+              "name": "arcmira/arcmira",
+              "version": source["version"],
+              "description": source["description"],
+              "private": False,
+              "skills": "skills",
+              "mcpServers": ".mcp.json",
+          }
+          target = root / ".tessl-plugin"
+          target.mkdir(exist_ok=True)
+          (target / "plugin.json").write_text(json.dumps(metadata, indent=2) + "\n")
+          PY
+      - uses: tesslio/setup-tessl@25ec223fc0da33b41b8044ff5ab2b85235f4f91e # v2
+        with:
+          version: 0.93.0
+      - name: Publish the released plugin and claim its indexed skills
+        working-directory: plugins/arcmira
+        env:
+          TESSL_TOKEN: ${{ secrets.TESSL_TOKEN }}
+          TESSL_AUTO_UPDATE_INTERVAL_MINUTES: 0
+        run: |
+          test -n "$TESSL_TOKEN" || { echo "TESSL_TOKEN is not configured" >&2; exit 1; }
+          tessl plugin publish --skip-evals
