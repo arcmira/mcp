@@ -8,7 +8,7 @@
     "source": "github"
   },
   "version": "0.10.4",
-  "websiteUrl": "https://arcmira.com/docs",
+  "websiteUrl": "https://arcmira.com",
   "remotes": [
     {
       "type": "streamable-http",

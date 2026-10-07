@@ -20,7 +20,7 @@
   "mcpName": "io.github.arcmira/arcmira",
   "license": "UNLICENSED",
   "author": "Arcmira",
-  "homepage": "https://arcmira.com/docs",
+  "homepage": "https://arcmira.com",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/arcmira/mcp.git"
