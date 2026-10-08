@@ -71,7 +71,7 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 
 | Tool | Input | Returns |
 |---|---|---|
-| `arcmira_describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, every method with arguments and return fields, nine worked example programs, the quirks that cost answers, the budget and monitor rules, error codes, and doc links. About 24,000 characters; `topic` narrows it to one method and its examples. Never bills. |
+| `arcmira_describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, every method with arguments and return fields, nine worked example programs, the quirks that cost answers, the budget and monitor rules, error codes, and doc links. About 25,000 characters; `topic` narrows it to one method and its examples. Never bills. |
 | `arcmira_execute_read` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Reads, Premium transcripts included, and the user's monitors. Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
 | `arcmira_execute_write` | `code` | The same as `arcmira_execute_read`, with the account writes added: `arcmira.monitors.create`, `arcmira.monitors.update` (including `paused`), `arcmira.monitors.addEntities`, `arcmira.monitors.addName` and `arcmira.monitors.attachTrackers`. Nothing is deleted. |
 | `arcmira_feedback` | `category`, `note`, `request_id?`, `call_id?` | One `POST /v1/feedback` of type `experience`. `category` is `wrong_entity`, `bad_data`, `missing`, `slow`, `confusing` or `other`; `note` says what happened. Returns the feedback id. |
@@ -80,7 +80,7 @@ Every tool also takes an optional `intent`, at most 300 characters: the user's r
 
 Only `arcmira_describe` is annotated read-only. Both program tools can start Premium transcription, which uses credits from the plan and then the on-demand budget, so neither is read-only. Only `arcmira_execute_write` is destructive, because it can overwrite monitor settings and pause monitors; a Premium read only adds. Both can request arbitrary public videos and carry open-world annotations. Feedback adds a stored record and is an additive write. These labels describe possible effects; the `execute_read` name identifies the client access level, not a guarantee of no side effects.
 
-Paid reads use credits from your plan, then the on-demand budget you set in the dashboard. That budget is the approval, so an agent never asks you for a cents amount. When the budget or plan blocks a read (`spend_limit_exceeded`, `quota_exceeded`, a plan gate), the agent tells the user to raise the on-demand budget at https://arcmira.com/dashboard/spending or upgrade the plan at https://arcmira.com/pricing, and links the refusal's `unlock.url`.
+Paid reads use credits from your plan, then the on-demand budget you set in the dashboard. That budget is the approval, so an agent never asks you for a cents amount. When the budget or plan blocks a read (`spend_limit_exceeded`, `quota_exceeded`, a plan gate), the agent tells the user to raise the on-demand budget at https://arcmira.com/dashboard/spending or upgrade the plan at https://arcmira.com/pricing, and links the refusal's `unlock.url`. `member_limit` (your monthly on-demand limit in a team account) and `fair_use_cap` (Ultra's Premium transcript hours) carry no unlock: the agent tells you to ask a team admin, who raises the limit or turns on on-demand usage, or to wait for the month to reset.
 
 A Premium transcript is one read in `arcmira_execute_read`:
 
@@ -107,7 +107,7 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 | `arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })` | `GET /v1/transcripts/{video_id}`, read again at `Retry-After` while a Premium transcription is pending | The transcript of one video, captions or Premium, whole or a window |
 | `arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })` | `GET /v1/mentions/counts` | What shows talk about, what they share, what one episode mentions |
 | `arcmira.quote(videoIdOrUrl)` | `GET /v1/transcripts/{video_id}/quote` | The free whole-video Premium quote: rows, credits, and any on-demand cents |
-| `arcmira.status({ channelId? })` | `GET /v1/channels/{id}/coverage`, `GET /v1/me` | Coverage and the index date, or the key, plan, credits and on-demand budget |
+| `arcmira.status({ channelId? })` | `GET /v1/channels/{id}/coverage`, `GET /v1/me` | Coverage and the index date, or the account the key spends (`account`, `role`), plan, credits and on-demand budget |
 | `arcmira.monitors.list()` | `GET /v1/monitors` | The user's monitors, with delivery settings and tracker counts |
 | `arcmira.monitors.trackers(monitorId)` | `GET /v1/monitors/{id}/trackers` | What one monitor already follows |
 | `arcmira.monitors.create({ name, notify_frequency, notify_emails?, notify_slack?, ... })` | `POST /v1/monitors` | A new monitor. Write tool only |
@@ -144,7 +144,7 @@ Good first ids: TBPN is channel `UC-DRzaGnL_vtBUpCFH5M0tg`, All-In Podcast is `U
 `arcmira_execute_read` and `arcmira_execute_write` run the program in a fresh [Dynamic Worker](https://developers.cloudflare.com/dynamic-workers/) isolate. The isolate's only network is the parent's outbound proxy, which adds the caller's credential to what it forwards, so the program never holds the key, and refuses anything outside the tool's allowlist with `outbound_refused`:
 
 - `arcmira_execute_read`: `GET https://api.arcmira.com/v1/*`. A Premium transcription starts inside the transcript `GET`.
-- `arcmira_execute_write`: the read set, plus `POST` and `PATCH` under `/v1/monitors` and `/v1/trackers`. Never `DELETE`, and never the webhook secret rotation.
+- `arcmira_execute_write`: the read set, plus `POST` and `PATCH` under `/v1/monitors` and `PATCH` under `/v1/trackers`. Never `DELETE`, and never the webhook secret rotation. A tracker is created inside a monitor, so nothing posts to `/v1/trackers`.
 
 The proxy enforces this in the Worker, so a raw `fetch()` gets the same answer as a client method. A write method called from `arcmira_execute_read` throws `write_tool_required` before any request. The isolate gets 5 seconds of CPU, the tool waits 30 seconds of wall time, the client stops at 40 API calls with `call_budget`, and the rendered output is cut at 12,000 characters in total, 3,000 per string and 100 items per array, with `truncated_arrays` naming each cut array and a `recovery` line that says how to get every row. A syntax error comes back as `syntax_error` with the function-body rule; a thrown error as `program_error` with its message.
 

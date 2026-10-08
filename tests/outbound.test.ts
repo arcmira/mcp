@@ -49,7 +49,7 @@ describe("the sandbox outbound allowlists", () => {
       assert.equal(outboundAllowed("read", method, path), allowed, `read ${method} ${path}`);
   });
 
-  it("write adds POST and PATCH under /v1/monitors and /v1/trackers, never DELETE or the webhook secret", () => {
+  it("write adds POST and PATCH under /v1/monitors and PATCH under /v1/trackers, never DELETE or the webhook secret", () => {
     for (const [method, path, allowed] of [
       ["GET", "/v1/me", true],
       ["POST", "/v1/transcriptions", false],
@@ -57,7 +57,7 @@ describe("the sandbox outbound allowlists", () => {
       ["PATCH", "/v1/monitors/mon_1", true],
       ["POST", "/v1/monitors/mon_1/entities", true],
       ["POST", "/v1/monitors/mon_1/trackers", true],
-      ["POST", "/v1/trackers", true],
+      ["POST", "/v1/trackers", false],
       ["PATCH", "/v1/trackers/trk_1", true],
       ["DELETE", "/v1/monitors/mon_1", false],
       ["DELETE", "/v1/trackers/trk_1", false],
