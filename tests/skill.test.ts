@@ -79,6 +79,7 @@ test('one budget rule: describe, the instructions and the core skill state it, a
   assert.match(BUDGET_RULE, /never ask the user for a cents amount/);
   assert.match(BUDGET_RULE, /dashboard\/spending/);
   assert.match(BUDGET_RULE, /pricing/);
+  assert.match(BUDGET_RULE, /on_demand_paused.*dashboard\/billing/);
   const schemaText = (tool: (typeof TOOLS)[number]) => JSON.stringify(z.toJSONSchema(tool.inputSchema));
   const skills = spawnSync('ls', [join(ROOT, 'plugins/arcmira/skills')], { encoding: 'utf8' }).stdout.trim().split('\n');
   const surfaces: Array<[string, string]> = [
