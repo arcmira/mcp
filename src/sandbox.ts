@@ -136,15 +136,16 @@ const under = (path: string, root: string): boolean => path === root || path.sta
 
 /**
  * The routes a sandbox program may call, by tool. Read: any GET under /v1 (a Premium read buys inside
- * GET /v1/transcripts/{video_id}). Write adds POST and PATCH under /v1/monitors and /v1/trackers, never
- * DELETE, and never the webhook secret rotation, which breaks the user's existing webhook verification.
+ * GET /v1/transcripts/{video_id}). Write adds POST and PATCH under /v1/monitors and PATCH under
+ * /v1/trackers, never DELETE, and never the webhook secret rotation, which breaks the user's existing
+ * webhook verification. A tracker is created inside a monitor, so nothing POSTs under /v1/trackers.
  */
 export function outboundAllowed(access: Access, method: string, path: string): boolean {
   if (/%2f|%5c/i.test(path) || !under(path, '/v1')) return false;
   if (method === 'GET') return true;
   if (access !== 'write' || (method !== 'POST' && method !== 'PATCH')) return false;
   if (path.includes('/webhook-secret')) return false;
-  return under(path, '/v1/monitors') || under(path, '/v1/trackers');
+  return under(path, '/v1/monitors') || (method === 'PATCH' && under(path, '/v1/trackers'));
 }
 
 export interface SandboxHost {

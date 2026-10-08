@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.5
+
+Follows the team account changes to `/v1` (2026-10-08).
+
+- `arcmira.status()` documents `account` (`id`, `name`, `kind` `personal` or `team`, `plan`) and `role` (`owner`, `admin` or `member`): whose plan and credits the key spends, and the user's role there. `email_masked` is the user, not the account.
+- The reference names `member_limit` and `fair_use_cap`, two 402 refusals with no unlock. For `member_limit` an agent tells the user to ask a team admin, and offers no upgrade. For `fair_use_cap` an admin turns on or raises on-demand usage, or the hours reset with the month.
+- `tracker_create_retired`: `POST /v1/trackers` is gone. `arcmira.monitors.addName` already follows a name inside a monitor.
+- `arcmira_execute_write` no longer reaches `POST` under `/v1/trackers`. `PATCH /v1/trackers/{id}` stays.
+- OpenAPI fixture refreshed.
+
 ## 0.10.4
 
 `arcmira_execute_read` is no longer marked destructive. A Premium read can start a transcription that uses credits, so the tool is still not read-only, but it only adds. `arcmira_execute_write` stays destructive, since it changes monitors you already have.

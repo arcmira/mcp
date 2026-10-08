@@ -329,18 +329,6 @@
                 "properties": {
                   "quote": {
                     "$ref": "#/components/schemas/RefusedQuote"
-                  },
-                  "existing_id": {
-                    "type": "string",
-                    "description": "On tracker_already_exists, the existing tracker id. Reuse it instead of creating another tracker."
-                  },
-                  "limit": {
-                    "type": "integer",
-                    "description": "On tracker_limit, the trackers the plan holds."
-                  },
-                  "count": {
-                    "type": "integer",
-                    "description": "On tracker_limit, the trackers the account holds now."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -395,6 +383,11 @@
             "code": "entity_not_found",
             "type": "not_found",
             "description": "No entity matches the id, slug, or name."
+          },
+          {
+            "code": "fair_use_cap",
+            "type": "quota_exceeded",
+            "description": "Ultra plan credits cover 80 Premium transcript hours a month, and this month's are used. Past them a Premium transcript uses granted or on-demand credits, and the account has none. Nothing was charged. An admin turns on on-demand usage or raises its limit, or the hours reset with the month."
           },
           {
             "code": "feature_not_available",
@@ -498,6 +491,12 @@
             "description": "Transcription jobs belong to an account; sign up for a key."
           },
           {
+            "code": "member_limit",
+            "type": "quota_exceeded",
+            "gate": "rows",
+            "description": "The account's included credits are used up and the person the key or token acts for has reached their monthly on-demand limit in it. Nothing was charged, and there is no unlock. An admin raises the limit in Settings / Team, or it resets with the month."
+          },
+          {
             "code": "monitor_creation_unavailable",
             "type": "server_error",
             "description": "Monitor creation is temporarily unavailable. Retry the same request with the same key."
@@ -520,12 +519,12 @@
           {
             "code": "owner_only",
             "type": "permission_error",
-            "description": "Only the team owner may change or test a team monitor's webhook, rotate its secret, or delete it."
+            "description": "Only an admin of the account may do this. Everyone in a team can create, edit, pause, delete and restore monitors."
           },
           {
             "code": "owner_plan_required",
             "type": "permission_error",
-            "description": "A team monitor follows the team owner's plan, which does not include this. The owner can upgrade; a member's own plan does not apply."
+            "description": "A team account follows its owner's plan, which does not include this. An admin can upgrade; a member's own plan does not apply."
           },
           {
             "code": "pagination_gated",
@@ -600,22 +599,22 @@
           {
             "code": "spend_limit_exceeded",
             "type": "quota_exceeded",
-            "description": "The request would take on-demand usage past the account or seat spend limit this period. Nothing was charged. Raise the limit or wait for the next period, then read again or send a new intent."
+            "description": "The request would take on-demand usage past the account's on-demand limit this period. Nothing was charged. Raise the limit or wait for the next period, then read again or send a new intent."
           },
           {
-            "code": "team_not_found",
-            "type": "not_found",
-            "description": "No team with this id that the caller belongs to."
+            "code": "team_id_retired",
+            "type": "invalid_request_error",
+            "description": "team_id is retired: a monitor belongs to the account the key acts in. Omit team_id or send null."
           },
           {
-            "code": "tracker_already_exists",
-            "type": "conflict_error",
-            "description": "The account already tracks this entity. error.details.existing_id identifies the existing tracker."
+            "code": "tracker_create_retired",
+            "type": "invalid_request_error",
+            "description": "POST /v1/trackers is retired (HTTP 410): a tracker lives inside a monitor. Follow an entity id or an exact name with POST /v1/monitors/{id}/entities, which creates the tracker in that monitor."
           },
           {
-            "code": "tracker_limit",
-            "type": "permission_error",
-            "description": "The plan's tracker limit is reached. error.details carries limit and count."
+            "code": "tracker_delivery_retired",
+            "type": "invalid_request_error",
+            "description": "Trackers have no delivery of their own: a tracker alerts through its monitor. Omit notify_email, notify_webhook, notify_slack, webhook_url, slack_channel_id and slack_integration_id, or send the value that means the monitor's delivery (true for notify_email, false or null for the rest), and set delivery with PATCH /v1/monitors/{id}. param names the field."
           },
           {
             "code": "tracker_not_found",
@@ -1260,11 +1259,55 @@
               "string",
               "null"
             ],
-            "description": "The account email with the local part masked after its first character, e.g. z***@example.com. Null when the account has none."
+            "description": "The email of the person calling (user_id), with the local part masked after its first character, e.g. z***@example.com. Null when the person has none."
           },
           "period_resets_at": {
             "type": "string",
             "description": "ISO 8601 time the plan credits reset: 00:00 UTC on the first of next month, on every plan."
+          },
+          "account": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Id of the account this request spends: the person's own account, or the team account a key or OAuth token was made in."
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The team name when the account is a team, else the account holder's name. Null when the account has no name."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "personal",
+                  "team"
+                ],
+                "description": "team when the account is a team, personal otherwise."
+              },
+              "plan": {
+                "type": "string",
+                "description": "The account's plan tier, the same value as tier."
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "kind",
+              "plan"
+            ],
+            "description": "The account whose credits and plan this request uses. user_id is the person; this is who pays."
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "description": "The person's role on the account: owner of their own account, or admin or member of a team."
           },
           "tier": {
             "type": "string",
@@ -1294,7 +1337,7 @@
               },
               "rows_remaining": {
                 "type": "integer",
-                "description": "Credits left from the plan, grants and top-ups, on-demand excluded, in rows (a row is 4 credits): divided by 4, rounded up."
+                "description": "Credits left from the plan and grants, on-demand excluded, in rows (a row is 4 credits): divided by 4, rounded up."
               },
               "monthly_rows": {
                 "type": "integer",
@@ -1312,7 +1355,7 @@
                       "integer",
                       "null"
                     ],
-                    "description": "Credits spendable now: plan, granted, purchased, and on-demand up to its cap. Null when nothing limits it."
+                    "description": "Credits spendable now: plan, granted, and on-demand up to its cap. Null when nothing limits it."
                   },
                   "plan": {
                     "type": "object",
@@ -1342,10 +1385,6 @@
                   "granted": {
                     "type": "integer",
                     "description": "Credits left in granted lots that have not expired."
-                  },
-                  "purchased": {
-                    "type": "integer",
-                    "description": "Credits left in purchased top-ups."
                   },
                   "on_demand": {
                     "type": "object",
@@ -1377,7 +1416,6 @@
                   "available",
                   "plan",
                   "granted",
-                  "purchased",
                   "on_demand"
                 ],
                 "description": "The month in credits, the primary measure of usage. Every read uses credits from the plan, then the on-demand budget. An included plan credit is valued at $0.001; on-demand usage costs $0.002 a credit. A row is 4 credits. Present only when the credits ledger decides access."
@@ -1401,6 +1439,8 @@
           "credential_kind",
           "email_masked",
           "period_resets_at",
+          "account",
+          "role",
           "tier",
           "scopes",
           "rate_limit",
@@ -3167,18 +3207,6 @@
                 "properties": {
                   "quote": {
                     "$ref": "#/components/schemas/RefusedQuote"
-                  },
-                  "existing_id": {
-                    "type": "string",
-                    "description": "On tracker_already_exists, the existing tracker id. Reuse it instead of creating another tracker."
-                  },
-                  "limit": {
-                    "type": "integer",
-                    "description": "On tracker_limit, the trackers the plan holds."
-                  },
-                  "count": {
-                    "type": "integer",
-                    "description": "On tracker_limit, the trackers the account holds now."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -3518,18 +3546,6 @@
                 "properties": {
                   "quote": {
                     "$ref": "#/components/schemas/RefusedQuote"
-                  },
-                  "existing_id": {
-                    "type": "string",
-                    "description": "On tracker_already_exists, the existing tracker id. Reuse it instead of creating another tracker."
-                  },
-                  "limit": {
-                    "type": "integer",
-                    "description": "On tracker_limit, the trackers the plan holds."
-                  },
-                  "count": {
-                    "type": "integer",
-                    "description": "On tracker_limit, the trackers the account holds now."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -4032,18 +4048,6 @@
                 "properties": {
                   "quote": {
                     "$ref": "#/components/schemas/RefusedQuote"
-                  },
-                  "existing_id": {
-                    "type": "string",
-                    "description": "On tracker_already_exists, the existing tracker id. Reuse it instead of creating another tracker."
-                  },
-                  "limit": {
-                    "type": "integer",
-                    "description": "On tracker_limit, the trackers the plan holds."
-                  },
-                  "count": {
-                    "type": "integer",
-                    "description": "On tracker_limit, the trackers the account holds now."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -4815,7 +4819,7 @@
                 }
               ]
             },
-            "description": "The account's personal monitors and the monitors of every team it belongs to, ordered by dashboard sort position, then name."
+            "description": "The monitors of the account the caller acts in, ordered by dashboard sort position, then name."
           }
         },
         "required": [
@@ -4859,7 +4863,7 @@
                     "member",
                     "external"
                   ],
-                  "description": "owner: the paying account. member: a member of the monitor's team, who receives its alerts without an invitation and does not count toward the recipient limits. external: anyone else, who must confirm first."
+                  "description": "owner: the address of the account the monitor belongs to. member: a teammate in that account. external: anyone else, who must confirm first."
                 },
                 "user_id": {
                   "type": [
@@ -4877,10 +4881,8 @@
                     "suppressed",
                     "removed",
                     "owner_unverified",
-                    "plan_limited",
-                    "muted"
-                  ],
-                  "description": "muted: a team member muted this monitor for themselves."
+                    "plan_limited"
+                  ]
                 },
                 "invitation_status": {
                   "type": "string",
@@ -4925,23 +4927,23 @@
               "string",
               "null"
             ],
-            "description": "Webhook destination URL. Null when no webhook is configured. Absent when access is member: only the team owner sees the webhook."
+            "description": "Webhook destination URL. Null when no webhook is configured."
           },
           "webhook_secret_set": {
             "type": "boolean",
-            "description": "True when a webhook signing secret exists for this monitor. The secret itself is never returned on reads; enablement and rotation responses support recovery with the original Idempotency-Key during the valid recovery window. Absent when access is member."
+            "description": "True when a webhook signing secret exists for this monitor. The secret itself is never returned on reads; enablement and rotation responses support recovery with the original Idempotency-Key during the valid recovery window."
           },
           "webhook_secret_hint": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Last 4 characters of the current signing secret, for identifying which secret you hold. Null until a secret exists. Absent when access is member."
+            "description": "Last 4 characters of the current signing secret, for identifying which secret you hold. Null until a secret exists."
           },
           "webhook_failures": {
             "type": "integer",
             "default": 0,
-            "description": "Consecutive webhook delivery failures recorded for this monitor. Reset by a secret rotation or PATCHing notify_webhook: true; 10 consecutive failures auto-disable a webhook. Note: the delivery pipeline currently accrues failures on the tracker that fired, so this monitor-level counter can lag."
+            "description": "Consecutive webhook delivery failures recorded for this monitor. Reset by a secret rotation or PATCHing notify_webhook: true; 10 consecutive failures auto-disable a webhook."
           },
           "webhook_disabled_at": {
             "type": [
@@ -4983,38 +4985,13 @@
             "type": "string",
             "description": "When the monitor was last updated."
           },
-          "team": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "properties": {
-              "id": {
-                "type": "string",
-                "description": "Team id."
-              },
-              "name": {
-                "type": "string",
-                "description": "Team name."
-              }
-            },
-            "required": [
-              "id",
-              "name"
-            ],
-            "description": "The team the monitor is shared with. Null for a personal monitor."
-          },
           "access": {
             "type": "string",
             "enum": [
               "account",
               "member"
             ],
-            "description": "account: the caller pays for the monitor, as its personal owner or the team owner. member: the caller is another member of its team, who may edit it but not its webhook, and may not delete it."
-          },
-          "muted": {
-            "type": "boolean",
-            "description": "True when the caller muted this team monitor for themselves. Always false on a personal monitor."
+            "description": "account: the caller owns the account the monitor belongs to, or is an admin in it. member: the caller is a member of that team account, who may edit the monitor and its webhook but may not delete it."
           }
         },
         "required": [
@@ -5030,9 +5007,7 @@
           "slack_channel_id",
           "created_at",
           "updated_at",
-          "team",
-          "access",
-          "muted"
+          "access"
         ]
       },
       "MonitorMutationResponse": {
@@ -5236,11 +5211,8 @@
             "description": "Id of the tracker (tracked entity) that produced the alert."
           },
           "monitor_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Id of the monitor the tracker belongs to. Null for trackers outside a monitor."
+            "type": "string",
+            "description": "Id of the monitor whose delivery sent the alert."
           },
           "entity_id": {
             "type": [
@@ -5383,7 +5355,7 @@
               "id",
               "name"
             ],
-            "description": "The monitor the tracker belongs to. Null for trackers outside a monitor."
+            "description": "The monitor the tracker belongs to. Null when that monitor was deleted."
           }
         },
         "required": [
@@ -5612,39 +5584,6 @@
             "type": "string",
             "description": "User-facing display name. Falls back to entity_name when not customized."
           },
-          "notify_email": {
-            "type": "boolean",
-            "description": "True when this tracker delivers by email (default true at creation)."
-          },
-          "notify_webhook": {
-            "type": "boolean",
-            "description": "True when this tracker has a per-tracker webhook override enabled."
-          },
-          "notify_slack": {
-            "type": "boolean",
-            "description": "True when this tracker has a per-tracker Slack override enabled."
-          },
-          "webhook_url": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Per-tracker webhook destination override. Null when the tracker uses its monitor's delivery settings. Absent when the tracker is in a team monitor the caller does not own."
-          },
-          "slack_channel_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Per-tracker Slack channel override. Null when not set."
-          },
-          "slack_integration_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Per-tracker Slack integration override. Null when not set."
-          },
           "filters": {
             "type": [
               "object",
@@ -5684,7 +5623,7 @@
           },
           "monitor_id": {
             "type": "string",
-            "description": "The monitor this tracker belongs to. Absent for standalone trackers."
+            "description": "The monitor this tracker wakes, whose delivery its alerts use. Every tracker is in exactly one monitor."
           },
           "email_delivery_count": {
             "type": "integer",
@@ -5704,17 +5643,13 @@
           "entity_name",
           "entity_type",
           "display_name",
-          "notify_email",
-          "notify_webhook",
-          "notify_slack",
-          "slack_channel_id",
-          "slack_integration_id",
           "filters",
           "paused",
           "paused_at",
           "last_notified_at",
           "created_at",
           "updated_at",
+          "monitor_id",
           "email_delivery_count",
           "webhook_delivery_count",
           "slack_delivery_count"
@@ -6032,18 +5967,6 @@
                 "properties": {
                   "quote": {
                     "$ref": "#/components/schemas/RefusedQuote"
-                  },
-                  "existing_id": {
-                    "type": "string",
-                    "description": "On tracker_already_exists, the existing tracker id. Reuse it instead of creating another tracker."
-                  },
-                  "limit": {
-                    "type": "integer",
-                    "description": "On tracker_limit, the trackers the plan holds."
-                  },
-                  "count": {
-                    "type": "integer",
-                    "description": "On tracker_limit, the trackers the account holds now."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -6621,7 +6544,7 @@
         ],
         "operationId": "get_me",
         "summary": "Current API key context",
-        "description": "Available even when the account has exhausted its usage allowance. Returns the credential making the request (key_id, key_label, credential_kind), the masked account email, the tier, scopes, rate limit, usage with period_resets_at, and account settings. usage.credits is the primary measure: credits from the plan, then the on-demand budget. The row fields restate it at 4 credits a row. settings.transcripts is what a transcript request that names no parameter of its own receives: every key of the account resolves against it.",
+        "description": "Available even when the account has exhausted its usage allowance. Returns the credential making the request (key_id, key_label, credential_kind), the masked email of the person, the account whose credits it spends (account: id, name, kind, plan) and the role the person holds on it, the tier, scopes, rate limit, usage with period_resets_at, and account settings. usage.credits is the primary measure: credits from the plan, then the on-demand budget. The row fields restate it at 4 credits a row. settings.transcripts is what a transcript request that names no parameter of its own receives: every key of the account resolves against it.",
         "security": [
           {
             "bearerAuth": []
@@ -8888,9 +8811,12 @@
                     "description": "Slack channel id to deliver to."
                   },
                   "team_id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "description": "Create the monitor in this team, which the caller must belong to. The team owner pays for it and its plan sets the limits. A member may not set a webhook. Create only."
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Retired. A monitor belongs to the account the key acts in. Absent or null is ignored; any other value answers 400 team_id_retired. Create only.",
+                    "deprecated": true
                   }
                 },
                 "required": [
@@ -9179,7 +9105,7 @@
         ],
         "operationId": "delete_monitor",
         "summary": "Delete monitor",
-        "description": "Deletes the monitor AND every tracker inside it (trackers_deleted reports how many). Cannot be undone. Retrying with the original Idempotency-Key returns the original deleted count without deleting again.",
+        "description": "Deletes the monitor AND every tracker inside it (trackers_deleted reports how many). Anyone in the account can restore it, with its trackers and recipients, from Recently deleted on the dashboard Monitors page for 30 days. Retrying with the original Idempotency-Key returns the original deleted count without deleting again.",
         "security": [
           {
             "bearerAuth": []
@@ -9460,7 +9386,7 @@
         ],
         "operationId": "add_monitor_trackers",
         "summary": "Add trackers to monitor",
-        "description": "Attaches EXISTING trackers to the monitor by id ({ tracker_ids: [\"trk_...\"] }). It does not create trackers: create them first via POST /v1/trackers, then attach. Attached trackers use the monitor's delivery settings. Supply 1 to 90 IDs. Duplicate IDs count once. Every ID must belong to the account; a missing or foreign ID returns tracker_not_found and none are attached. attached_count reports the unique attached count.",
+        "description": "Moves the account's trackers into this monitor by id ({ tracker_ids: [\"trk_...\"] }), out of the monitors they are in. A tracker always sits in one monitor and alerts through its delivery settings. It does not create trackers: POST /v1/monitors/{id}/entities does. Supply 1 to 90 IDs. Duplicate IDs count once. Every ID must belong to the account; a missing or foreign ID returns tracker_not_found and none move. attached_count reports the unique moved count.",
         "security": [
           {
             "bearerAuth": []
@@ -9502,7 +9428,7 @@
                     },
                     "minItems": 1,
                     "maxItems": 90,
-                    "description": "Ids of existing trackers (\"trk_...\") to attach to this monitor. Create trackers first via POST /v1/trackers. At most 90 IDs per request; duplicates count once. All IDs must belong to the account or none are attached."
+                    "description": "Ids of the account's trackers (\"trk_...\") to move into this monitor from the monitors they are in. At most 90 IDs per request; duplicates count once. All IDs must belong to the account or none move."
                   }
                 },
                 "required": [
@@ -9676,7 +9602,7 @@
         ],
         "operationId": "add_monitor_entities",
         "summary": "Follow entities in a monitor by id or exact name",
-        "description": "Follows each entity ({ entity_ids: [\"ent_...\"] }) and each exact name ({ names: [{ name, type }] }) in the monitor: the monitor account's existing tracker for the entity or name (compared case-insensitively) is reused, else a tracker is created under the monitor's account (the team owner on a team monitor) for the canonical entity (a merged id follows its redirect) or the name as given, then the trackers are attached, all in one write. Use names for something not yet indexed; a channel is named by its YouTube channel id, and a channel name answers 400 id_required. Attached trackers use the monitor's delivery settings. Supply 1 to 90 ids and names together; duplicates count once. Each gets one result, ids first then names, in request order; a names result carries name and type in place of entity_id. An id that cannot be followed comes back with attached: false and a reason (entity_not_found, entity_type_not_trackable, tracker_limit_reached, tracked_in_another_monitor) while the rest still attach; a tracker already in another monitor is left there and named in current_monitor_id. Requires the monitors:write and trackers:write scopes.",
+        "description": "Follows each entity ({ entity_ids: [\"ent_...\"] }) and each exact name ({ names: [{ name, type }] }) in the monitor: the monitor account's existing tracker for the entity or name (compared case-insensitively) is reused, else a tracker is created in the monitor's account for the canonical entity (a merged id follows its redirect) or the name as given, then the trackers are attached, all in one write. Use names for something not yet indexed; a channel is named by its YouTube channel id, and a channel name answers 400 id_required. Attached trackers use the monitor's delivery settings. Supply 1 to 90 ids and names together; duplicates count once. Each gets one result, ids first then names, in request order; a names result carries name and type in place of entity_id. An id that cannot be followed comes back with attached: false and a reason (entity_not_found, entity_type_not_trackable, tracker_limit_reached, tracked_in_another_monitor) while the rest still attach; a tracker already in another monitor is left there and named in current_monitor_id. Requires the monitors:write and trackers:write scopes.",
         "security": [
           {
             "bearerAuth": []
@@ -9756,7 +9682,7 @@
                       ],
                       "additionalProperties": false
                     },
-                    "description": "Exact names to follow in this monitor, for a name not yet indexed or one you have no id for. The tracker is created under the monitor's account (the team owner on a team monitor) and attached in the same call; the account's tracker for the same name (compared case-insensitively) and type is reused. Duplicates count once."
+                    "description": "Exact names to follow in this monitor, for a name not yet indexed or one you have no id for. The tracker is created in the monitor's account and attached in the same call; the account's tracker for the same name (compared case-insensitively) and type is reused. Duplicates count once."
                   },
                   "person_match_mode": {
                     "type": "string",
@@ -9965,204 +9891,6 @@
             "$ref": "#/components/responses/ServerError"
           }
         }
-      },
-      "post": {
-        "tags": [
-          "Trackers"
-        ],
-        "operationId": "create_tracker",
-        "summary": "Create tracker",
-        "description": "Creates a standalone tracker watching one exact name and type, matched case-insensitively against entities in newly analyzed media, so a tracker can exist before the entity is indexed. To follow an entity you already have an id for, use POST /v1/monitors/{id}/entities. A channel is followed by its YouTube channel id (UC plus 22 characters); a channel name answers 400 id_required. Attach it to a monitor afterwards via POST /v1/monitors/{id}/trackers. Creating a duplicate (same entity name + type) returns 409 tracker_already_exists with the existing tracker id in error.details.existing_id.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": false,
-            "name": "Idempotency-Key",
-            "in": "header",
-            "example": "8b2f6c3e-4d1a-4e7b-9c05-2f6a1b7d3e90",
-            "description": "One key per intent, 1 to 255 printable ASCII characters (0x21 to 0x7E); anything else is 400 invalid_idempotency_key. Keys are scoped to the account, credential and resource family. The same key and normalized method, path and body returns the committed response with Idempotency-Replayed: true. A changed intent within the same family returns 409 idempotency_conflict. Monitor and tracker families have independent namespaces. Secret recovery is limited as described by the operation."
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "entity_name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "description": "The exact name to watch, matched case-insensitively against analyzed media, so a tracker can exist before the entity is indexed. For a channel, the YouTube channel id (UC plus 22 characters), never a name: a channel name answers 400 id_required naming GET /v1/entities/resolve?q=...&type=channel and best.youtube_channel_id. Required on create. Creating a duplicate (same name, compared case-insensitively, and type) returns 409 tracker_already_exists with the existing tracker id in error.details.existing_id."
-                  },
-                  "entity_type": {
-                    "type": "string",
-                    "enum": [
-                      "person",
-                      "organization",
-                      "org",
-                      "product",
-                      "topic",
-                      "channel"
-                    ],
-                    "description": "Entity type of the tracked entity. Required on create. org is accepted for organization, and the tracker answers organization."
-                  },
-                  "display_name": {
-                    "type": "string",
-                    "description": "Optional label shown in alerts and the dashboard."
-                  },
-                  "notify_email": {
-                    "type": "boolean",
-                    "description": "Per-tracker email delivery. Default true."
-                  },
-                  "notify_webhook": {
-                    "type": "boolean",
-                    "description": "Per-tracker webhook delivery override. Paid plans only."
-                  },
-                  "notify_slack": {
-                    "type": "boolean",
-                    "description": "Per-tracker Slack delivery override. Paid plans only."
-                  },
-                  "webhook_url": {
-                    "type": "string",
-                    "description": "Per-tracker webhook destination override (http/https)."
-                  },
-                  "slack_channel_id": {
-                    "type": "string",
-                    "description": "Per-tracker Slack channel override."
-                  },
-                  "slack_integration_id": {
-                    "type": "string",
-                    "description": "Per-tracker Slack integration override."
-                  },
-                  "person_match_mode": {
-                    "type": "string",
-                    "enum": [
-                      "mentions",
-                      "appearances",
-                      "both"
-                    ],
-                    "description": "Person trackers only. Mentions (default) matches others talking about the person; appearances matches the person present as a speaker, host or guest; both accepts either. Non-person trackers reject this field. PATCH changes future and pending delivery eligibility, without backfill."
-                  },
-                  "filters": {
-                    "type": "object",
-                    "additionalProperties": {},
-                    "description": "Stored filter object. personMatchMode is also accepted here for person trackers. Other filter keys are retained; do not assume they change matching."
-                  }
-                },
-                "required": [
-                  "entity_name",
-                  "entity_type"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-Arcmira-Version": {
-                "$ref": "#/components/headers/X-Arcmira-Version"
-              },
-              "RateLimit-Limit": {
-                "$ref": "#/components/headers/RateLimit-Limit"
-              },
-              "RateLimit-Remaining": {
-                "$ref": "#/components/headers/RateLimit-Remaining"
-              },
-              "RateLimit-Reset": {
-                "$ref": "#/components/headers/RateLimit-Reset"
-              },
-              "Idempotency-Replayed": {
-                "$ref": "#/components/headers/Idempotency-Replayed"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TrackerMutationResponse"
-                }
-              }
-            }
-          },
-          "201": {
-            "description": "Tracker created",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-Arcmira-Version": {
-                "$ref": "#/components/headers/X-Arcmira-Version"
-              },
-              "RateLimit-Limit": {
-                "$ref": "#/components/headers/RateLimit-Limit"
-              },
-              "RateLimit-Remaining": {
-                "$ref": "#/components/headers/RateLimit-Remaining"
-              },
-              "RateLimit-Reset": {
-                "$ref": "#/components/headers/RateLimit-Reset"
-              },
-              "Idempotency-Replayed": {
-                "$ref": "#/components/headers/Idempotency-Replayed"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TrackerMutationResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/InvalidRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/AuthenticationError"
-          },
-          "403": {
-            "$ref": "#/components/responses/PermissionError"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "description": "Conflict. idempotency_conflict means the Idempotency-Key was finalized with a different request intent. The route also answers 409 for a duplicate or a failed precondition, named in its description.",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/X-Request-Id"
-              },
-              "X-Arcmira-Version": {
-                "$ref": "#/components/headers/X-Arcmira-Version"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
-          "500": {
-            "$ref": "#/components/responses/ServerError"
-          }
-        }
       }
     },
     "/v1/trackers/{id}": {
@@ -10172,7 +9900,7 @@
         ],
         "operationId": "update_tracker",
         "summary": "Update tracker",
-        "description": "Partial update: send only the fields to change. The tracked entity itself (entity_name/entity_type) is immutable; delete and recreate to watch a different entity.",
+        "description": "Partial update: send only the fields to change. The tracked entity itself (entity_name/entity_type) is immutable; delete and recreate to watch a different entity. Delivery is the monitor's: change it with PATCH /v1/monitors/{id}.",
         "security": [
           {
             "bearerAuth": []
@@ -10212,27 +9940,42 @@
                   },
                   "notify_email": {
                     "type": "boolean",
-                    "description": "Per-tracker email delivery. Default true."
+                    "description": "Retired: a tracker alerts through its monitor's delivery (set it with PATCH /v1/monitors/{id}). Omitted or true is accepted and ignored; any other value answers 400 tracker_delivery_retired.",
+                    "deprecated": true
                   },
                   "notify_webhook": {
                     "type": "boolean",
-                    "description": "Per-tracker webhook delivery override. Paid plans only."
+                    "description": "Retired: a tracker alerts through its monitor's delivery (set it with PATCH /v1/monitors/{id}). Omitted or false is accepted and ignored; any other value answers 400 tracker_delivery_retired.",
+                    "deprecated": true
                   },
                   "notify_slack": {
                     "type": "boolean",
-                    "description": "Per-tracker Slack delivery override. Paid plans only."
+                    "description": "Retired: a tracker alerts through its monitor's delivery (set it with PATCH /v1/monitors/{id}). Omitted or false is accepted and ignored; any other value answers 400 tracker_delivery_retired.",
+                    "deprecated": true
                   },
                   "webhook_url": {
-                    "type": "string",
-                    "description": "Per-tracker webhook destination override (http/https)."
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Retired: a tracker alerts through its monitor's delivery (set it with PATCH /v1/monitors/{id}). Omitted or null is accepted and ignored; any other value answers 400 tracker_delivery_retired.",
+                    "deprecated": true
                   },
                   "slack_channel_id": {
-                    "type": "string",
-                    "description": "Per-tracker Slack channel override."
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Retired: a tracker alerts through its monitor's delivery (set it with PATCH /v1/monitors/{id}). Omitted or null is accepted and ignored; any other value answers 400 tracker_delivery_retired.",
+                    "deprecated": true
                   },
                   "slack_integration_id": {
-                    "type": "string",
-                    "description": "Per-tracker Slack integration override."
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Retired: a tracker alerts through its monitor's delivery (set it with PATCH /v1/monitors/{id}). Omitted or null is accepted and ignored; any other value answers 400 tracker_delivery_retired.",
+                    "deprecated": true
                   },
                   "person_match_mode": {
                     "type": "string",
@@ -10333,7 +10076,7 @@
         ],
         "operationId": "delete_tracker",
         "summary": "Delete tracker",
-        "description": "Deletes the tracker. Cannot be undone.",
+        "description": "Deletes the tracker. Cannot be undone. Its monitor stays, with its delivery settings, even when this was its last tracker.",
         "security": [
           {
             "bearerAuth": []
