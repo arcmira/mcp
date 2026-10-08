@@ -1,0 +1,24 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "YouTube transcript search",
+      "description": "Find timestamped quotes, follow speaker appearances, and compare discussions across indexed YouTube videos.",
+      "skills": [
+        "arcmira",
+        "find-quotes",
+        "person-research",
+        "compare-shows"
+      ]
+    },
+    {
+      "title": "Sponsors and monitors",
+      "description": "Research channel sponsors and recommendations, then monitor entities for new mentions.",
+      "skills": [
+        "sponsor-research",
+        "company-watch"
+      ]
+    }
+  ]
+}
