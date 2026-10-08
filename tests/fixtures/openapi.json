@@ -517,6 +517,12 @@
             "description": "No route or resource at this path."
           },
           {
+            "code": "on_demand_paused",
+            "type": "quota_exceeded",
+            "gate": "rows",
+            "description": "The account's included credits are used up and its on-demand usage is paused, because a payment for an on-demand invoice was declined. Nothing was charged, and there is no unlock. On-demand resumes once the invoice is paid. An admin updates the card in Billing, which retries the payment."
+          },
+          {
             "code": "owner_only",
             "type": "permission_error",
             "description": "Only an admin of the account may do this. Everyone in a team can create, edit, pause, delete and restore monitors."

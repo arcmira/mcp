@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.6
+
+Follows the `402 on_demand_paused` refusal added to `/v1` on 2026-10-08.
+
+- The budget rule and the error list name `on_demand_paused`: the account's included credits are used and on-demand usage is paused after a declined payment. It carries no unlock and no upgrade. An agent tells the user that an admin of the account must update the card at https://arcmira.com/dashboard/billing, and that on-demand usage resumes once the invoice is paid.
+- OpenAPI fixture refreshed.
+
 ## 0.10.5
 
 Follows the team account changes to `/v1` (2026-10-08).
