@@ -121,8 +121,8 @@ export default {
       return finish({ ok: true, value: value === undefined ? null : value, lines, logs_truncated, outcome_uncertain: false, ...meter });
     } catch (error) {
       const e = error instanceof Error ? error : new Error(String(error));
-      const { name, message, code, status, unlock, gate, param, retry_after_seconds, retry_after, doc_url, request_id, quote } = e;
-      return finish({ ok: false, error: { name, code: code ?? (name === 'SyntaxError' ? 'syntax_error' : 'program_error'), message: name === 'SyntaxError' ? message + '. Code runs as the body of an async function; import and export are not supported.' : message, status, unlock, gate, param, retry_after_seconds, retry_after, doc_url, request_id, quote }, lines, logs_truncated, outcome_uncertain: false, ...meter });
+      const { name, message, code, status, unlock, gate, param, retry_after_seconds, retry_after, doc_url, request_id, quote, limit } = e;
+      return finish({ ok: false, error: { name, code: code ?? (name === 'SyntaxError' ? 'syntax_error' : 'program_error'), message: name === 'SyntaxError' ? message + '. Code runs as the body of an async function; import and export are not supported.' : message, status, unlock, gate, param, retry_after_seconds, retry_after, doc_url, request_id, quote, limit }, lines, logs_truncated, outcome_uncertain: false, ...meter });
     }
   },
 };`;
@@ -135,7 +135,7 @@ export type Access = 'read' | 'write';
 const under = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
 
 /**
- * The routes a sandbox program may call, by tool. Read: any GET under /v1 (a Premium read buys inside
+ * The routes a sandbox program may call, by tool. Read: any GET under /v1 (a Premium read starts its transcription inside
  * GET /v1/transcripts/{video_id}). Write adds POST and PATCH under /v1/monitors and PATCH under
  * /v1/trackers, never DELETE, and never the webhook secret rotation, which breaks the user's existing
  * webhook verification. A tracker is created inside a monitor, so nothing POSTs under /v1/trackers.

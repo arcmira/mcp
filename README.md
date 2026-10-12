@@ -71,7 +71,7 @@ The 401 body carries that signup call under `error.data.unlock.action`, so an ag
 
 | Tool | Input | Returns |
 |---|---|---|
-| `arcmira_describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, every method with arguments and return fields, nine worked example programs, the quirks that cost answers, the budget and monitor rules, error codes, and doc links. About 25,000 characters; `topic` narrows it to one method and its examples. Never bills. |
+| `arcmira_describe` | `topic?` | The arcmira client reference: the id rule, which method answers which question, every method with arguments and return fields, worked example programs, the quirks that cost answers, the usage and monitor rules, error codes, and doc links. About 23,000 characters; `topic` narrows it to one method and its examples. Never bills. |
 | `arcmira_execute_read` | `code` | What the program printed plus its return value. The code is the body of an async function with `arcmira` and `ArcmiraError` in scope. Reads, Premium transcripts included, and the user's monitors. Limits: 30 seconds, 40 API calls, and 12,000 characters of output in total, 3,000 per string, and 100 items per array. |
 | `arcmira_execute_write` | `code` | The same as `arcmira_execute_read`, with the account writes added: `arcmira.monitors.create`, `arcmira.monitors.update` (including `paused`), `arcmira.monitors.addEntities`, `arcmira.monitors.addName` and `arcmira.monitors.attachTrackers`. Nothing is deleted. |
 | `arcmira_feedback` | `category`, `note`, `request_id?`, `call_id?` | One `POST /v1/feedback` of type `experience`. `category` is `wrong_entity`, `bad_data`, `missing`, `slow`, `confusing` or `other`; `note` says what happened. Returns the feedback id. |
@@ -80,7 +80,7 @@ Every tool also takes an optional `intent`, at most 300 characters: the user's r
 
 Only `arcmira_describe` is annotated read-only. Both program tools can start Premium transcription, which uses credits from the plan and then the on-demand budget, so neither is read-only. Only `arcmira_execute_write` is destructive, because it can overwrite monitor settings and pause monitors; a Premium read only adds. Both can request arbitrary public videos and carry open-world annotations. Feedback adds a stored record and is an additive write. These labels describe possible effects; the `execute_read` name identifies the client access level, not a guarantee of no side effects.
 
-Paid reads use credits from your plan, then the on-demand budget you set in the dashboard. That budget is the approval, so an agent never asks you for a cents amount. When the budget or plan blocks a read (`spend_limit_exceeded`, `quota_exceeded`, a plan gate), the agent tells the user to raise the on-demand budget at https://arcmira.com/dashboard/spending or upgrade the plan at https://arcmira.com/pricing, and links the refusal's `unlock.url`. `member_limit` (your monthly on-demand limit in a team account) and `fair_use_cap` (Ultra's Premium transcript hours) carry no unlock: the agent tells you to ask a team admin, who raises the limit or turns on on-demand usage, or to wait for the month to reset. `on_demand_paused` (a payment for on-demand usage was declined) carries no unlock either: the agent tells you that an admin of the account must update the card at https://arcmira.com/dashboard/billing, and on-demand usage resumes once the invoice is paid.
+Metered reads use credits from your plan, then the on-demand budget you set in the dashboard. Arcmira enforces that budget on every read, and no tool takes a spending amount. A search uses 4 credits per passage it returns past the first 5, a captions read 4 credits per started 15 minutes of its window, and a Premium transcript 300 credits per started 15 minutes of the whole video. A Premium read that starts a transcription reports its `charge` (credits, and whether they came from the plan, on-demand usage, or both). `arcmira.quote(video)` returns that price beforehand and uses no credits; it is a price check, not a spoken quote. When the plan or budget blocks a read, the tool result is an error (`isError: true`) with the API's `code` (`paid_plan_required`, `quota_exceeded`, `spend_limit_exceeded`, `member_limit`, `fair_use_cap` or `on_demand_paused`), a `message` that states what was reached and what lifts it, and `unlock` when a plan or setting change lifts it. The server gives the agent these facts, not a script for what to say.
 
 A Premium transcript is one read in `arcmira_execute_read`:
 
@@ -89,9 +89,9 @@ const t = await arcmira.transcript("cdLeJU_1UH8", { quality: "premium" });
 return t.state === "ready" ? t.lines : { state: t.state, eta_seconds: t.eta_seconds, note: t.note };
 ```
 
-When the video is not transcribed yet, `GET /v1/transcripts/{video_id}?quality=premium` starts transcribing it, using credits from your plan and then your on-demand budget, and answers `202` with the job and `Retry-After`. The client reads again at `Retry-After` until 22 seconds into the program, a wait all Premium reads in one program share. Reading again never uses credits twice. Still `pending` after that: the result carries `eta_seconds`, and the same read in a later program returns the lines. A failed transcription comes back as `state` `failed` or `refunded` with the reason, and the read does not start another unless it passes `retry: true`, which an agent sends only when the user asks. A plan without Premium throws `paid_plan_required`; a budget that blocks the read throws `spend_limit_exceeded` or `quota_exceeded`, and the quote rides on the error as `quote`. A Premium transcript uses credits for the whole video, at 75 rows per 15-minute quarter and four credits per row, and `start` and `end` never lower it; `arcmira.quote(video)` shows the credits for free.
+When the video is not transcribed yet, `GET /v1/transcripts/{video_id}?quality=premium` starts transcribing it and answers `202` with the job and `Retry-After`. The client reads again at `Retry-After` until 22 seconds into the program, a wait all Premium reads in one program share. Reading again never uses credits twice. Still `pending` after that: the result carries `eta_seconds`, and the same read in a later program returns the lines. A failed transcription comes back as `state` `failed` or `refunded` with the reason, and the read does not start another unless it passes `retry: true`, which an agent sends only when the user asks. A plan without Premium throws `paid_plan_required`; a budget that blocks the read throws `spend_limit_exceeded` or `quota_exceeded`, and the price rides on the error as `quote`. `start` and `end` never lower a Premium charge.
 
-Results that are empty, an error, truncated or a resolve `ask` end with one line, `feedback`, which names the call: `If this was wrong, slow, or missing for the user, send one arcmira_feedback with call_id mcpc_...`.
+Results that are empty, an error, truncated or a resolve `ask` carry `call_id` (`mcpc_...`), which `arcmira_feedback` takes to name the call.
 
 The client's methods are the arcmira CLI's commands, with the same names and the flags as options, so the MCP, the CLI and the SDK teach one vocabulary:
 
@@ -100,13 +100,13 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 | `arcmira.resolve(q, { type?, context?, limit? })` | `GET /v1/entities/resolve` | A name, `@handle`, URL or `UC` id to one of three answers: `best`, `suggested` (with `reason` and `evidence`), or `ask` with options |
 | `arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, entityIds?, after?, before?, source?, limit? })` | `GET /v1/search` | Spoken slices for one topic, or about an entity, or spoken by a person, with watch links and dates |
 | `arcmira.mentions({ entityId, channelId?, after?, before?, limit?, cursor? })` | `GET /v1/mentions` | Has X mentioned Y, first seen, last seen |
-| `arcmira.momentum(entityId)` | `GET /v1/entities/{id}/momentum` | Last 30 days against the prior 30, with a verdict |
+| `arcmira.momentum(entityId, { days? })` | `GET /v1/entities/{id}/momentum` | The last `days` (7 to 365, default 30) against the prior `days`, with a verdict and top shows for that window. 10 credits a call. |
 | `arcmira.sponsors(channelId, { minAdReads?, status?, limit? })` | `GET /v1/channels/{id}/sponsors` | Recurring sponsors of one show |
 | `arcmira.recommendations(entityId, { kind?, channelId?, after?, before?, limit?, cursor? })` | `GET /v1/recommendations?entity_id=` | Who recommends one entity, sponsored or organic, with the quote |
 | `arcmira.episodes(channelId, { limit?, after?, before? })` | `GET /v1/channels/{id}/videos` | Newest indexed episodes, with the `video_id` the others take |
 | `arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })` | `GET /v1/transcripts/{video_id}`, read again at `Retry-After` while a Premium transcription is pending | The transcript of one video, captions or Premium, whole or a window |
 | `arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })` | `GET /v1/mentions/counts` | What shows talk about, what they share, what one episode mentions |
-| `arcmira.quote(videoIdOrUrl)` | `GET /v1/transcripts/{video_id}/quote` | The free whole-video Premium quote: rows, credits, and any on-demand cents |
+| `arcmira.quote(videoIdOrUrl)` | `GET /v1/transcripts/{video_id}/quote` | A price check, not a spoken quote: the credits a Premium read of the whole video would use, and any on-demand cents. Uses no credits |
 | `arcmira.status({ channelId? })` | `GET /v1/channels/{id}/coverage`, `GET /v1/me` | Coverage and the index date, or the account the key spends (`account`, `role`), plan, credits and on-demand budget |
 | `arcmira.monitors.list()` | `GET /v1/monitors` | The user's monitors, with delivery settings and tracker counts |
 | `arcmira.monitors.trackers(monitorId)` | `GET /v1/monitors/{id}/trackers` | What one monitor already follows |
@@ -158,7 +158,7 @@ A gate inside a program throws an `ArcmiraError` with the API's error fields, an
 {"ok":false,"error":{"code":"recommendations_not_enabled","message":"Sponsor recommendations require Pro.","gate":"plan"},"calls":1,"outcome_uncertain":false}
 ```
 
-Switch on `code`, relay `unlock.url` to the human, and honor `retry_after_seconds` on `rate_limited`. A 200 that withheld something (Premium transcript text, the paid-versus-organic split, sponsors past the free slice) is a normal result carrying the same body under `access`. The full catalog is at https://arcmira.com/docs/errors.
+Switch on `code`. `unlock.url` names the plan or setting that lifts a gate, and `rate_limited` carries `retry_after_seconds`. A 200 that withheld something (Premium transcript text, the paid-versus-organic split, sponsors past the free slice) is a normal result carrying the same body under `access`. The full catalog is at https://arcmira.com/docs/errors.
 
 Every result, gates included, carries the key's budget after the call under `_meta["arcmira.com/rate_limit"]` as `{ "limit": 20, "remaining": 17, "reset": 1788819360 }`, read from the API's RateLimit headers, and `_meta["arcmira.com/build"]`: `server`, `deploy`, `api` (the API build that answered) and `client` (the host's name from its handshake, forwarded to the API as `x-arcmira-client`).
 
@@ -173,25 +173,9 @@ Each tool call is logged to Arcmira's product analytics (PostHog), linked to the
 
 Before the record is stored, the API replaces anything that looks like a credential or an email address (`arc_` keys, `Bearer` tokens, `sk-` keys, addresses) with `[redacted]`. Results, transcript text and logs printed by a program are never logged. A call with no valid credential is not logged. The record is sent after the result, so logging never delays or changes an answer; a record that fails to send is dropped.
 
-## Upgrading from 0.9
+## Upgrading
 
-0.10 follows the cleaned-up v1 API. Programs that read the old field names read `undefined`; describe and the skills carry the new ones.
-
-- Lists name their collection: `mentions().mentions`, `recommendations().recommendations` (was `data`). A recommendation's `class` is `sponsored`, `organic` or `mention` (was `mention_class` `ad_read`, `endorsement`, `mention`).
-- Search chunks are snake_case: `video_id`, `video_title`, `published_at`, `start_seconds`, `watch_url`, `channel_name`, `cite_line`. Search `kind` is `sponsored`, `organic` or `mention`, or an array of them.
-- `before` is the first day left out on every method (it was the last day counted). Every dated result echoes `window`.
-- Monitor fields are snake_case in both directions: `create({ name, notify_frequency })`, `update(id, { paused: true })`, and `monitors.list()` returns `paused`, `notify_frequency`, `tracker_count`.
-- `arcmira.status({ jobId })` is gone: a pending Premium read returns its job and `eta_seconds`, and the same read returns the lines once they are ready.
-- New: `arcmira.monitors.addName(monitorId, [{ name, type }])` follows exact names before they are indexed.
-- A failed Premium transcription is terminal: `state` `failed` or `refunded` with `job.error` or `last_attempt`. `arcmira.transcript(video, { quality: "premium", retry: true })` transcribes again and uses credits again, only when the user asks.
-
-## Upgrading from 0.8
-
-`describe` is now `arcmira_describe`, `execute` is now `arcmira_execute_read`, and `prepare_transcript` is now a Premium read, `arcmira.transcript(video, { quality: "premium" })`, inside `arcmira_execute_read`. A host that cached the old list and calls an old name gets `tool_retired`, which names the replacement. `max_on_demand_cents` is no longer an input: the account's on-demand budget decides.
-
-## Upgrading from 0.6.0
-
-The ten tools (`resolve_entities`, `search_transcripts`, `list_mentions`, `entity_momentum`, `count_occurrences`, `list_episodes`, `list_sponsors`, `list_recommendations`, `index_status`, `get_transcript`) are gone from `tools/list`. A host that cached the old list and calls one gets `tool_retired`, which names `arcmira_describe`. Each old tool is one client method: `resolve_entities` is `arcmira.resolve`, `search_transcripts` is `arcmira.search`, `list_mentions` is `arcmira.mentions`, `entity_momentum` is `arcmira.momentum`, `count_occurrences` is `arcmira.occurrences`, `list_episodes` is `arcmira.episodes`, `list_sponsors` is `arcmira.sponsors`, `list_recommendations` is `arcmira.recommendations`, `index_status` is `arcmira.status`, `get_transcript` is `arcmira.transcript`. The `recency` shorthand became `arcmira.daysAgo(n)`.
+Upgrade notes for every release, the 0.7 tool renames and the 0.10 field changes included, are in [CHANGELOG.md](CHANGELOG.md).
 
 ## Plugin
 
@@ -206,7 +190,7 @@ The ten tools (`resolve_entities`, `search_transcripts`, `list_mentions`, `entit
 | `person-research` | Interview or meeting prep: appearances, a person's own words, who discusses them |
 | `compare-shows` | Two shows side by side: size, topics, overlap, shared sponsors |
 
-Every skill starts from names, never ids: each program resolves the name, returns `ask` options when several entities fit and none stands out, says when it assumed one, and names the entity it used. Every skill ends by offering to save what it found to a monitor and with the feedback line. The skills are generated from `src/reference.ts` and `src/skills.ts` by `scripts/build-skill.ts`; CI fails when a file drifts or a program calls a method the reference does not document, and `pnpm examples:check` runs every program against production.
+Every skill starts from names, never ids: each program resolves the name, returns `ask` options when several entities fit and none stands out, says when it assumed one, and names the entity it used. Every skill ends with the monitor line (monitors can follow what it found, and what an alert uses) and the feedback line. The skills are generated from `src/reference.ts` and `src/skills.ts` by `scripts/build-skill.ts`; CI fails when a file drifts or a program calls a method the reference does not document, and `pnpm examples:check` runs every program against production.
 
 ```bash
 claude plugin marketplace add arcmira/mcp

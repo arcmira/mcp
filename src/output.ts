@@ -43,6 +43,8 @@ const CONTROL = [
   "quote",
   "charge",
   "rows_charged",
+  "limit",
+  "freshness",
 ];
 const priority = (key: string) => {
   const index = CONTROL.indexOf(key);
@@ -67,9 +69,9 @@ function isAsk(value: unknown): boolean {
 
 /**
  * Bound data without slicing JSON, retaining outcome and continuation fields before bulk arrays.
- * `feedback` is the one line added when the outcome is an error, empty, truncated or a resolve ask.
+ * `call_id` names the call when the outcome is an error, empty, truncated or a resolve ask, the cases arcmira_feedback is for.
  */
-export function renderExecution(execution: Execution, options: { feedback?: string } = {}): string {
+export function renderExecution(execution: Execution, options: { callId?: string } = {}): string {
   let budget = OUTPUT_BUDGET;
   let truncated = execution.truncated ?? false;
   let cuts = [...(execution.truncated_arrays ?? [])];
@@ -140,7 +142,7 @@ export function renderExecution(execution: Execution, options: { feedback?: stri
     api_build: execution.api_build,
     truncated,
     ...(truncated ? { truncated_arrays: cuts, recovery: RECOVERY } : {}),
-    ...(options.feedback && (!execution.ok || truncated || isEmpty(execution.value) || isAsk(execution.value)) ? { feedback: options.feedback } : {}),
+    ...(options.callId && (!execution.ok || truncated || isEmpty(execution.value) || isAsk(execution.value)) ? { call_id: options.callId } : {}),
     logs: execution.lines,
     logs_truncated: execution.logs_truncated,
   };
@@ -157,7 +159,7 @@ export function renderExecution(execution: Execution, options: { feedback?: stri
     envelope.logs_truncated =
       execution.lines.length > 0 || execution.logs_truncated;
     envelope.truncated = true;
-    if (options.feedback) envelope.feedback = options.feedback;
+    if (options.callId) envelope.call_id = options.callId;
     text = JSON.stringify(envelope);
   }
   return text;

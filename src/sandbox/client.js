@@ -87,7 +87,7 @@ const MAX_WAIT_SECONDS = 22;
 /** With less left than this, a pending Premium read returns instead of sleeping for one more read. */
 const MIN_LAST_WAIT_MS = 5_000;
 const TERMINAL = new Set(['failed', 'refunded']);
-const FAILED_NOTE = 'The Premium transcript was not produced; job.error or last_attempt.error says why. Report it, and never substitute captions. Transcribe again only when the user asks, which uses credits from the plan again: arcmira.transcript(video, { quality: "premium", retry: true }).';
+const FAILED_NOTE = 'The Premium transcript was not produced; job.error or last_attempt.error says why. arcmira.transcript(video, { quality: "premium", retry: true }) starts a new transcription and uses credits again; send it only when the user asks for another attempt.';
 const RETIRED_PREMIUM = 'arcmira.prepare and arcmira.wait are gone: arcmira.transcript(video, { quality: "premium" }) returns the lines. When the video is not transcribed yet, that read uses credits from the account\'s plan, then its on-demand budget.';
 
 /** recommendations kind to /v1 class; all sends no class. */
@@ -168,6 +168,7 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       doc_url: err.doc_url,
       request_id: err.request_id,
       quote: err.details?.quote,
+      limit: err.details?.limit,
     });
   }
 
@@ -235,8 +236,10 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         cursor,
       });
     },
-    async momentum(entityId) {
-      return get(`/v1/entities/${needEntityId(entityId, 'entityId')}/momentum`);
+    async momentum(entityId, options) {
+      const { days } = needOptions('momentum', options, 'arcmira.momentum(entityId, { days? })');
+      if (days !== undefined && (!Number.isInteger(days) || days < 7 || days > 365)) throw new ArcmiraError('days is a whole number of days from 7 to 365.', 'invalid_request');
+      return get(`/v1/entities/${needEntityId(entityId, 'entityId')}/momentum`, { days });
     },
     async sponsors(channelId, options) {
       const { minAdReads, status, limit } = needOptions('sponsors', options, 'arcmira.sponsors(channelId, { minAdReads?, status?, limit? })');
@@ -264,29 +267,31 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       });
     },
     /**
-     * One video's transcript. A Premium read of a video not yet transcribed buys it (included credits, then
-     * on-demand within the account's budget, which is the approval) and answers 202 with the job; the read
-     * repeats at Retry-After until MAX_WAIT_SECONDS into the program. Repeated reads never buy twice. A failed
-     * purchase is terminal (state failed or refunded, or that job.state on a 202) until a read sends retry.
+     * One video's transcript. A Premium read of a video not yet transcribed starts a transcription (credits
+     * from the plan, then on-demand within the account's budget) and answers 202 with the job; the read
+     * repeats at Retry-After until MAX_WAIT_SECONDS into the program. Repeated reads never use credits twice.
+     * A failed transcription is terminal (state failed or refunded, or that job.state on a 202) until a read sends retry.
      */
     async transcript(video, options) {
       const { quality, language, timestamps, start, end, retry } = needOptions('transcript', options, 'arcmira.transcript(video, { quality?, language?, timestamps?, start?, end?, retry? })');
       const id = videoIdOf(video);
       const query = { quality, language, timestamps: timestamps === false ? 'false' : undefined, start, end };
-      // retry buys again after a failed purchase; only the first read sends it, so a job that fails mid-wait is not bought twice.
+      // retry transcribes again after a failure; only the first read sends it, so a job that fails mid-wait is not charged twice.
       let retrying = retry === true;
+      let charge;
       for (;;) {
         const { body, headers } = await call(`/v1/transcripts/${id}`, retrying ? { ...query, retry: 'true' } : query);
         retrying = false;
         if (quality !== 'premium') return body;
         const failed = TERMINAL.has(body.state) ? body.state : TERMINAL.has(body.job?.state) ? body.job.state : null;
         if (failed) return { ...body, state: failed, note: FAILED_NOTE };
-        if (body.state !== 'pending') return body;
+        charge = body.job?.charge ?? charge;
+        if (body.state !== 'pending') return charge && !body.charge ? { ...body, charge } : body;
         const remaining = waitUntil - now().getTime();
         if (remaining < MIN_LAST_WAIT_MS) {
           const eta = Number.isFinite(body.job?.eta_seconds) ? body.job.eta_seconds : undefined;
           const left = eta === undefined ? '' : `, about ${Math.max(1, Math.round(eta / 60))} min left`;
-          return { ...body, eta_seconds: eta, note: `Still transcribing${left}. Tell the user, then run the same read again later; it never uses credits twice.` };
+          return { ...body, eta_seconds: eta, note: `Still transcribing${left}. The same read returns the lines once ready and never uses credits twice.` };
         }
         const poll = Number(headers.get('retry-after') ?? body.job?.next_poll_seconds);
         await sleep(Math.min((Number.isFinite(poll) ? Math.max(1, poll) : 10) * 1000, remaining));
@@ -338,7 +343,7 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       async create(options) {
         const fields = monitorFields('monitors.create', options, MONITOR_FIELDS);
         if (typeof fields.name !== 'string' || fields.name.trim() === '') throw new ArcmiraError('arcmira.monitors.create needs name, 1 to 100 characters.', 'invalid_request');
-        if (fields.notify_frequency === undefined) throw new ArcmiraError('arcmira.monitors.create needs notify_frequency: ask the user realtime, hourly or daily (default daily).', 'invalid_request');
+        if (fields.notify_frequency === undefined) throw new ArcmiraError('arcmira.monitors.create needs notify_frequency: realtime, hourly or daily.', 'invalid_request');
         return write('monitors.create', '/v1/monitors', fields);
       },
       async update(monitorId, patch) {

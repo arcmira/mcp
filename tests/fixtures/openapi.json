@@ -329,6 +329,9 @@
                 "properties": {
                   "quote": {
                     "$ref": "#/components/schemas/RefusedQuote"
+                  },
+                  "limit": {
+                    "$ref": "#/components/schemas/Limit"
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -387,7 +390,7 @@
           {
             "code": "fair_use_cap",
             "type": "quota_exceeded",
-            "description": "Ultra plan credits cover 80 Premium transcript hours a month, and this month's are used. Past them a Premium transcript uses granted or on-demand credits, and the account has none. Nothing was charged. An admin turns on on-demand usage or raises its limit, or the hours reset with the month."
+            "description": "Ultra plan credits cover 80 Premium transcript hours a month, and this month's are used. Past them a Premium transcript uses granted or on-demand credits, and the account has none. Nothing was charged. details.limit carries the hours and what is used. An admin turns on on-demand usage or raises its budget, or the hours reset with the month."
           },
           {
             "code": "feature_not_available",
@@ -415,7 +418,7 @@
             "code": "freshness_requires_paid",
             "type": "permission_error",
             "gate": "freshness",
-            "description": "The date window is newer than the plan serves; move it before the cutoff or upgrade."
+            "description": "The date window starts after results on this plan stop. details.limit carries delay_days and served_through; move the window to served_through or earlier, or open unlock.url for the plan that reads newer media."
           },
           {
             "code": "id_required",
@@ -494,7 +497,7 @@
             "code": "member_limit",
             "type": "quota_exceeded",
             "gate": "rows",
-            "description": "The account's included credits are used up and the person the key or token acts for has reached their monthly on-demand limit in it. Nothing was charged, and there is no unlock. An admin raises the limit in Settings / Team, or it resets with the month."
+            "description": "The account's included credits are used up and the person the key or token acts for has reached their monthly on-demand limit in it. Nothing was charged, and there is no unlock. details.limit carries the limit and what is used, in US cents. An admin raises the limit on the Team page (https://arcmira.com/dashboard/members), or it resets with the month."
           },
           {
             "code": "monitor_creation_unavailable",
@@ -520,7 +523,7 @@
             "code": "on_demand_paused",
             "type": "quota_exceeded",
             "gate": "rows",
-            "description": "The account's included credits are used up and its on-demand usage is paused, because a payment for an on-demand invoice was declined. Nothing was charged, and there is no unlock. On-demand resumes once the invoice is paid. An admin updates the card in Billing, which retries the payment."
+            "description": "The account's included credits are used up and its on-demand usage is paused, because a payment for an on-demand invoice was declined. Nothing was charged, and there is no unlock. On-demand resumes once the invoice is paid. An admin updates the card on the Billing & Invoices page (https://arcmira.com/dashboard/billing), which retries the payment."
           },
           {
             "code": "owner_only",
@@ -553,7 +556,7 @@
             "code": "quota_exceeded",
             "type": "quota_exceeded",
             "gate": "rows",
-            "description": "The read needs more credits than your plan, then your on-demand budget, have left. unlock.url upgrades the plan or raises the budget."
+            "description": "The read needs more credits than the plan, then the on-demand budget, have left. Nothing was charged. details.limit carries the plan credits or the on-demand budget the read met, with what is used and when it resets. unlock.url upgrades the plan or raises the budget."
           },
           {
             "code": "rate_limited",
@@ -605,7 +608,7 @@
           {
             "code": "spend_limit_exceeded",
             "type": "quota_exceeded",
-            "description": "The request would take on-demand usage past the account's on-demand limit this period. Nothing was charged. Raise the limit or wait for the next period, then read again or send a new intent."
+            "description": "The request would take on-demand usage past the account's on-demand budget this month. Nothing was charged. details.limit carries the budget and what is used. Raise the budget on the Spending page or wait for the month to reset; then read again, or send a POST /v1/transcriptions request again with a new Idempotency-Key."
           },
           {
             "code": "team_id_retired",
@@ -996,6 +999,195 @@
           "rows"
         ]
       },
+      "Limit": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "plan_credits"
+                ]
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "credits"
+                ]
+              },
+              "amount": {
+                "type": "number",
+                "description": "The plan credits a month. Carried by quota_exceeded when on-demand usage is off."
+              },
+              "used": {
+                "type": "number",
+                "description": "How much of amount is used this month, in credits."
+              },
+              "resets_at": {
+                "type": "string",
+                "description": "YYYY-MM-DD, the first day of next month (UTC), when used returns to 0."
+              }
+            },
+            "required": [
+              "kind",
+              "unit",
+              "amount",
+              "used",
+              "resets_at"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "on_demand_budget"
+                ]
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "credits"
+                ]
+              },
+              "amount": {
+                "type": "number",
+                "description": "The on-demand budget a month, in credits ($0.002 a credit). Carried by quota_exceeded and spend_limit_exceeded when on-demand usage is on."
+              },
+              "used": {
+                "type": "number",
+                "description": "How much of amount is used this month, in credits."
+              },
+              "resets_at": {
+                "type": "string",
+                "description": "YYYY-MM-DD, the first day of next month (UTC), when used returns to 0."
+              }
+            },
+            "required": [
+              "kind",
+              "unit",
+              "amount",
+              "used",
+              "resets_at"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "member_on_demand"
+                ]
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "cents"
+                ]
+              },
+              "amount": {
+                "type": "number",
+                "description": "The monthly on-demand limit an admin set for the person the key or token acts for, in US cents. Carried by member_limit."
+              },
+              "used": {
+                "type": "number",
+                "description": "How much of amount is used this month, in cents."
+              },
+              "resets_at": {
+                "type": "string",
+                "description": "YYYY-MM-DD, the first day of next month (UTC), when used returns to 0."
+              }
+            },
+            "required": [
+              "kind",
+              "unit",
+              "amount",
+              "used",
+              "resets_at"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "premium_hours"
+                ]
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "hours"
+                ]
+              },
+              "amount": {
+                "type": "number",
+                "description": "The Premium transcript hours Ultra plan credits cover a month. Carried by fair_use_cap."
+              },
+              "used": {
+                "type": "number",
+                "description": "How much of amount is used this month, in hours."
+              },
+              "resets_at": {
+                "type": "string",
+                "description": "YYYY-MM-DD, the first day of next month (UTC), when used returns to 0."
+              }
+            },
+            "required": [
+              "kind",
+              "unit",
+              "amount",
+              "used",
+              "resets_at"
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Freshness"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "freshness"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            ],
+            "description": "Where results stop on a plan that reads media after a delay."
+          }
+        ],
+        "description": "On quota_exceeded, spend_limit_exceeded, member_limit, fair_use_cap and freshness_requires_paid: the limit the refusal met. Absent when the server holds no figure for it."
+      },
+      "Freshness": {
+        "type": "object",
+        "properties": {
+          "delay_days": {
+            "type": "integer",
+            "description": "Days after publication before this plan reads a video."
+          },
+          "served_through": {
+            "type": "string",
+            "description": "YYYY-MM-DD (UTC). Results on this plan stop at this publish date; media published after it is not read."
+          }
+        },
+        "required": [
+          "delay_days",
+          "served_through"
+        ],
+        "description": "Where results stop on a plan that reads media after a delay."
+      },
       "TranscriptionJob": {
         "type": "object",
         "properties": {
@@ -1334,6 +1526,20 @@
             "type": "boolean",
             "description": "True when the plan includes the Recommendations API (commercial intelligence endpoints)."
           },
+          "freshness": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Freshness"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Where results stop for this account now: the free plan, and a paid plan past its usage limit, read media after a delay. Dated reads cut their window at served_through and say so. Null when results are current."
+              }
+            ]
+          },
           "usage": {
             "type": "object",
             "properties": {
@@ -1451,6 +1657,7 @@
           "scopes",
           "rate_limit",
           "recommendations_api_enabled",
+          "freshness",
           "usage",
           "settings"
         ]
@@ -2077,6 +2284,16 @@
               "url"
             ],
             "description": "Present with note on a free preview page."
+          },
+          "freshness": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Freshness"
+              },
+              {
+                "description": "Present when your plan's freshness gate cut the window: where results on this plan stop. unlock names the plan that reads past it."
+              }
+            ]
           }
         },
         "required": [
@@ -3213,6 +3430,9 @@
                 "properties": {
                   "quote": {
                     "$ref": "#/components/schemas/RefusedQuote"
+                  },
+                  "limit": {
+                    "$ref": "#/components/schemas/Limit"
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -3402,14 +3622,6 @@
             },
             "description": "Ranked slices. Empty means no hit in the shows we index; say so, never search the open web."
           },
-          "partial": {
-            "type": "boolean",
-            "description": "True when some retrieval batches failed and these chunks are what survived."
-          },
-          "failed_batches": {
-            "type": "integer",
-            "description": "How many batches failed when partial is true."
-          },
           "as_of": {
             "type": [
               "string",
@@ -3552,6 +3764,9 @@
                 "properties": {
                   "quote": {
                     "$ref": "#/components/schemas/RefusedQuote"
+                  },
+                  "limit": {
+                    "$ref": "#/components/schemas/Limit"
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -3572,6 +3787,16 @@
             ],
             "description": "The gate that reduced this response. Present only when something was withheld; carries the same code, gate, and unlock an outright refusal would."
           },
+          "freshness": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Freshness"
+              },
+              {
+                "description": "Present when your plan's freshness gate cut the window: where results on this plan stop. unlock names the plan that reads past it."
+              }
+            ]
+          },
           "unlock": {
             "type": "object",
             "properties": {
@@ -3588,7 +3813,7 @@
               "tier",
               "url"
             ],
-            "description": "Present when your plan's freshness gate cut the window and nothing older matched; note says so."
+            "description": "Present with freshness when your plan's freshness gate cut the window; note says so."
           },
           "note": {
             "type": "string",
@@ -3670,7 +3895,7 @@
             "state": "live",
             "missing_before": null
           },
-          "note": "Quote text as a spoken beat of a few sentences and cite watch_url with published_at. Results are recency-boosted; state the window from window.after when you passed one."
+          "note": "Quote text as a spoken beat of a few sentences and cite watch_url with published_at. State the window from window.after when you passed one."
         }
       },
       "NamedEntityRef": {
@@ -3835,7 +4060,7 @@
               "fading",
               "none"
             ],
-            "description": "Absolute delta of the last 30 days against the prior 30. none when the entity has no mentions at all."
+            "description": "Absolute delta of the window against the prior window of the same length. The delta it needs grows with the square root of the window: 3 at 7 days, 5 at 30, 9 at 90, 18 at 365. none when the entity has no mentions at all."
           },
           "as_of": {
             "type": [
@@ -3843,6 +4068,9 @@
               "null"
             ],
             "description": "Newest indexed media that mentions the entity. Lead with it; it is the date the verdict is true as of."
+          },
+          "window": {
+            "$ref": "#/components/schemas/MomentumWindow"
           },
           "coverage": {
             "type": "string",
@@ -3876,6 +4104,24 @@
               "total": {
                 "type": "integer",
                 "description": "All-time mentions in the index."
+              },
+              "mentions_window": {
+                "type": "integer",
+                "description": "Mentions in window. Equals mentions_30d when days is 30."
+              },
+              "mentions_prior_window": {
+                "type": "integer",
+                "description": "Mentions in the same number of days before window.after. Equals mentions_prior_30d when days is 30."
+              },
+              "delta_window_absolute": {
+                "type": "integer"
+              },
+              "delta_window_pct": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Percent change against the prior window. Null when the prior window was zero."
               }
             },
             "required": [
@@ -3885,8 +4131,13 @@
               "delta_30d_absolute",
               "delta_30d_pct",
               "mentions_90d",
-              "total"
-            ]
+              "total",
+              "mentions_window",
+              "mentions_prior_window",
+              "delta_window_absolute",
+              "delta_window_pct"
+            ],
+            "description": "Each count ends where window ends. On a plan whose freshness gate cut the window, nothing published after window.before is counted."
           },
           "top_shows": {
             "type": "array",
@@ -3923,7 +4174,7 @@
                 "mentions"
               ]
             },
-            "description": "Up to five channels by mentions in the last 30 days."
+            "description": "Up to five channels by mentions in window."
           },
           "paid_vs_organic": {
             "type": "object",
@@ -3943,7 +4194,7 @@
               "endorsements",
               "organic"
             ],
-            "description": "Commercial split for the last 30 days. Present only on a Pro+ plan; otherwise access names the gate."
+            "description": "Commercial split in window. Present only on a Pro+ plan; otherwise access names the gate."
           },
           "access": {
             "type": "object",
@@ -4054,6 +4305,9 @@
                 "properties": {
                   "quote": {
                     "$ref": "#/components/schemas/RefusedQuote"
+                  },
+                  "limit": {
+                    "$ref": "#/components/schemas/Limit"
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -4074,6 +4328,34 @@
             ],
             "description": "The gate that reduced this response. Present only when something was withheld; carries the same code, gate, and unlock an outright refusal would."
           },
+          "freshness": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Freshness"
+              },
+              {
+                "description": "Present when your plan's freshness gate cut the window: where results on this plan stop. unlock names the plan that reads past it."
+              }
+            ]
+          },
+          "unlock": {
+            "type": "object",
+            "properties": {
+              "tier": {
+                "type": "string",
+                "description": "The plan that lifts the freshness gate."
+              },
+              "url": {
+                "type": "string",
+                "description": "Where to start that plan."
+              }
+            },
+            "required": [
+              "tier",
+              "url"
+            ],
+            "description": "Present with freshness when your plan's freshness gate cut the window; note says so."
+          },
           "note": {
             "type": "string",
             "description": "One steering sentence for the agent reading this."
@@ -4083,6 +4365,7 @@
           "entity",
           "verdict",
           "as_of",
+          "window",
           "coverage",
           "volume",
           "top_shows",
@@ -4098,6 +4381,11 @@
           },
           "verdict": "accelerating",
           "as_of": "2026-08-28T17:00:00.000Z",
+          "window": {
+            "after": "2026-06-01T00:00:00Z",
+            "before": "2026-08-30T15:04:05Z",
+            "days": 90
+          },
           "coverage": "Shows we index, not the whole internet.",
           "volume": {
             "mentions_7d": 6,
@@ -4106,7 +4394,11 @@
             "delta_30d_absolute": 12,
             "delta_30d_pct": 109.1,
             "mentions_90d": 41,
-            "total": 188
+            "total": 188,
+            "mentions_window": 41,
+            "mentions_prior_window": 29,
+            "delta_window_absolute": 12,
+            "delta_window_pct": 41.4
           },
           "top_shows": [
             {
@@ -4141,6 +4433,34 @@
           },
           "note": "Lead with verdict and as_of. Then volume and shows. The paid vs organic split needs a plan that carries it; card.access says so. Search transcripts second for quotes. Never invent a heat score."
         }
+      },
+      "MomentumWindow": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PublicationWindow"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "after": {
+                "type": "string",
+                "description": "Inclusive start as an ISO instant: midnight UTC, the given number of days before the day the window ends on."
+              },
+              "before": {
+                "type": "string",
+                "description": "Exclusive end as an ISO instant: when the card was read, or the cutoff when your plan's freshness gate cut the window."
+              },
+              "days": {
+                "type": "integer",
+                "description": "The lookback you asked for, 7 to 365."
+              }
+            },
+            "required": [
+              "days"
+            ]
+          }
+        ],
+        "description": "The window mentions_window counts, [after, before) in UTC. mentions_prior_window counts the same number of days before after."
       },
       "ChannelCoverageResponse": {
         "type": "object",
@@ -4369,6 +4689,34 @@
               "null"
             ],
             "description": "Same as indexed_through."
+          },
+          "freshness": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Freshness"
+              },
+              {
+                "description": "Present when your plan's freshness gate cut the window: where results on this plan stop. unlock names the plan that reads past it."
+              }
+            ]
+          },
+          "unlock": {
+            "type": "object",
+            "properties": {
+              "tier": {
+                "type": "string",
+                "description": "The plan that lifts the freshness gate."
+              },
+              "url": {
+                "type": "string",
+                "description": "Where to start that plan."
+              }
+            },
+            "required": [
+              "tier",
+              "url"
+            ],
+            "description": "Present with freshness when your plan's freshness gate cut the window; note says so."
           },
           "note": {
             "type": "string",
@@ -4669,6 +5017,34 @@
               "null"
             ],
             "description": "Newest media across rows. Null when there are none."
+          },
+          "freshness": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Freshness"
+              },
+              {
+                "description": "Present when your plan's freshness gate cut the window: where results on this plan stop. unlock names the plan that reads past it."
+              }
+            ]
+          },
+          "unlock": {
+            "type": "object",
+            "properties": {
+              "tier": {
+                "type": "string",
+                "description": "The plan that lifts the freshness gate."
+              },
+              "url": {
+                "type": "string",
+                "description": "Where to start that plan."
+              }
+            },
+            "required": [
+              "tier",
+              "url"
+            ],
+            "description": "Present with freshness when your plan's freshness gate cut the window; note says so."
           },
           "note": {
             "type": "string",
@@ -5973,6 +6349,9 @@
                 "properties": {
                   "quote": {
                     "$ref": "#/components/schemas/RefusedQuote"
+                  },
+                  "limit": {
+                    "$ref": "#/components/schemas/Limit"
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -6550,7 +6929,7 @@
         ],
         "operationId": "get_me",
         "summary": "Current API key context",
-        "description": "Available even when the account has exhausted its usage allowance. Returns the credential making the request (key_id, key_label, credential_kind), the masked email of the person, the account whose credits it spends (account: id, name, kind, plan) and the role the person holds on it, the tier, scopes, rate limit, usage with period_resets_at, and account settings. usage.credits is the primary measure: credits from the plan, then the on-demand budget. The row fields restate it at 4 credits a row. settings.transcripts is what a transcript request that names no parameter of its own receives: every key of the account resolves against it.",
+        "description": "Available even when the account has exhausted its usage allowance. Returns the credential making the request (key_id, key_label, credential_kind), the masked email of the person, the account whose credits it spends (account: id, name, kind, plan) and the role the person holds on it, the tier, scopes, rate limit, freshness (where results stop on a plan that reads media after a delay, or null), usage with period_resets_at, and account settings. usage.credits is the primary measure: credits from the plan, then the on-demand budget. The row fields restate it at 4 credits a row. settings.transcripts is what a transcript request that names no parameter of its own receives: every key of the account resolves against it.",
         "security": [
           {
             "bearerAuth": []
@@ -7889,10 +8268,10 @@
                 "ended",
                 "uncertain"
               ],
-              "description": "Filter against the curated known-advertisers dataset. Pro+ only."
+              "description": "Filter against the curated known-advertisers dataset. Pro+ only; on other plans passing it is refused with filter_requires_paid."
             },
             "required": false,
-            "description": "Filter against the curated known-advertisers dataset. Pro+ only.",
+            "description": "Filter against the curated known-advertisers dataset. Pro+ only; on other plans passing it is refused with filter_requires_paid.",
             "name": "status",
             "in": "query"
           },
@@ -7901,10 +8280,10 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 200,
-              "description": "Sponsors to return. Default 100. Pro+ only; other plans receive the free slice."
+              "description": "Sponsors to return. Default 100. Pro+ only; on other plans passing it is refused with filter_requires_paid, and omitting it serves the free slice."
             },
             "required": false,
-            "description": "Sponsors to return. Default 100. Pro+ only; other plans receive the free slice.",
+            "description": "Sponsors to return. Default 100. Pro+ only; on other plans passing it is refused with filter_requires_paid, and omitting it serves the free slice.",
             "name": "limit",
             "in": "query"
           },
@@ -7981,7 +8360,7 @@
         ],
         "operationId": "search",
         "summary": "Retrieve spoken transcript slices for one topic",
-        "description": "Search indexed YouTube and podcast transcripts for short spoken slices. Each result includes spoken text, a watch URL, and a publish date. Scope with channel_ids (or channel) and entity_ids (a person id filters to that person's appearances); narrow to passages about entities with about, to a speaker with by, and to sponsored, organic or mention passages with kind. Every filter takes ids, never names: resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter. Results carry names beside ids (filters.about, filters.by, chunk about and speakers_by). Use one topic per call. Search results include text on every plan within the plan's publication-date window. Explicitly requesting source=arcmira_premium on a plan without Premium transcripts is refused with filter_requires_paid. An after later than the plan's freshness gate is refused with freshness_requires_paid rather than widened. Uses 4 credits per chunk returned past the first 5. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "Search indexed YouTube and podcast transcripts for short spoken slices. Each result includes spoken text, a watch URL, and a publish date. Scope with channel_ids (or channel) and entity_ids (a person id filters to that person's appearances); narrow to passages about entities with about, to a speaker with by, and to sponsored, organic or mention passages with kind. Every filter takes ids, never names: resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter. Results carry names beside ids (filters.about, filters.by, chunk about and speakers_by). Use one topic per call. Search results include text on every plan within the plan's publication-date window. Explicitly requesting source=arcmira_premium on a plan without Premium transcripts is refused with filter_requires_paid. An after later than the plan's freshness gate is refused with freshness_requires_paid rather than widened. A window the gate cut carries freshness (delay_days, served_through), unlock, and a note that says where results on this plan stop. Uses 4 credits per chunk returned past the first 5. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -8201,7 +8580,7 @@
         ],
         "operationId": "get_entity_momentum",
         "summary": "Spoken-web heat for one entity",
-        "description": "Mentions in the last 7 and 30 days against the prior 30, an absolute-delta verdict (accelerating, flat, fading, none), the newest media date, and the top shows in the window. It counts the shows we index, not the whole internet, and it is a count, not a score. On a Pro+ plan the card also carries paid_vs_organic; otherwise that field is absent and access names the gate. Free; uses no credits. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "Mentions in a lookback window of days (7 to 365, default 30) against the same number of days before it, an absolute-delta verdict on that window (accelerating, flat, fading, none), the newest media date, and the top shows in the window. Pass the window the rest of your answer uses: days=90 for a 90-day answer. The fixed 7, 30 and 90 day counts stay on every card. It counts the shows we index, not the whole internet, and it is a count, not a score. On a Pro+ plan the card also carries paid_vs_organic for the window; otherwise that field is absent and access names the gate. On a plan with a freshness gate, the window ends at the cutoff and the card carries freshness, unlock, and a note that says where results stop. Uses 10 credits from your plan at any window, the default included. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -8217,6 +8596,19 @@
             "description": "Entity id, ent_{n} or the numeric id. Merged ids follow their redirect.",
             "name": "id",
             "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 7,
+              "maximum": 365,
+              "default": 30,
+              "description": "Lookback window in days, 7 to 365. Default 30. The card counts mentions in that many days, and in as many days before them, as mentions_window and mentions_prior_window. Pass the window the rest of your answer uses."
+            },
+            "required": false,
+            "description": "Lookback window in days, 7 to 365. Default 30. The card counts mentions in that many days, and in as many days before them, as mentions_window and mentions_prior_window. Pass the window the rest of your answer uses.",
+            "name": "days",
+            "in": "query"
           },
           {
             "schema": {
@@ -8511,7 +8903,7 @@
         ],
         "operationId": "count_mentions",
         "summary": "Ranked catalog counts of who a set of channels mention",
-        "description": "A small ranked table of entity and channel counts, all-time unless after is set. Pass channel_ids for what shows talk about and entity_types to match the question (topic for subjects, person for guests, organization,product for brands). Pass video_ids with one id from GET /v1/channels/{channel_id}/videos for what a single episode mentions. Two or more channel_ids also return shared, the entities on more than one of them ranked by the smallest per-channel count, which is true overlap. An after later than the plan's freshness gate is refused with freshness_requires_paid rather than widened. Uses 4 credits per ranked entry returned past the first 5. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "A small ranked table of entity and channel counts, all-time unless after is set. Pass channel_ids for what shows talk about and entity_types to match the question (topic for subjects, person for guests, organization,product for brands). Pass video_ids with one id from GET /v1/channels/{channel_id}/videos for what a single episode mentions. Two or more channel_ids also return shared, the entities on more than one of them ranked by the smallest per-channel count, which is true overlap. An after later than the plan's freshness gate is refused with freshness_requires_paid rather than widened. A window the gate cut carries freshness (delay_days, served_through), unlock, and a note that says where results on this plan stop. Uses 4 credits per ranked entry returned past the first 5. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -10273,7 +10665,7 @@
         ],
         "operationId": "get_transcript",
         "summary": "Get a video transcript",
-        "description": "Caption reads use 4 credits per started 15 minutes. quality=premium is one read. An owned transcript answers 200 ready at no charge. Otherwise this call starts a Premium transcript of the whole video, 300 credits per started 15 minutes, using credits from the account's plan first and then the account's on-demand budget up to its limit, and answers 202 pending with the job and Retry-After until the transcript is ready. Read again after Retry-After; repeated reads join the same job and never charge twice. When the last Premium transcript for the video failed, the read answers 200 state failed with the job and last_attempt and charges nothing; retry=true starts a new one. When the plan or the budget blocks, 403 paid_plan_required (with unlock) or 402 quota_exceeded or spend_limit_exceeded carries the price in quote and nothing is charged. A default-premium account with nothing owned reads captions with a note. start/end only trim the returned content; language selects caption tracks, timestamps=false returns paragraphs. Premium lines carry speaker and index, and the body carries speakers and revision.",
+        "description": "Caption reads use 4 credits per started 15 minutes. quality=premium is one read. An owned transcript answers 200 ready at no charge. Otherwise this call starts a Premium transcript of the whole video, 300 credits per started 15 minutes, using credits from the account's plan first and then the account's on-demand budget up to its limit, and answers 202 pending with the job and Retry-After until the transcript is ready. Read again after Retry-After; repeated reads join the same job and never charge twice. When the last Premium transcript for the video failed, the read answers 200 state failed with the job and last_attempt and charges nothing; retry=true starts a new one. When the plan or the budget blocks, 403 paid_plan_required (with unlock) or 402 quota_exceeded or spend_limit_exceeded carries the price in quote and the limit it met in limit, and nothing is charged. A default-premium account with nothing owned reads captions with a note. On captions, start and end set the billed window: 4 credits per started 15 minutes of end minus start. On Premium they only trim the returned content, and the charge is the whole video. language selects caption tracks, timestamps=false returns paragraphs. Premium lines carry speaker and index, and the body carries speakers and revision.",
         "security": [
           {
             "bearerAuth": []
@@ -10462,7 +10854,7 @@
             "$ref": "#/components/responses/AuthenticationError"
           },
           "402": {
-            "description": "quota_exceeded or spend_limit_exceeded. The plan includes Premium but the credits left on the plan and the on-demand budget do not cover this video; quote carries the refused price and nothing was charged.",
+            "description": "quota_exceeded, spend_limit_exceeded, member_limit, on_demand_paused or fair_use_cap. The plan includes Premium but the credits left on the plan and the on-demand budget do not cover this video; quote carries the refused price, limit carries the limit it met when the server holds one, and nothing was charged.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"

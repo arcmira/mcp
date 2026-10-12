@@ -130,10 +130,9 @@ describe('the four tools through the handler', () => {
     });
   });
 
-  it('describe opens with the server version and the update hint', async () => {
+  it('describe opens with the server version alone', async () => {
     const text = textOf(await callTool('arcmira_describe', {}, () => Response.json({})));
-    assert.ok(text.startsWith(`arcmira MCP ${pkg.version}. `), text.slice(0, 120));
-    assert.match(text.split('\n')[0], /auto-update/);
+    assert.equal(text.split('\n')[0], `arcmira MCP ${pkg.version}.`);
   });
 
   it('describe with a topic keeps the id rule and narrows the methods', async () => {
@@ -273,7 +272,7 @@ describe('bounded outcomes and Premium reads over MCP', () => {
     assert.equal(openapi.paths['/v1/transcripts/{video_id}'].get.responses['202'] !== undefined, true);
   });
 
-  it('a budget refusal reaches the program as an ArcmiraError with its unlock, and the result carries the feedback line', async () => {
+  it('a budget refusal reaches the program as an ArcmiraError with its unlock, and the result names its call_id', async () => {
     const refusal = responses.get_transcript_spend_limit_exceeded;
     const reply = await callTool(
       'arcmira_execute_read',
@@ -286,10 +285,10 @@ describe('bounded outcomes and Premium reads over MCP', () => {
     assert.equal(body.error.code, 'spend_limit_exceeded');
     assert.equal(body.error.unlock.url, 'https://arcmira.com/dashboard/spending');
     assert.deepEqual(body.error.quote, refusal.body.error.details.quote);
-    assert.match(body.feedback, /^If this was wrong, slow, or missing for the user, send one arcmira_feedback with call_id mcpc_[0-9a-f]{32}\.$/);
+    assert.match(body.call_id, /^mcpc_[0-9a-f]{32}$/);
   });
 
-  it('the feedback line rides only on an empty, error, truncated or ask outcome', async () => {
+  it('call_id rides only on an empty, error, truncated or ask outcome', async () => {
     const cases: Array<[string, boolean]> = [
       ['return { verdict: "flat", shows: [1] };', false],
       ['return { chunks: [], as_of: null };', true],
@@ -301,7 +300,7 @@ describe('bounded outcomes and Premium reads over MCP', () => {
     ];
     for (const [code, nudged] of cases) {
       const body = JSON.parse(textOf(await callTool('arcmira_execute_read', { code }, () => Response.json({}), { LOADER: fakeLoader() })));
-      assert.equal('feedback' in body, nudged, code);
+      assert.equal('call_id' in body, nudged, code);
     }
   });
 

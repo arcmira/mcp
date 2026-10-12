@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.10.7: Clear language
+
+The agent text states facts once, matches the API, and fits where hosts read it. Prompted by the Anthropic directory review (2026-10-11) and an audit of every surface the agent reads.
+
+- Usage is stated as facts, not as instructions on what to ask or say. The server instructions, the reference, the `arcmira_execute_read` description, the README and every skill drop "never ask for cents", "do not ask", "without another confirmation" and the scripted replies to a blocked read. Metered reads use credits from the account's plan, then the on-demand budget Arcmira enforces; a search uses 4 credits per passage it returns past the first 5; a Premium read that starts a transcription reports its `charge`; a blocked read fails with the API's `code`, `message` and, when one exists, `unlock`. `manifest:check`, the skill build and the tests refuse the old wording on every surface (`SCRIPTED_SPEND`).
+- Each rule has one copy. The usage rule appears once in describe (the Premium note no longer embeds it), once in the server instructions and once in the `arcmira` skill. The monitor procedure is one constant, `MONITOR_RULE`, carried by describe, the `arcmira` skill and `company-watch`; the `arcmira_execute_write` description points at it. The id rule, the captions rule, the coverage note and the feedback line each have one copy per surface. Task skills keep three pick lines and the pick block in each program, and drop the shared boilerplate.
+- The server instructions fit Claude Code's 2,048-character cut: 1,995 characters, down from 4,132, which Claude Code cut mid-sentence. `manifest:check` and a test hold them to 2,000. describe drops from 25,161 to 23,124 characters.
+- The default window is the last 90 days unless the user names one, narrowed when a name returns more than the answer needs. Describe and every worked example use it. On a plan with a delay, `arcmira.status()` reports `freshness { delay_days, served_through }`, and reads the delay cut say where results stop.
+- `arcmira.momentum(entityId, { days })` takes a window from 7 to 365 days (default 30); the verdict and top shows cover it, and each call uses 10 credits at any window. The resolve rules in describe are the 0.10.6 wording again, and the server instructions return `ask.options` for the user to pick: the shorter wording lost names-only eval tasks. describe adds that a name may already be followed by a monitor.
+- A blocked read keeps the API's `details.limit` (`kind`, `amount`, `used`, `unit`, `resets_at`) as `ArcmiraError.limit`, and output capping keeps `limit` and `freshness`.
+- Claims now match the API: `recommendations` takes `limit` 1..100 (default 10); a captions read uses 4 credits per started 15 minutes of its window; `sponsors` takes `minAdReads`, `status` (`active`, `lapsed`, `ended` or `uncertain`) and `limit` on Pro+ only, and other plans throw `filter_requires_paid`; the error list gains `freshness_requires_paid`, `pagination_gated`, `transcript_unavailable` and `transcript_fetching` and loses the unreachable `tracker_create_retired`; and credits come from the account's plan, not the user's.
+- `arcmira.quote(video)` is described as a price check, not a spoken quote, and uses no credits.
+- Monitors are offered as one fact: monitors can follow the entities a research turn found, and each alert uses 25 credits from the account's plan, then its on-demand budget. The scripted delivery dialog and "(default daily)" are gone; the API's default frequency is realtime, and `monitors.create` still requires `notify_frequency`.
+- Tool results carry facts, not instructions. An empty, error, truncated or ask result names its `call_id` instead of a feedback sentence. A pending Premium read says the same read returns the lines once ready. A failed one says `retry: true` uses credits again and is sent only when the user asks for another attempt.
+- A Premium read that finishes within the client's wait keeps the `charge` of the transcription it started.
+- describe opens with the version alone. Speaker-coverage examples that would go stale are gone. Upgrade notes moved from the README to this changelog.
+- Annotations are unchanged: `arcmira_execute_read` has been `readOnlyHint: false` since 0.10.4.
+
 ## 0.10.6
 
 Follows the `402 on_demand_paused` refusal added to `/v1` on 2026-10-08.
@@ -178,6 +196,8 @@ Why: on 20 tasks and three models, code mode answered 59 of 60 against 56 of 60 
 The old tool names are retired, not hidden: a `tools/call` for one answers `tool_retired` with the two tools named, so a host with a cached list learns the change. The server instructions, landing document and server card describe the two tools; the card carries `instructions`. `search` sends the new `by` (speaker ids) and `kind` filters, which /v1 is adding; the manifest check warns on them until the OpenAPI document names them.
 
 New: `plugins/arcmira`, an Apache-2.0 plugin with manifests for Claude Code, Codex, Cursor, Agent Plugins and Gemini, bundling the MCP URL and one skill generated from `src/reference.ts` (`pnpm skill:build`; CI checks drift). Marketplace manifests at the repo root make `claude plugin marketplace add arcmira/mcp` work. `scripts/check-manifest.ts` now replays every client method against the live OpenAPI document; `scripts/smoke.ts` runs 22 probes through the two tools. `wrangler.jsonc` gains the `worker_loaders` binding `LOADER`.
+
+Each old tool is one client method: `resolve_entities` is `arcmira.resolve`, `search_transcripts` is `arcmira.search`, `list_mentions` is `arcmira.mentions`, `entity_momentum` is `arcmira.momentum`, `count_occurrences` is `arcmira.occurrences`, `list_episodes` is `arcmira.episodes`, `list_sponsors` is `arcmira.sponsors`, `list_recommendations` is `arcmira.recommendations`, `index_status` is `arcmira.status`, `get_transcript` is `arcmira.transcript`. The `recency` shorthand became `arcmira.daysAgo(n)`.
 
 ## 0.6.0
 

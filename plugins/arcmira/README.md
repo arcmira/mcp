@@ -10,7 +10,7 @@ Arcmira is the search engine for the spoken web. This plugin connects your codin
 
 - The remote Arcmira MCP server at `https://mcp.arcmira.com/mcp`. It exposes four tools: `arcmira_describe` returns the client reference, `arcmira_execute_read` runs JavaScript that reads, Premium transcripts included, `arcmira_execute_write` saves what you follow to your monitors, and `arcmira_feedback` tells Arcmira what went wrong. The host signs you in through OAuth on first use.
 - The `arcmira` skill, which teaches the agent to resolve names to ids, run one program per question, and cite the date the index runs through.
-- Five task skills, each with a worked program and the bar for a good answer: `sponsor-research`, `company-watch` (sets up a monitor), `find-quotes`, `person-research`, `compare-shows`. Each starts from the names you give, says which entity it used, and offers to save what it found to a monitor.
+- Five task skills, each with a worked program and the bar for a good answer: `sponsor-research`, `company-watch` (sets up a monitor), `find-quotes`, `person-research`, `compare-shows`. Each starts from the names you give, says which entity it used, and ends by noting that a monitor can follow what it found.
 
 The plugin runs no local code. The agent sends your questions, as JavaScript programs, to `mcp.arcmira.com`, which reads the Arcmira API on your account.
 

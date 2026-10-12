@@ -42,6 +42,13 @@ describe('the sandbox client', () => {
     assert.equal(urls.length, 0);
   });
 
+  it('momentum takes days from 7 to 365 and refuses anything else before a call', async () => {
+    const { urls, fetch } = recording({});
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com/', fetch });
+    for (const days of [6, 366, 30.5, '90']) await assert.rejects(arcmira.momentum('ent_14', { days }), (e: Error & { code: string }) => e.code === 'invalid_request');
+    assert.equal(urls.length, 0);
+  });
+
   it('maps every method to its v1 route with the CLI flag names as query keys', async () => {
     const { urls, fetch } = recording({ mentions: [], recommendations: [], chunks: [], rows: [], sponsors: [], episodes: [] });
     const { arcmira, meter } = mod.createArcmira({ base: 'https://api.arcmira.com/', fetch });
@@ -49,6 +56,7 @@ describe('the sandbox client', () => {
     await arcmira.search({ query: 'cards', channelIds: [TBPN], after: '2026-08-01', limit: 3 });
     await arcmira.mentions({ entityId: 'ent_14', channelId: TBPN, before: '2026-09-01T00:00:00Z' });
     await arcmira.momentum('ent_14');
+    await arcmira.momentum('ent_14', { days: 90 });
     await arcmira.sponsors(TBPN, { minAdReads: 3 });
     await arcmira.recommendations('ent_14', { kind: 'organic' });
     await arcmira.recommendations('ent_14');
@@ -65,6 +73,7 @@ describe('the sandbox client', () => {
       `/v1/search?q=cards&channel_ids=${TBPN}&after=2026-08-01&limit=3`,
       `/v1/mentions?entity_id=ent_14&channel_id=${TBPN}&before=2026-09-01T00%3A00%3A00Z&limit=10`,
       '/v1/entities/ent_14/momentum?',
+      '/v1/entities/ent_14/momentum?days=90',
       `/v1/channels/${TBPN}/sponsors?min_ad_reads=3`,
       '/v1/recommendations?entity_id=ent_14&class=organic&limit=10',
       '/v1/recommendations?entity_id=ent_14&limit=10',
@@ -76,7 +85,7 @@ describe('the sandbox client', () => {
       '/v1/me?',
       '/v1/transcripts/dQw4w9WgXcQ/quote?',
     ]);
-    assert.equal(meter.calls, 14);
+    assert.equal(meter.calls, 15);
   });
 
   it('monitor methods: reads in either access, writes only with access write, each write a JSON body with its own Idempotency-Key', async () => {
@@ -249,10 +258,32 @@ describe('Premium reads in the sandbox client', () => {
 
   it('a Premium read of a video not transcribed yet is one read: 202 with the job, then the lines at Retry-After', async () => {
     const { arcmira, sent, slept } = api({ [PREMIUM]: [responses.get_transcript_pending, responses.get_transcript_premium_ready] });
-    assert.deepEqual(await arcmira.transcript('https://www.youtube.com/watch?v=dQw4w9WgXcQ', { quality: 'premium' }), responses.get_transcript_premium_ready.body);
+    assert.deepEqual(await arcmira.transcript('https://www.youtube.com/watch?v=dQw4w9WgXcQ', { quality: 'premium' }), { ...responses.get_transcript_premium_ready.body, charge: job.charge });
     assert.deepEqual(sent.map((c) => c.route), [PREMIUM, PREMIUM]);
     assert.ok(sent.every((c) => c.body === null && c.key === null));
     assert.deepEqual(slept, [22]);
+  });
+
+  it('a refusal carries the limit the API reported', async () => {
+    const refusal = responses.get_transcript_spend_limit_exceeded;
+    const limit = { kind: 'on_demand_budget', unit: 'credits', amount: 5000, used: 5000, resets_at: '2026-11-01' };
+    const { arcmira } = api({ [PREMIUM]: [{ ...refusal, body: { error: { ...refusal.body.error, details: { ...refusal.body.error.details, limit } } } }] });
+    await assert.rejects(arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' }), (e: Error & { limit: unknown }) => {
+      assert.deepEqual(e.limit, limit);
+      return true;
+    });
+  });
+
+  it('a Premium read that started the transcription keeps its charge on the ready result', async () => {
+    const { arcmira } = api({ [PREMIUM]: [responses.get_transcript_pending, responses.get_transcript_premium_ready] });
+    const t = await arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' });
+    assert.equal(t.state, 'ready');
+    assert.deepEqual(t.charge, job.charge);
+  });
+
+  it('a Premium read of a video already transcribed carries no charge', async () => {
+    const { arcmira } = api({ [PREMIUM]: [responses.get_transcript_premium_ready] });
+    assert.equal((await arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' })).charge, undefined);
   });
 
   it('still pending near 22 seconds into the program, it returns the job with eta_seconds and says to read again; it honors Retry-After', async () => {
@@ -275,12 +306,12 @@ describe('Premium reads in the sandbox client', () => {
     assert.equal(sent.length, 4);
   });
 
-  it('a failed purchase is terminal and never bought again unless the read sends retry, once', async () => {
+  it('a failed transcription is terminal and never charged again unless the read sends retry, once', async () => {
     for (const failed of [responses.get_transcript_failed, responses.get_transcript_pending_failed_job]) {
       const { arcmira, sent, slept } = api({ [PREMIUM]: [failed] });
       const t = await arcmira.transcript('dQw4w9WgXcQ', { quality: 'premium' });
       assert.ok(t.state === 'failed' || t.state === 'refunded');
-      assert.match(t.note, /never substitute captions.*retry: true/);
+      assert.match(t.note, /retry: true.*only when the user asks for another attempt/);
       assert.equal(sent.length, 1);
       assert.deepEqual(slept, []);
     }

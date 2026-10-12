@@ -9,7 +9,7 @@
  * several entities fit, says when it assumed one, and takes the pick back through ID on the second run.
  */
 
-import { LINKS } from './reference.ts';
+import { MONITOR_RULE } from './reference.ts';
 
 export interface TaskSkill {
   name: string;
@@ -22,25 +22,19 @@ export interface TaskSkill {
   ids: string[];
   /** The procedure, when the task is more than one program. */
   steps?: string[];
+  /** A shared rule from reference.ts the task carries whole, after its steps. */
+  rule?: string;
   /** write: the block runs in arcmira_execute_write; every other block runs in arcmira_execute_read. */
   programs: ReadonlyArray<{ title: string; code: string; tool?: 'write' }>;
   good: string[];
   traps: string[];
 }
 
-/** The offer every skill closes with when its research found entities. */
-export const SAVE_OFFER =
-  'When the answer named companies, people, shows or topics worth following, offer once to save them to a monitor so updates arrive on their own. On a yes, follow the `company-watch` skill: it lists the user\'s monitors first and asks how they want updates.';
-
-/** How every task skill turns a name into the one entity the user meant. */
+/** How every task skill turns a name into the one entity the user meant; the pick block in each program does the rest. */
 export const PICK_STEPS = [
-  'Resolve the exact name the user said, and pass their own words about it as `context` when they gave any ("Sam, the My First Million co-host" is `resolve("Sam", { context: "the My First Million co-host" })`). Context is only words from the user\'s message, never your guess: a bare "Theo" is `resolve("Theo")`, and its ask goes back to the user.',
-  '`best`: the name means that row. Use it and name it.',
-  '`suggested`: no row is certain but one stands out. Use it and tell the user you assumed it, quoting `suggested.evidence` ("Sam Altman, assuming the most mentioned Sam: 4,399 appearances, 11x the next").',
-  '`ask`: several rows fit and none stands out. Return `ask.options` for the user to pick and stop, or check every option id against the data in one program (occurrences or momentum with all the ids) and answer per row, naming each.',
-  'None of the three: the name is not in the Arcmira index. Say so and ask for another spelling or a link; never answer for a different entity without saying so.',
-  'Say which entity the answer is about (name, type, id) in the answer. Never switch entities silently.',
-  'Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element). Drop rows about another sense.',
+  'Resolve the exact name the user said, with their own words about it as `context` (a bare "Theo" has none).',
+  '`best` and `suggested` give the id. A `suggested` pick is an assumption: the answer names it, with `suggested.evidence` as the reason.',
+  '`ask`: several entities fit, and `ask.options` goes back to the user. No answer at all: the name is not in the index.',
 ];
 
 /** The guard every program opens with: ask options when several rows fit, else the one id and whether it was assumed. ID reruns it with the pick. */
@@ -88,7 +82,7 @@ const after = arcmira.daysAgo(90);
 const reads = [];
 let cursor, entity, window;
 do {
-  const page = await arcmira.recommendations(id, { kind: "sponsored", after, limit: 50, cursor });
+  const page = await arcmira.recommendations(id, { kind: "sponsored", after, limit: 100, cursor });
   entity = page.entity;
   window = page.window;
   reads.push(...page.recommendations);
@@ -112,14 +106,14 @@ return {
     ],
     good: [
       'Names the brand or show it used, with its type and id, and any look-alike it set aside.',
-      'Ranks sponsors (or shows) by ad reads and gives the counts, first and last seen dates, and active or lapsed.',
+      'Ranks sponsors (or shows) by ad reads and gives the counts, first and last seen dates, and the sponsor status.',
       'States the window and the as-of date, and that counts cover the shows Arcmira indexes.',
       'Quotes one ad read verbatim with its promo code when there is one, and links each name to the `page` the result carries.',
     ],
     traps: [
       '`recommendations` can return `recommendations_not_enabled`. Explain the account-access limit and required tier reported by the API; a channel sponsor list does not answer which shows recommend a brand.',
       'An ad read is sponsored; an unpaid on-air endorsement is `kind: "organic"`. Do not mix them in one count.',
-      'Page with `cursor` until `has_more` is false before you count reads; one page is at most 50 rows.',
+      'Page with `cursor` until `has_more` is false before you count reads; one page is at most 100 rows.',
     ],
   },
   {
@@ -127,7 +121,7 @@ return {
     description: 'Watches a company or topic on podcasts and YouTube: what was said lately (shows, counts, momentum, quotes), then an Arcmira monitor to keep following it.',
     title: 'Company watch',
     summary:
-      'Answers "what was said about X lately" in one program, over the last 30 days unless the user names a window: episode counts per show from `occurrences`, the trend from `momentum`, the catalog notes from `mentions`, and quotes from `search` about the entity. Then it turns "keep me posted on X" into a monitor that delivers. Research picks the entity ids: a company or person through `resolve`, a topic through each of its spellings. The user\'s own monitors decide where they go: suggest one that fits, or create one after asking how they want updates. Only the save runs in `arcmira_execute_write`; everything before it reads.',
+      'Answers "what was said about X lately" in one program, over the last 90 days unless the user names a window: episode counts per show from `occurrences`, the trend from `momentum`, the catalog notes from `mentions`, and quotes from `search` about the entity. Then it turns "keep me posted on X" into a monitor that delivers. Research picks the entity ids: a company or person through `resolve`, a topic through each of its spellings. The user\'s own monitors decide where they go: one that fits, or a new one the user confirms. Only the save runs in `arcmira_execute_write`; everything before it reads.',
     asks: [
       'what is being said about a company, product or brand lately, this month or this week, and is talk rising or fading',
       'did any show mention us, a competitor or an investor lately',
@@ -138,23 +132,18 @@ return {
     ids: [
       'Resolve a company with no type (the catalog types some companies as product) and a person with `{ type: "person" }`. A company name is often a common word ("Linear", "Ramp", "ICE"): name each pick, for example "Linear, the software company (product, ent_279443)", so the user can catch a wrong one before it is answered or saved.',
       'A topic has spellings. Resolve each variant with `{ type: "topic" }` ("data centers", "datacenters", "data centre", "data center") and keep every distinct id: one tracker per spelling catches what one would miss.',
-      'Never assume a monitor exists ("Competitors" may not). Read `arcmira.monitors.list()` and the trackers of each candidate before suggesting one, and never add an entity a monitor already follows.',
     ],
     steps: [
-      'What was said lately: run the first program and answer. Then offer to keep following the entity with a monitor. Each alert uses 25 credits from your plan, then your on-demand budget; creating a monitor is free. On a yes, go on.',
-      'Find what to follow and the monitors that could hold it: the second program, in `arcmira_execute_read`. Reuse ids the research already found instead of resolving again.',
-      'A monitor fits when its name or its trackers match the subject. Suggest it by name ("Add Linear to your Dev tools monitor?") and wait for a yes.',
-      'None fits: ask how the user wants updates, one question at a time, each with a default they can accept with "yes". First where: email to the account address (default) or Slack. Then when: as it happens, an hourly digest, or a daily digest (default daily). Then the name (default: the subject, like "Data center discourse").',
-      `Slack: the first program lists the connected workspaces (\`slack\`). With one, deliver there: \`notify_slack: true\`, its id as \`slack_integration_id\` and its \`default_channel_id\` as \`slack_channel_id\`; with several, ask which. With none, link ${LINKS.integrations} to connect one, and save with email for now, saying so; switch it later with \`arcmira.monitors.update\`.`,
-      'Save with the third program, in `arcmira_execute_write`: create the monitor only when none fits (or set Slack on the one that fits), then `addEntities` with every id in one call. A name resolve found nothing for can still be followed by its exact name with `addName` (a show by its UC id), which catches it once a show says it.',
-      'Tell the user plainly about every id that did not attach. `entity_not_found`: Arcmira has no such entity; offer another spelling. `entity_type_not_trackable`: that kind of entity cannot be followed. `tracker_limit_reached`: the plan\'s tracker limit is full; pausing or removing trackers in the dashboard, or a higher plan, makes room. `tracked_in_another_monitor`: say which monitor already follows it (`current_monitor_name`) and ask before moving it; on a yes, `arcmira.monitors.attachTrackers(monitorId, [tracker_id])` in `arcmira_execute_write` moves it. When a result carries `canonical_entity_id`, the id was merged into that one; name the canonical entity.',
-      'Close with what arrives, where and when, and that `arcmira.monitors.update(id, { paused: true })` pauses it; nothing is deleted.',
+      'What was said lately: run the first program and answer.',
+      'To follow the subject: the second program, in `arcmira_execute_read`, resolves every name and topic spelling (reuse ids the research already found) and reads the user\'s monitors, what each follows, and the connected Slack workspaces.',
+      'To save: the third program, in `arcmira_execute_write`, uses the monitor that fits or creates one, follows every id with `addEntities` and every unresolved name with `addName`, and returns each id that did not attach with its reason and `current_monitor_name`. A `canonical_entity_id` means the id was merged into that entity.',
     ],
+    rule: MONITOR_RULE,
     programs: [
       {
-        title: 'The last 30 days about one company (arcmira_execute_read)',
+        title: 'The last 90 days about one company (arcmira_execute_read)',
         code: `${pick('Linear')}
-const after = arcmira.daysAgo(30);   // the user's window when they name one ("this week": 7)
+const after = arcmira.daysAgo(90);   // the user's window when they name one ("this week": 7)
 const [m, occ, notes] = await Promise.all([
   arcmira.momentum(id),
   arcmira.occurrences({ entityIds: [id], after, limit: 10 }),
@@ -227,17 +216,15 @@ return {
       'For what was said: opens with the entity (name, type, id), gives the verdict with the 7-day and 30-day counts and `as_of`, the shows with episode counts for the stated window, and two or three quotes in the speakers\' words, each with show, date and `watch_url`.',
       'Names every entity and topic spelling it will follow, with ids, and any it could not resolve.',
       'Suggests an existing monitor only after reading the user\'s monitors, and says which entities it already follows.',
-      'Asks the delivery questions one at a time with a default each; for Slack, uses the connected workspace, or links the connection page and says the monitor uses email until then.',
+      'Confirms the monitor and its delivery before saving; for Slack, uses a connected workspace, or links the connection page and says the monitor uses email until then.',
       'Names every id that did not attach and why, and asks before moving a tracker another monitor holds.',
       'After saving, says what arrives, where and how often, and how to pause it.',
     ],
     traps: [
       'Counts measure the shows Arcmira indexes, not the internet. An empty window means no indexed show said it; cite `as_of` before saying nothing happened. Count episodes with `occurrences`, never by counting `mentions` rows.',
       'Read episode titles and notes before asserting a lone mention: a title far from the company is a homonym the catalog mislabelled.',
-      'Never create or change a monitor before the user agreed to where it goes and how it delivers.',
       'A monitor id comes from `monitors.list()`, never from a name the user said.',
-      '`tracked_in_another_monitor` leaves the tracker where it is. Never move it without a yes.',
-      '`insufficient_scope` means the sign-in lacks monitors:write or trackers:write: tell the user to reconnect Arcmira and allow monitor changes.',
+      '`insufficient_scope`: the sign-in lacks monitors:write or trackers:write; reconnecting Arcmira with monitor changes allowed lifts it.',
       'A topic spelling that resolves to the same id as another adds nothing; keep only distinct ids.',
     ],
   },
@@ -246,7 +233,7 @@ return {
     description: 'Finds exact spoken quotes and clip-ready moments on podcasts and YouTube: verbatim words, speaker, date, a timestamped link, clip start and end. Uses arcmira.',
     title: 'Find quotes and clip moments',
     summary:
-      '`search` finds the passage; `transcript` with `start` and `end` returns the exact lines around it with second offsets, which give the verbatim quote and the clip boundaries. Caption reads meter only the returned lines. A Premium read uses credits for the whole video; start/end only select the returned window.',
+      '`search` finds the passage; `transcript` with `start` and `end` returns the exact lines around it with second offsets, which give the verbatim quote and the clip boundaries.',
     asks: ['find a quote, with the source and a timestamp', 'the moment a show talked about a topic, to clip or cite', 'what a specific person said about a topic, in their words'],
     ids: [
       'A speaker resolves with `{ type: "person" }`; pass the id as `speakerIds` (who said it). A person or brand the passage is about goes in `about`. A show goes in `channelIds` as its UC id.',
@@ -285,7 +272,7 @@ return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of
       '`search` ranks by the words in `query`; put the distinctive words of the phrase there, not a paraphrase.',
       'A chunk found with `speakerIds` also holds other people\'s lines. Quote only lines that start with the speaker\'s name ("Chamath Palihapitiya: ..."), never the whole passage.',
       'Caption lines are machine text: fix nothing inside the quotation marks. A premium transcript (`quality: "premium"`, paid plans) adds speaker ids into `speakers[]`.',
-      'Keep transcript windows short (`start`, `end`): a whole episode bills every line.',
+      'A caption read uses 4 credits per started 15 minutes of its `start`/`end` window, and of the whole episode without one. A Premium read uses credits for the whole video whatever the window.',
       'Some videos have no readable caption track yet (`transcript_unavailable`, `transcript_fetching`); quote the search chunk `text` for those and say the words come from the search passage.',
     ],
   },
@@ -308,7 +295,7 @@ const [m, rows, own] = await Promise.all([
   arcmira.mentions({ entityId: id, after: arcmira.daysAgo(90), limit: 40 }),
   arcmira.search({ query: "AI", speakerIds: [id], after: arcmira.daysAgo(180), limit: 5 }),
 ]);
-const about = await arcmira.search({ query: m.entity.name, about: [id], after: arcmira.daysAgo(30), limit: 3 });
+const about = await arcmira.search({ query: m.entity.name, about: [id], after: arcmira.daysAgo(90), limit: 3 });
 const appeared = new Map();
 for (const x of rows.mentions) if (x.is_appearance) appeared.set(x.media.video_id, { show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at });
 let fromAppearance = null;   // no speaker-tagged chunks: read their newest appearance instead
@@ -340,7 +327,7 @@ return {
       'Lists recent episodes they appeared on, and ends with a few questions or themes that follow from the quotes when the user is prepping.',
     ],
     traps: [
-      'A search with `about` returns other people talking; only `speakerIds` returns the person\'s own words. Speaker tags cover part of the index (Sam Altman has none), so when the speaker search is empty, read a window of an episode they appeared on and say the lines come from their appearance, since caption lines do not name the speaker.',
+      'A search with `about` returns other people talking; only `speakerIds` returns the person\'s own words. Speaker tags cover part of the index, so when the speaker search is empty, read a window of an episode they appeared on and say the lines come from their appearance, since caption lines do not name the speaker.',
       'A chunk found with `speakerIds` also holds other people\'s lines. Quote only lines that start with the person\'s name.',
       'Put the user\'s topic in `query` for the speaker search (it needs a word or phrase of two or more characters).',
       'Mentions and momentum count the shows Arcmira indexes, not all media.',
@@ -359,7 +346,7 @@ return {
     ],
     programs: [
       {
-        title: 'Two shows, last 30 days',
+        title: 'Two shows, last 90 days',
         code: `const SHOWS = ["TBPN", "All-In Podcast"], IDS = [null, null];   // after an ask, put the picked option's channel_id in IDS and run again
 const ids = [], names = [], assumed = [];
 for (const [i, n] of SHOWS.entries()) {
@@ -371,7 +358,7 @@ for (const [i, n] of SHOWS.entries()) {
   names.push(e.name);
   assumed.push(r.suggested ? r.suggested.evidence : null);
 }
-const after = arcmira.daysAgo(30);
+const after = arcmira.daysAgo(90);
 const [s0, s1, e0, e1, occ, sp0, sp1] = await Promise.all([
   arcmira.status({ channelId: ids[0] }), arcmira.status({ channelId: ids[1] }),
   arcmira.episodes(ids[0], { limit: 1 }), arcmira.episodes(ids[1], { limit: 1 }),

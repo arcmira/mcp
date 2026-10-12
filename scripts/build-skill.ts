@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ACCESS_GUIDANCE, BUDGET_RULE, COVERAGE_GUIDANCE, DOCS, FEEDBACK_LINE, ID_RULE, MONITOR_RULE } from '../src/reference.ts';
-import { PICK_STEPS, SAVE_OFFER, TASK_SKILLS, type TaskSkill } from '../src/skills.ts';
+import { BUDGET_RULE, COVERAGE_GUIDANCE, DOCS, FEEDBACK_LINE, ID_RULE_ANSWERS, ID_RULE_CODE, ID_RULE_HEAD, MONITOR_OFFER, MONITOR_RULE, SCRIPTED_SPEND } from '../src/reference.ts';
+import { PICK_STEPS, TASK_SKILLS, type TaskSkill } from '../src/skills.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SKILLS_DIR = join(ROOT, 'plugins/arcmira/skills');
@@ -11,12 +11,14 @@ const NAME = 'arcmira';
 const DESCRIPTION =
   'Answers what YouTube shows and podcasts said: transcripts, who was mentioned, sponsors, recommendations, momentum. Use for the arcmira MCP server or CLI.';
 
-/** How every skill ends: the save-to-monitor offer, then the feedback line. */
-const CLOSING = `## After the answer
+/** How every skill ends: the monitor line, where company-watch sets one up, then the feedback line. */
+function closing(name: string): string {
+  return `## After the answer
 
-${SAVE_OFFER}
+${MONITOR_OFFER}${name === 'company-watch' ? '' : ' The `company-watch` skill sets one up.'}
 
 ${FEEDBACK_LINE}`;
+}
 
 /** How a program that opens with the pick block is rerun after an ask. */
 const PICK_INTRO = " It opens with the pick: set `CONTEXT` to the user's own words about the name. When several entities fit it returns `ask` and runs nothing else. Show those options to the user, then run it again with `ID` set to the pick.";
@@ -63,15 +65,14 @@ Anything else (one video's transcript, a topic across shows, who recommends a pr
 ## Procedure
 
 1. Call \`arcmira_describe\` once before your first program. It is current on every call; \`arcmira_describe({ topic })\` narrows it to one method.
-2. Resolve every name in the question with \`arcmira.resolve\`, passing the user's own words about the name as \`context\` when they gave any. Filters take ids only.
-3. Act on the one answer resolve gives. \`best\`: use it and name it. \`suggested\`: use it and tell the user you assumed it, quoting \`suggested.evidence\`. \`ask\`: return \`ask.options\` for the user to pick and stop, or check every option id against the data in one program and answer per row. None of the three: the name is not in the index; say so and ask for another spelling or a link. Say in the answer which entity you used.
-4. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
-5. Write one \`arcmira_execute_read\` program per question. Resolve, check, and run every query the question needs inside that one program.
-6. Return only the fields the answer needs, not whole responses.
-7. ${COVERAGE_GUIDANCE} Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`. When the user names no window, use the last 30 days; a week of the index is often thin.
-8. Link each name in the answer to the \`page\` field the result carries. Do not build arcmira.com URLs by hand.
-9. Premium: \`arcmira.transcript(video, { quality: "premium" })\` returns the lines. When the video is not transcribed yet, that read uses credits from the user's plan, then the on-demand budget. A Premium request is the go-ahead; do not ask. Still pending: tell the user the \`eta_seconds\` it returns, then read again once it has passed.
-10. ${BUDGET_RULE}
+2. Resolve every name in the question first, as the ID rule below says. Filters take ids only.
+3. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
+4. Write one \`arcmira_execute_read\` program per question. Resolve, check, and run every query the question needs inside that one program.
+5. Return only the fields the answer needs, not whole responses.
+6. ${COVERAGE_GUIDANCE} Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`. When the user names no window, use the last 90 days, and narrow it when a name returns more than the answer needs.
+7. Link each name in the answer to the \`page\` field the result carries. Do not build arcmira.com URLs by hand.
+8. Premium: \`arcmira.transcript(video, { quality: "premium" })\` returns the lines. When the video is not transcribed yet, that read starts a transcription. Still pending: \`eta_seconds\` says about how long; read again once it has passed.
+9. ${BUDGET_RULE}
 
 ## Monitors
 
@@ -79,13 +80,13 @@ ${MONITOR_RULE}
 
 ## The ID rule
 
-\`\`\`
-${ID_RULE}
+${ID_RULE_HEAD}
+
+\`\`\`javascript
+${ID_RULE_CODE}
 \`\`\`
 
-## Access
-
-${ACCESS_GUIDANCE}
+${ID_RULE_ANSWERS}
 
 ## Docs
 
@@ -95,7 +96,7 @@ ${ACCESS_GUIDANCE}
 - OpenAPI: ${DOCS.openapi}
 - Agent index: ${DOCS.llms}
 
-${CLOSING}
+${closing(NAME)}
 `;
   return text;
 }
@@ -110,7 +111,7 @@ description: ${JSON.stringify(t.description)}
 
 ${t.summary}
 
-Use it through the arcmira MCP server (\`arcmira_describe\`, then \`arcmira_execute_read\` with a program) or the arcmira CLI, whose commands have the same names. \`arcmira_describe\` carries the full method reference (CLI: \`arcmira <command> --help\`), and the \`arcmira\` skill the shared procedure.
+Run each program with \`arcmira_execute_read\`; \`arcmira_describe\` has the method reference.
 
 ## When to use
 
@@ -125,10 +126,10 @@ ${PICK_STEPS.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 For this task:
 
 ${t.ids.map((s) => `- ${s}`).join('\n')}
-${t.steps ? `\n## Steps\n\n${t.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n` : ''}
+${t.steps ? `\n## Steps\n\n${t.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}\n` : ''}${t.rule ? `\n${t.rule}\n` : ''}
 ## Worked program
 
-Pass each block to \`arcmira_execute_read\` as one program (a block marked arcmira_execute_write goes to that tool), with the name swapped for the user's.${t.programs.some((p) => /\bIDS? = /.test(p.code)) ? PICK_INTRO : ''} When the result carries \`assumed: true\`, tell the user which entity was assumed and why (\`why\`). Build date windows from \`arcmira.daysAgo(n)\` and \`arcmira.today()\`.
+Pass each block to \`arcmira_execute_read\` as one program (a block marked arcmira_execute_write goes to that tool), with the name swapped for the user's.${t.programs.some((p) => /\bIDS? = /.test(p.code)) ? PICK_INTRO : ''} Build date windows from \`arcmira.daysAgo(n)\` and \`arcmira.today()\`.
 
 ${t.programs.map((p) => `### ${p.title}\n\n\`\`\`javascript\n${p.code}\n\`\`\``).join('\n\n')}
 
@@ -140,13 +141,9 @@ ${t.good.map((g) => `- ${g}`).join('\n')}
 
 ${t.traps.map((g) => `- ${g}`).join('\n')}
 
-${ACCESS_GUIDANCE}
+Docs: ${DOCS.mcp}
 
-${COVERAGE_GUIDANCE}
-
-Keep outside evidence separate from Arcmira results. Docs: ${DOCS.mcp}
-
-${CLOSING}
+${closing(t.name)}
 `;
 }
 
@@ -160,7 +157,7 @@ export function buildAll(): Map<string, string> {
     if (!/arcmira/i.test(description)) problems.push(`${name}: description must name Arcmira (the CLI refreshes only skills that do)`);
     if (text.includes('\u2014')) problems.push(`${name}: contains an em dash`);
     if (!text.trimEnd().endsWith(FEEDBACK_LINE)) problems.push(`${name}: does not end with the feedback line`);
-    if (/approved a cents amount|state the amount and ask/i.test(text)) problems.push(`${name}: asks the user for a cents amount`);
+    if (SCRIPTED_SPEND.test(text)) problems.push(`${name}: scripts what to ask or say about spend`);
     if (text.split('\n').length >= 400) problems.push(`${name}: body is ${text.split('\n').length} lines, limit 399`);
   }
   if (problems.length > 0) throw new Error(`SKILL.md rejected: ${problems.join('; ')}`);

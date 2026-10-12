@@ -12,7 +12,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { SRC } from '../src/api.ts';
-import { METHODS, referenceText } from '../src/reference.ts';
+import { MAX_INSTRUCTIONS, METHODS, SCRIPTED_SPEND, referenceText } from '../src/reference.ts';
 import { FEEDBACK_CATEGORIES, SERVER_INSTRUCTIONS, TOOLS, feedbackBody } from '../src/tools.ts';
 import server from '../server.json' with { type: 'json' };
 
@@ -142,8 +142,11 @@ for (const tool of TOOLS) {
   if (hints.idempotentHint !== referenceOnly) fail(`${label}: only reference lookup is guaranteed safe to repeat unchanged`);
   if (!tool.name.startsWith('arcmira_')) fail(`${label}: tool names carry the arcmira_ prefix`);
 }
-if (/approved a cents amount|state the amount and ask/i.test(SERVER_INSTRUCTIONS + referenceText())) fail('instructions or reference ask the user for a cents amount');
+for (const [where, text] of [['server instructions', SERVER_INSTRUCTIONS], ['reference', referenceText()], ...TOOLS.map((t) => [t.name, t.description])]) {
+  if (SCRIPTED_SPEND.test(text)) fail(`${where}: scripts what to ask or say about spend (${text.match(SCRIPTED_SPEND)![0]})`);
+}
 if (SERVER_INSTRUCTIONS.includes('—')) fail('server instructions: em dash');
+if (SERVER_INSTRUCTIONS.length > MAX_INSTRUCTIONS) fail(`server instructions: ${SERVER_INSTRUCTIONS.length} characters, limit ${MAX_INSTRUCTIONS} (Claude Code cuts at 2,048)`);
 const reference = referenceText();
 if (reference.includes('—')) fail('reference: em dash');
 for (const method of METHODS) {

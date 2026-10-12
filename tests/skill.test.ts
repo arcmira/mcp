@@ -65,8 +65,8 @@ test('every plugin manifest carries the package version, so hosts see each relea
   }
 });
 
-test('one budget rule: describe, the instructions and the core skill state it, and no surface asks the user for cents', async () => {
-  const { BUDGET_RULE, FEEDBACK_LINE } = await import('../src/reference.ts');
+test('one usage rule: describe, the instructions and the core skill state it once each, and no surface scripts what to ask or say about spend', async () => {
+  const { BUDGET_RULE, FEEDBACK_LINE, MONITOR_OFFER, SCRIPTED_SPEND } = await import('../src/reference.ts');
   const { describeTool, SERVER_INSTRUCTIONS, TOOLS } = await import('../src/tools.ts');
   const { z } = await import('zod');
   const describeText = (await describeTool.run({} as never, null as never)).content[0].text as string;
@@ -75,11 +75,10 @@ test('one budget rule: describe, the instructions and the core skill state it, a
     ['instructions', SERVER_INSTRUCTIONS],
     ['arcmira skill', readFileSync(SKILL, 'utf8')],
   ] as const)
-    assert.ok(text.includes(BUDGET_RULE), `${where} states the budget rule`);
-  assert.match(BUDGET_RULE, /never ask the user for a cents amount/);
-  assert.match(BUDGET_RULE, /dashboard\/spending/);
-  assert.match(BUDGET_RULE, /pricing/);
-  assert.match(BUDGET_RULE, /on_demand_paused.*dashboard\/billing/);
+    assert.equal(text.split(BUDGET_RULE).length - 1, 1, `${where} states the budget rule once`);
+  assert.match(BUDGET_RULE, /enforces that budget/);
+  assert.match(BUDGET_RULE, /charge \{ unit, amount, from/);
+  assert.match(BUDGET_RULE, /paid_plan_required, quota_exceeded, spend_limit_exceeded, member_limit, fair_use_cap or on_demand_paused/);
   const schemaText = (tool: (typeof TOOLS)[number]) => JSON.stringify(z.toJSONSchema(tool.inputSchema));
   const skills = spawnSync('ls', [join(ROOT, 'plugins/arcmira/skills')], { encoding: 'utf8' }).stdout.trim().split('\n');
   const surfaces: Array<[string, string]> = [
@@ -93,13 +92,14 @@ test('one budget rule: describe, the instructions and the core skill state it, a
   for (const [where, text] of surfaces) {
     assert.doesNotMatch(text, /spending policy|already authorized/i, where);
     assert.doesNotMatch(text, /approved a cents amount|state the amount and ask|unless the user approved|approval link/i, where);
-    // README keeps an upgrade note that names the retired tools.
-    if (where !== 'README.md') assert.doesNotMatch(text, /prepare_transcript|`describe`|`execute`/, `${where} names a retired tool`);
+    assert.doesNotMatch(text, SCRIPTED_SPEND, where);
+    assert.doesNotMatch(text, /\bfor free\b|default daily|one question at a time/i, where);
+    assert.doesNotMatch(text, /prepare_transcript|`describe`|`execute`/, `${where} names a retired tool`);
   }
   for (const skill of skills) {
     const text = readFileSync(join(ROOT, 'plugins/arcmira/skills', skill, 'SKILL.md'), 'utf8');
     assert.ok(text.trimEnd().endsWith(FEEDBACK_LINE), `${skill} ends with the feedback line`);
-    assert.match(text, /save them to a monitor/, `${skill} offers to save to a monitor`);
+    assert.ok(text.includes(MONITOR_OFFER), `${skill} closes with the monitor line`);
   }
 });
 
@@ -136,4 +136,33 @@ test('README tools table is one table with every tool, and execute states the re
     assert.doesNotMatch(text, /20,000/, where);
   }
   assert.doesNotMatch(readme, /cut at 20,000/);
+});
+
+test('the server instructions fit under Claude Code\'s 2,048-character cut, with headroom', async () => {
+  const { MAX_INSTRUCTIONS } = await import('../src/reference.ts');
+  const { SERVER_INSTRUCTIONS } = await import('../src/tools.ts');
+  assert.ok(MAX_INSTRUCTIONS <= 2000);
+  assert.ok(SERVER_INSTRUCTIONS.length <= MAX_INSTRUCTIONS, `instructions are ${SERVER_INSTRUCTIONS.length} characters`);
+  assert.match(SERVER_INSTRUCTIONS, /last 90 days/);
+});
+
+test('describe states the 90-day default, and every worked example that builds a window uses it', async () => {
+  const { EXAMPLES } = await import('../src/reference.ts');
+  const { describeTool } = await import('../src/tools.ts');
+  const describeText = (await describeTool.run({} as never, null as never)).content[0].text as string;
+  assert.match(describeText, /With no window from the user, use the last 90 days/);
+  for (const example of EXAMPLES) for (const [, days] of example.code.matchAll(/daysAgo\((\d+)\)/g)) assert.equal(days, '90', example.title);
+});
+
+test('one monitor procedure: describe, the arcmira skill and company-watch carry MONITOR_RULE, and the write tool points at it', async () => {
+  const { MONITOR_RULE } = await import('../src/reference.ts');
+  const { describeTool, executeWriteTool } = await import('../src/tools.ts');
+  const describeText = (await describeTool.run({} as never, null as never)).content[0].text as string;
+  for (const [where, text] of [
+    ['describe', describeText],
+    ['arcmira skill', readFileSync(SKILL, 'utf8')],
+    ['company-watch skill', readFileSync(join(ROOT, 'plugins/arcmira/skills/company-watch/SKILL.md'), 'utf8')],
+  ] as const)
+    assert.equal(text.split(MONITOR_RULE).length - 1, 1, `${where} carries the monitor rule once`);
+  assert.match(executeWriteTool.description, /MONITORS section of arcmira_describe/);
 });

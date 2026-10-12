@@ -3,7 +3,7 @@ import type { ApiClient } from './api.ts';
 import { withRateLimit } from './result.ts';
 import pkg from '../package.json' with { type: 'json' };
 import type { ToolAnnotations } from '@modelcontextprotocol/server';
-import { BUDGET_RULE, DOCS, SHORT_GUIDE, feedbackNudge, referenceText } from './reference.ts';
+import { DOCS, SHORT_GUIDE, referenceText } from './reference.ts';
 import { errorResult, okResult, textResult, type ToolResult } from './result.ts';
 import { renderExecution, runProgram, type Access, type Execution, type SandboxHost } from './sandbox.ts';
 import { OUTPUT_LIMITS } from './output.ts';
@@ -57,8 +57,8 @@ function tool<Schema extends z.ZodObject<z.ZodRawShape>>(spec: ToolSpec<Schema>)
   return spec;
 }
 
-/** First line of every describe: the server version, and why a stale plugin or skill copy does not make this reference stale. */
-export const VERSION_LINE = `arcmira MCP ${pkg.version}. The server sends this reference fresh on every call; plugin and skill copies can lag, so keep them on auto-update: ${DOCS.mcp}#stay-up-to-date`;
+/** First line of every describe: the server version, so an agent can tell this reference from a stale skill copy. */
+export const VERSION_LINE = `arcmira MCP ${pkg.version}.`;
 
 /** The whole reference's size, measured from the text so the describe input never goes stale. */
 export const REFERENCE_SIZE = `about ${Math.round(referenceText().length / 1000)},000 characters`;
@@ -88,7 +88,7 @@ const LIMITS = `Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`;
 export const executeReadTool = tool({
   name: 'arcmira_execute_read',
   title: 'Research with a program',
-  description: `Runs JavaScript against the Arcmira API through the arcmira client: indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, coverage, Premium transcripts (a Premium read of an untranscribed video uses credits from the user's plan, then the on-demand budget; never ask for cents), and the user's monitors. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the outcome first, then call/rate/build facts and capped logs. Methods and examples: arcmira_describe. Filters require entity, channel, or video IDs. ${LIMITS}`,
+  description: `Runs JavaScript against the Arcmira API through the arcmira client: indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, coverage, Premium transcripts (a Premium read of an untranscribed video starts a transcription that uses credits from the account's plan, then its on-demand budget, and reports its charge), and the user's monitors. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the result first, then the call count, rate limit, build and capped logs. Methods and examples: arcmira_describe. Filters require entity, channel, or video IDs. ${LIMITS}`,
   // Not read-only: a Premium read can start a transcription that uses credits. Not destructive: it only adds.
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   inputSchema: z.object({ code, intent: intentParam }),
@@ -100,7 +100,7 @@ export const executeReadTool = tool({
 export const executeWriteTool = tool({
   name: 'arcmira_execute_write',
   title: 'Change Arcmira monitors',
-  description: `Runs JavaScript like arcmira_execute_read, with the account writes added: arcmira.monitors.create, arcmira.monitors.update (including paused), arcmira.monitors.addEntities, arcmira.monitors.addName and arcmira.monitors.attachTrackers. Use it only to save what the user asked to follow: list their monitors first, never assume one exists, and ask how they want updates (email or Slack; as it happens, hourly or daily) before creating one. Nothing is deleted; pause instead. ${LIMITS}`,
+  description: `Runs JavaScript like arcmira_execute_read, plus the monitor writes: create, update (including paused), addEntities, addName and attachTrackers. Nothing is deleted. The MONITORS section of arcmira_describe has the fields and results. ${LIMITS}`,
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -162,9 +162,9 @@ async function execute(source: string, access: Access, { sandbox, call }: ToolCo
   return executionResult(await runProgram(sandbox(access), source), call.id);
 }
 
-/** A program's outcome as a tool result: text for every host, with the feedback nudge when the outcome warrants one. */
+/** A program's outcome as a tool result: text for every host, naming its call_id when the outcome warrants feedback. */
 export function executionResult(execution: Execution, callId: string): ToolResult {
-  const text = renderExecution(execution, { feedback: feedbackNudge(callId) });
+  const text = renderExecution(execution, { callId });
   const meta = {
     calls: execution.calls,
     api_build: execution.api_build,
