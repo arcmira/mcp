@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { BUILD_HEADER, CLIENT_HEADER, SRC, TERMS_WARNING_HEADER, USER_AGENT, apiKeyOf, createApiClient, noKeyError } from '../src/api.ts';
+import { BUILD_HEADER, CLIENT_HEADER, SRC, USER_AGENT, apiKeyOf, createApiClient, noKeyError } from '../src/api.ts';
 
 function withFetch<T>(handler: (url: URL, init: RequestInit) => Response | Promise<Response>, body: () => Promise<T>): Promise<T> {
   const original = globalThis.fetch;
@@ -225,22 +225,6 @@ describe('the host and the build', () => {
       assert.equal(seen?.get(CLIENT_HEADER), null);
     });
     assert.equal(client.upstreamBuild(), 'v-abc123');
-  });
-
-  it('keeps the terms warning from any answer of the current call, as one line, until the next call starts', async () => {
-    const client = createApiClient({}, 'arc_sk_fixture');
-    const warnings = ['Accept the terms\tat\nhttps://arcmira.com/terms/accept.', null];
-    await withFetch(async () => {
-      const warning = warnings.shift();
-      return Response.json({ ok: true }, { headers: warning ? { [TERMS_WARNING_HEADER]: warning.replace('\n', ' ') } : {} });
-    }, async () => {
-      client.setCall({ id: 'c1', tool: 't' });
-      await client.get('/v1/me');
-      await client.get('/v1/me');
-      assert.equal(client.termsWarning(), 'Accept the terms at https://arcmira.com/terms/accept.');
-      client.setCall({ id: 'c2', tool: 't' });
-      assert.equal(client.termsWarning(), null);
-    });
   });
 });
 

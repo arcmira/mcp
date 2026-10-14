@@ -4,7 +4,7 @@ import responses from './fixtures/transcription-responses.json' with { type: 'js
 
 type Arcmira = Record<string, (...args: any[]) => Promise<any>> & { today(): string; daysAgo(n: number): string };
 const mod = (await import(new URL('../src/sandbox/client.js', import.meta.url).href)) as {
-  createArcmira(o: { base: string; fetch?: unknown; maxCalls?: number; now?: () => Date; sleep?: (ms: number) => Promise<void>; access?: 'read' | 'write'; idempotencyKey?: () => string }): { arcmira: Arcmira; meter: { calls: number; rate_limit: unknown; api_build: string | null; terms_warning: string | null } };
+  createArcmira(o: { base: string; fetch?: unknown; maxCalls?: number; now?: () => Date; sleep?: (ms: number) => Promise<void>; access?: 'read' | 'write'; idempotencyKey?: () => string }): { arcmira: Arcmira; meter: { calls: number; rate_limit: unknown; api_build: string | null } };
   ArcmiraError: new (...args: any[]) => Error & { code: string };
 };
 
@@ -173,12 +173,11 @@ describe('the sandbox client', () => {
 
   it('turns a v1 error body into an ArcmiraError with the code and unlock, and keeps the rate limit', async () => {
     const error = { type: 'permission_error', code: 'filter_requires_paid', message: 'Pro+', unlock: { tier: 'pro_plus', url: 'https://arcmira.com/pricing' } };
-    const { fetch } = recording({ error }, { status: 403, headers: { 'ratelimit-limit': '20', 'ratelimit-remaining': '3', 'ratelimit-reset': '99', 'x-arcmira-build': 'b1', 'arcmira-terms-warning': 'Accept the terms.' } });
+    const { fetch } = recording({ error }, { status: 403, headers: { 'ratelimit-limit': '20', 'ratelimit-remaining': '3', 'ratelimit-reset': '99', 'x-arcmira-build': 'b1' } });
     const { arcmira, meter } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch });
     await assert.rejects(arcmira.sponsors(TBPN, { status: 'active' }), (e: Error & { code: string; unlock: { url: string }; status: number }) => e.code === 'filter_requires_paid' && e.unlock.url === 'https://arcmira.com/pricing' && e.status === 403);
     assert.deepEqual(meter.rate_limit, { limit: 20, remaining: 3, reset: 99 });
     assert.equal(meter.api_build, 'b1');
-    assert.equal(meter.terms_warning, 'Accept the terms.');
   });
 
   it('stops at the call budget with a message that names the fix', async () => {

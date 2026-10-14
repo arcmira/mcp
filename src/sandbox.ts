@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import clientSource from './sandbox/client-source.ts';
 import { MAX_CALLS } from './reference.ts';
-import { rateLimitOf, termsWarningOf } from './api.ts';
+import { rateLimitOf } from './api.ts';
 
 export const TIME_LIMIT_MS = 30_000;
 import { LOG_CAP } from './output.ts';
@@ -25,8 +25,6 @@ const fields = {
   in_flight: z.number().int().nonnegative().optional(),
   /** `METHOD /v1/path` for each API call the program started, in order. Read from the sandbox header, never the body. */
   routes: z.array(z.string()).optional(),
-  /** v1's Arcmira-Terms-Warning from any call the program made. Read from the sandbox header, never the body. */
-  terms_warning: z.string().nullable().optional(),
 };
 const executionSchema = z.discriminatedUnion('ok', [
   z.object({ ...fields, ok: z.literal(true), value: z.unknown() }),
@@ -70,7 +68,7 @@ export default {
       if (text.length > remaining) logs_truncated = true;
     };
     const console = { log: log(''), info: log(''), warn: log('WARN'), error: log('ERR'), debug: log('') };
-    const meter = { calls: 0, completed: 0, rate_limit: null, api_build: null, terms_warning: null };
+    const meter = { calls: 0, completed: 0, rate_limit: null, api_build: null };
     const routes = [];
     const outbound = globalThis.fetch.bind(globalThis);
     const meteredFetch = async (...args) => {
@@ -87,7 +85,6 @@ export default {
       const limit = read('ratelimit-limit'), remaining = read('ratelimit-remaining'), reset = read('ratelimit-reset');
       if (limit !== null && remaining !== null && reset !== null) meter.rate_limit = { limit, remaining, reset };
       meter.api_build = getHeader(getHeaders(response), 'x-arcmira-build') ?? meter.api_build;
-      meter.terms_warning = getHeader(getHeaders(response), 'arcmira-terms-warning') ?? meter.terms_warning;
       return response;
       } finally { meter.completed++; }
     };
@@ -111,7 +108,6 @@ export default {
       setHeader(headers, 'x-execution-completed', toString(meter.completed));
       setHeader(headers, 'x-execution-routes', stringifyResult(routes));
       if (meter.api_build !== null) setHeader(headers, 'x-arcmira-build', meter.api_build);
-      if (meter.terms_warning !== null) setHeader(headers, 'arcmira-terms-warning', meter.terms_warning);
       if (meter.rate_limit !== null) {
         setHeader(headers, 'ratelimit-limit', toString(meter.rate_limit.limit));
         setHeader(headers, 'ratelimit-remaining', toString(meter.rate_limit.remaining));
@@ -259,7 +255,6 @@ export async function runProgram(host: SandboxHost, code: string): Promise<Execu
         rate_limit: rateLimitOf(response.headers),
         api_build: response.headers.get('x-arcmira-build'),
         routes: routesOf(response.headers.get('x-execution-routes')),
-        terms_warning: termsWarningOf(response.headers),
       };
       const body = await readCapped(response);
       if (body === null)

@@ -171,7 +171,6 @@ export function executionResult(execution: Execution, callId: string): ToolResul
     rate_limit: execution.rate_limit,
     outcome_uncertain: execution.outcome_uncertain,
     routes: execution.routes ?? [],
-    terms_warning: execution.terms_warning ?? null,
   };
   return withRateLimit(
     {
