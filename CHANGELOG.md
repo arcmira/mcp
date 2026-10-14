@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.10.8
+## Server update, 2026-10-14 (version stays 0.10.7)
 
 Follows the API change of 2026-10-14 that adds the `Arcmira-Terms-Warning` header and the `terms_acceptance_required` error.
 
