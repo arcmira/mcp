@@ -47,6 +47,7 @@ describe('the sandbox program', () => {
       truncated: false,
       outcome_uncertain: false,
       routes: ['GET /v1/entities/ent_14/momentum'],
+      terms_warning: null,
     });
     assert.equal(outbound.urls[0]?.pathname, '/v1/entities/ent_14/momentum');
     assert.deepEqual(JSON.parse(renderExecution(run)).value, { v: 'flat' });

@@ -162,6 +162,8 @@ Switch on `code`. `unlock.url` names the plan or setting that lifts a gate, and 
 
 Every result, gates included, carries the key's budget after the call under `_meta["arcmira.com/rate_limit"]` as `{ "limit": 20, "remaining": 17, "reset": 1788819360 }`, read from the API's RateLimit headers, and `_meta["arcmira.com/build"]`: `server`, `deploy`, `api` (the API build that answered) and `client` (the host's name from its handshake, forwarded to the API as `x-arcmira-client`).
 
+When any API call behind a result answers with an `Arcmira-Terms-Warning` header, the result ends with that warning as one more text line, and a result with `structuredContent` also carries it as `terms_warning`. The line appears once per result, however many calls carried the header. An account that has not accepted the current Terms of Service gets `403 terms_acceptance_required` as an error result whose `message` links to https://arcmira.com/terms/accept, never as a sign-in challenge.
+
 ## What we log
 
 Each tool call is logged to Arcmira's product analytics (PostHog), linked to the account that made it, so we can see how the tools are used and fix what fails. One record per call holds:

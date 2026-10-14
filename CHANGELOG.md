@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.8
+
+Follows the API change of 2026-10-14 that adds the `Arcmira-Terms-Warning` header and the `terms_acceptance_required` error.
+
+- MCP hosts never show response headers. When any API call in a tool run answers with `Arcmira-Terms-Warning`, the tool result ends with that warning as one more text line, and a result with `structuredContent` also carries it as `terms_warning`. The line appears once per result, however many calls carried the header. Execute programs carry it out of the sandbox the way they carry the rate limit and build.
+- A `403 terms_acceptance_required` reaches the agent as an error result with the API's `message`, which links to https://arcmira.com/terms/accept. The handshake still lets a key with a 403 through, so it never becomes the OAuth sign-in challenge. The error list in describe names the code.
+
 ## 0.10.7: Clear language
 
 The agent text states facts once, matches the API, and fits where hosts read it. Prompted by the Anthropic directory review (2026-10-11) and an audit of every surface the agent reads.

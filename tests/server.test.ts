@@ -158,6 +158,7 @@ describe('the four tools through the handler', () => {
       rate_limit: RATE_LIMIT,
       outcome_uncertain: false,
       routes: ['GET /v1/entities/ent_14/momentum'],
+      terms_warning: null,
     });
   });
 
@@ -375,4 +376,70 @@ it('a Premium refusal keeps its quote from error.details for the program', async
     { LOADER: fakeLoader() },
   );
   assert.deepEqual(JSON.parse(textOf(reply)).value, { code: 'paid_plan_required', quote: refusal.body.error.details.quote });
+});
+
+describe('the terms warning and the terms refusal', () => {
+  const WARNING = 'Accept the updated Terms of Service at https://arcmira.com/terms/accept before October 22, 2026 to keep using the API.';
+  const warned = (body: Record<string, unknown>) => Response.json(body, { headers: { 'Arcmira-Terms-Warning': WARNING } });
+  const lines = (reply: ToolReply) => textOf(reply).split('\n');
+  const count = (reply: ToolReply) => lines(reply).filter((line) => line === WARNING).length;
+
+  it('an execute whose call carried the header ends with the warning as one line', async () => {
+    const reply = await callTool('arcmira_execute_read', { code: 'return (await arcmira.momentum("ent_14")).verdict;' }, () => warned({ verdict: 'flat' }), { LOADER: fakeLoader() });
+    assert.equal(reply.result.isError, undefined);
+    assert.equal(count(reply), 1);
+    assert.equal(reply.result.content.at(-1)?.text, WARNING);
+    assert.equal(JSON.parse(reply.result.content[0].text).value, 'flat');
+  });
+
+  it('an execute without the header adds no line', async () => {
+    const reply = await callTool('arcmira_execute_read', { code: 'return (await arcmira.momentum("ent_14")).verdict;' }, () => Response.json({ verdict: 'flat' }), { LOADER: fakeLoader() });
+    assert.equal(reply.result.content.length, 1);
+    assert.ok(!textOf(reply).includes('Terms of Service'));
+  });
+
+  it('several warned calls in one execute still give one line', async () => {
+    const code = 'for (const id of ["ent_1", "ent_2", "ent_3"]) await arcmira.momentum(id); return (await (await fetch("https://api.arcmira.com/v1/me")).json()).id;';
+    const reply = await callTool('arcmira_execute_read', { code }, () => warned({ verdict: 'flat', id: 'usr_1' }), { LOADER: fakeLoader() });
+    assert.equal((reply.result._meta?.['arcmira.com/execution'] as { calls: number }).calls, 4);
+    assert.equal(count(reply), 1);
+  });
+
+  it('a result with structured content carries the warning there too, once', async () => {
+    const reply = await callTool('arcmira_feedback', { category: 'slow', note: 'x' }, () => warned({ feedback_id: 7 }));
+    assert.deepEqual(reply.result.structuredContent, { feedback_id: 7, recorded: true, terms_warning: WARNING });
+    assert.equal(count(reply), 1);
+  });
+
+  const refusal = () =>
+    Response.json(
+      {
+        error: {
+          type: 'permission_error',
+          code: 'terms_acceptance_required',
+          message: WARNING,
+          details: { url: 'https://arcmira.com/terms/accept' },
+          doc_url: 'https://arcmira.com/docs/errors#terms_acceptance_required',
+          request_id: 'req_terms',
+        },
+      },
+      { status: 403 },
+    );
+
+  it('a 403 terms_acceptance_required is an error tool result with the message and link, never the OAuth challenge', async () => {
+    const executed = await callTool('arcmira_execute_read', { code: 'return await arcmira.momentum("ent_14");' }, refusal, { LOADER: fakeLoader() });
+    assert.equal(executed.result.isError, true);
+    const error = JSON.parse(textOf(executed)).error;
+    assert.equal(error.code, 'terms_acceptance_required');
+    assert.equal(error.status, 403);
+    assert.ok(error.message.includes('https://arcmira.com/terms/accept'));
+
+    const posted = await callTool('arcmira_feedback', { category: 'slow', note: 'x' }, refusal);
+    assert.equal(posted.result.isError, true);
+    const structured = posted.result.structuredContent as { error: { code: string; message: string; details: { url: string } } };
+    assert.equal(structured.error.code, 'terms_acceptance_required');
+    assert.equal(structured.error.message, WARNING);
+    assert.equal(structured.error.details.url, 'https://arcmira.com/terms/accept');
+    assert.ok(textOf(posted).includes('https://arcmira.com/terms/accept'));
+  });
 });
