@@ -124,7 +124,7 @@ const SEARCH_KINDS = new Set(['sponsored', 'organic', 'mention']);
 export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCalls = 40, now = () => new Date(), sleep = (ms) => new Promise((done) => setTimeout(done, ms)), onCall, access = 'read', idempotencyKey = () => crypto.randomUUID() }) {
   const root = base.replace(/\/$/, '');
   const waitUntil = now().getTime() + MAX_WAIT_SECONDS * 1000;
-  const meter = { calls: 0, rate_limit: null, api_build: null };
+  const meter = { calls: 0, rate_limit: null, api_build: null, terms_warning: null };
 
   /**
    * The parsed body and headers of one v1 request; a non-2xx answer throws ArcmiraError. A body
@@ -155,6 +155,7 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       meter.rate_limit = { limit, remaining, reset };
     }
     meter.api_build = res.headers.get('x-arcmira-build') ?? meter.api_build;
+    meter.terms_warning = res.headers.get('arcmira-terms-warning') ?? meter.terms_warning;
     onCall?.({ method: send ? (send.method ?? 'POST') : 'GET', path, query, body: send?.body, status: res.status, ms: Date.now() - started });
     if (res.ok && body) return { body, headers: res.headers };
     const err = body?.error ?? {};

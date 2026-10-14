@@ -50,6 +50,20 @@ export function withRateLimit(result: ToolResult, rateLimit: RateLimit | null): 
   };
 }
 
+/**
+ * v1's terms warning as one more line, once per tool result however many calls carried it. Hosts never
+ * show response headers, and Claude Code shows structuredContent in place of content when both exist,
+ * so the line rides in both.
+ */
+export function withTermsWarning(result: ToolResult, warning: string | null): ToolResult {
+  if (warning === null) return result;
+  return {
+    ...result,
+    content: [...result.content, { type: 'text', text: warning }],
+    ...(result.structuredContent ? { structuredContent: { ...result.structuredContent, terms_warning: warning } } : {}),
+  };
+}
+
 /** Plain text with no structured copy: what describe and a rendered program return. */
 export function textResult(text: string): ToolResult {
   return { content: [{ type: 'text', text }] };

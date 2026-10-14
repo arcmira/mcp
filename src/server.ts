@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/server';
 import pkg from '../package.json' with { type: 'json' };
 import { noKeyError, type ApiClient } from './api.ts';
-import { clientLabel, errorResult, withBuild, withRateLimit } from './result.ts';
+import { clientLabel, errorResult, withBuild, withRateLimit, withTermsWarning } from './result.ts';
 import type { Access, SandboxHost } from './sandbox.ts';
 import { callId, inputState, outline, type Recorder } from './telemetry.ts';
 import { RETIRED_TOOLS, SERVER_INSTRUCTIONS, TOOLS, retiredToolResult } from './tools.ts';
@@ -35,14 +35,17 @@ export interface CallTag {
  */
 export function createServer(caller: Caller, deploy: string | null = null): McpServer {
   const server = new McpServer({ name: 'arcmira', version: pkg.version }, { instructions: SERVER_INSTRUCTIONS });
-  const build = (result: Parameters<typeof withBuild>[0]) => {
-    const execution = z.object({ api_build: z.string().nullable() }).safeParse(result._meta?.['arcmira.com/execution']);
-    return withBuild(result, {
+  const finish = (result: Parameters<typeof withBuild>[0]) => {
+    const execution = z
+      .object({ api_build: z.string().nullable(), terms_warning: z.string().nullable() })
+      .safeParse(result._meta?.['arcmira.com/execution']);
+    const built = withBuild(result, {
       server: pkg.version,
       deploy,
       api: execution.success ? execution.data.api_build : (caller.api?.upstreamBuild() ?? null),
       client: clientLabel(server.server.getClientVersion()),
     });
+    return withTermsWarning(built, execution.success ? execution.data.terms_warning : (caller.api?.termsWarning() ?? null));
   };
   for (const tool of TOOLS) {
     server.registerTool(
@@ -60,7 +63,7 @@ export function createServer(caller: Caller, deploy: string | null = null): McpS
         caller.api?.setClient(server.server.getClientVersion());
         caller.api?.setCall(call);
         const sandbox = caller.sandbox;
-        const result = build(
+        const result = finish(
           caller.api === null
             ? errorResult(noKeyError())
             : withRateLimit(

@@ -24,6 +24,8 @@ export const CALL_HEADER = 'x-arcmira-mcp-call';
 export const TOOL_HEADER = 'x-arcmira-mcp-tool';
 /** The header v1 answers with: the deploy id of the API build that served the call. */
 export const BUILD_HEADER = 'x-arcmira-build';
+/** The header v1 adds to a successful answer while the caller has not accepted the current Terms of Service. */
+export const TERMS_WARNING_HEADER = 'arcmira-terms-warning';
 
 /** The v1 error envelope body. Forwarded untouched; the facade never edits a gate. */
 /** Why a 401 happened, the same three values v1 puts on `error.reason`. */
@@ -81,6 +83,8 @@ export interface ApiClient {
   upstreamBuild(): string | null;
   /** The throttle headers on the latest upstream answer, or null before any call or when the answer carried none. */
   rateLimit(): RateLimit | null;
+  /** The terms warning any answer since the last setCall carried, or null. */
+  termsWarning(): string | null;
 }
 
 /** Reads the three RateLimit headers, or null unless all three are numbers. */
@@ -95,6 +99,12 @@ export function rateLimitOf(headers: Headers): RateLimit | null {
   const remaining = read('ratelimit-remaining');
   const reset = read('ratelimit-reset');
   return limit === null || remaining === null || reset === null ? null : { limit, remaining, reset };
+}
+
+/** The warning as one line of at most 500 characters, or null when the header is absent or blank. */
+export function termsWarningOf(headers: Headers): string | null {
+  const text = (headers.get(TERMS_WARNING_HEADER) ?? '').replace(/\s+/g, ' ').trim().slice(0, 500);
+  return text === '' ? null : text;
 }
 
 const CREDENTIAL_MESSAGES: Record<CredentialFailure, string> = {
@@ -166,15 +176,18 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
   let build: string | null = null;
   let client: string | null = null;
   let call: { id: string; tool: string } | null = null;
+  let termsWarning: string | null = null;
   const routes: string[] = [];
   return {
     rateLimit: () => latest,
     upstreamBuild: () => build,
+    termsWarning: () => termsWarning,
     setClient(info) {
       client = info?.name ? `${info.name}${info.version ? `/${info.version}` : ''}`.slice(0, 120) : null;
     },
     setCall(next) {
       call = next;
+      termsWarning = null;
     },
     routes: () => [...routes],
     get: (path, query = {}) => request(path, query),
@@ -238,6 +251,7 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
       };
     latest = rateLimitOf(response.headers) ?? latest;
     build = response.headers.get(BUILD_HEADER) ?? build;
+    termsWarning = termsWarningOf(response.headers) ?? termsWarning;
     const body: unknown = await response.json().catch(() => null);
     if (response.ok && body !== null && typeof body === 'object') {
       return { ok: true, status: response.status, body: body as never };

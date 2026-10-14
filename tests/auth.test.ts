@@ -203,6 +203,12 @@ describe('the handshake checks the account key', () => {
     assert.equal(asks, 1);
   });
 
+  it('lets a key whose account has not accepted the terms through, so the tool call renders the 403', async () => {
+    const response = await initialize('arc_sk_terms', me(403, { error: { type: 'permission_error', code: 'terms_acceptance_required' } }));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('www-authenticate'), null);
+  });
+
   it('lets an over-quota key through, so the first tool call renders the real gate', async () => {
     const response = await initialize('arc_sk_quota', me(402, { error: { code: 'over_quota' } }));
     assert.equal(response.status, 200);
