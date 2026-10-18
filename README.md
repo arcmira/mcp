@@ -1,26 +1,59 @@
-# Arcmira: YouTube Transcript Search
+# Arcmira MCP for YouTube and podcast transcript search
 
-Give your AI the ability to find who said what with timestamps, discover what’s being discussed across videos and livestreams, and distinguish organic recommendations from sponsored ad reads.
+Search YouTube video and podcast transcripts, retrieve timestamped quotes, find entity mentions and media appearances, inspect organic endorsements and ad reads, and monitor new mentions with your agent.
 
-[Arcmira](https://arcmira.com) · [API documentation](https://arcmira.com/docs) · [OpenAPI schema](https://api.arcmira.com/v1/openapi.json) · [MCP setup](https://arcmira.com/docs/mcp-server)
+## Connect Arcmira
 
-## Connect your AI
+Add the remote MCP server at `https://mcp.arcmira.com/mcp` and sign in through your host. For setup instructions, use [Connect your agent](https://arcmira.com/agent-setup).
 
-Copy this into your coding agent:
+For a coding agent, paste:
 
 ```text
 Fetch and execute the appropriate instructions to set me up for Arcmira from https://arcmira.com/agent-setup/prompt.md
 ```
 
-For Claude, ChatGPT, Cursor, and other MCP clients, use **`https://mcp.arcmira.com/mcp`** and sign in to Arcmira. [Setup by host](https://arcmira.com/agent-setup) · [Documentation](https://arcmira.com/docs/mcp-server) · [Website](https://arcmira.com/mcp) · [Plugin and skills](plugins/arcmira)
+## Run your first search
 
-Try: “Which brands sponsor both TBPN and the All-In Podcast?” or “Find what Sam Altman said about AI agents, with timestamped links.”
+Ask your agent:
 
-Results cover indexed videos. Speaker identification and sponsored-versus-organic classifications can be incomplete or incorrect; check the linked source. Plan limits apply.
+> Search YouTube and podcast transcripts for GPU financing over the last 60 days. Return the relevant quotes with speakers when available, publication dates, transcript sources, and timestamped links. Read the surrounding exchanges before summarizing what the sources imply.
 
-[Share plugin feedback](https://github.com/arcmira/mcp/issues/new?template=plugin-feedback.yml) · [Update installed skills](plugins/arcmira#keep-it-updated)
+The agent calls `arcmira_describe` once to load the client reference, then runs a program with `arcmira_execute_read`. Return structured fields for further analysis and a compact, sourced answer for the reader.
 
-## Connect
+```javascript
+const query = "GPU financing";
+const hits = await arcmira.search({
+  query, after: arcmira.daysAgo(60), before: arcmira.today(), limit: 5,
+});
+return { query, window: hits.window, passages: hits.chunks };
+```
+
+The search supports up to 20 passages, but full passages can exceed the execute tool's output budget. If the result is truncated, request fewer passages or return only the fields needed for the next step. Keep selected text intact and retain its source link.
+
+## Choose the method for the task
+
+| Task | Client method | What to retain |
+| --- | --- | --- |
+| Search YouTube and podcast transcripts for quotes | `arcmira.search` | Passage text, attribution when available, publication date, watch URL |
+| Read the surrounding transcript | `arcmira.transcript` | State, timestamped lines, source, speaker mapping |
+| Find mentions of a person, company, product or topic | `arcmira.mentions` | Entity, description, source video, position, appearance flag |
+| Count a person's media appearances | `arcmira.occurrences` with `mode: "appearances"` | Counted window, episode counts by channel |
+| Compare mention momentum | `arcmira.momentum` | Current/prior counts, change, verdict, returned window |
+| Find organic endorsements or ad reads | `arcmira.recommendations` | Classification, verbatim quote, source and position |
+| Find recurring channel sponsors | `arcmira.sponsors` | Sponsor, ad-read count, video count, first/latest dates |
+| Set up YouTube monitoring | `arcmira.monitors` through `arcmira_execute_write` | Monitor, tracked entities, delivery settings |
+
+Resolve names before applying entity or channel ID filters. Plain keyword search does not need a resolver call. The MCP client's argument names differ from the HTTP and SDK names; use the reference returned by `arcmira_describe`.
+
+## Continue the research
+
+[Continue the investment research workflow](https://arcmira.com/docs/workflows/investment-research). You will learn how to follow a search result into competing explanations, inspect the surrounding exchange, verify claims against disclosures, and write a brief with the questions that remain unresolved.
+
+Speaker identification and commercial classifications can be incomplete. Check the linked source. Missing a source or a capability your workflow needs? Use `arcmira_feedback` to describe it, why it matters, and what better support would be worth. [Help shape the index](https://arcmira.com/docs/feedback#help-shape-the-index).
+
+[Plugin and skills](plugins/arcmira) · [Share plugin feedback](https://github.com/arcmira/mcp/issues/new?template=plugin-feedback.yml) · [Update installed skills](plugins/arcmira#keep-it-updated)
+
+## Authentication options
 
 Two ways in. Hosts that speak the MCP authorization spec sign you in; everything else sends a key.
 
@@ -93,7 +126,7 @@ When the video is not transcribed yet, `GET /v1/transcripts/{video_id}?quality=p
 
 Results that are empty, an error, truncated or a resolve `ask` carry `call_id` (`mcpc_...`), which `arcmira_feedback` takes to name the call.
 
-The client's methods are the arcmira CLI's commands, with the same names and the flags as options, so the MCP, the CLI and the SDK teach one vocabulary:
+The client covers the same tasks as the CLI and SDKs. Argument names differ; use these MCP signatures:
 
 | Method | Fronts | Use it for |
 |---|---|---|
@@ -105,7 +138,7 @@ The client's methods are the arcmira CLI's commands, with the same names and the
 | `arcmira.recommendations(entityId, { kind?, channelId?, after?, before?, limit?, cursor? })` | `GET /v1/recommendations?entity_id=` | Who recommends one entity, sponsored or organic, with the quote |
 | `arcmira.episodes(channelId, { limit?, after?, before? })` | `GET /v1/channels/{id}/videos` | Newest indexed episodes, with the `video_id` the others take |
 | `arcmira.transcript(videoIdOrUrl, { quality?, language?, timestamps?, start?, end? })` | `GET /v1/transcripts/{video_id}`, read again at `Retry-After` while a Premium transcription is pending | The transcript of one video, captions or Premium, whole or a window |
-| `arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })` | `GET /v1/mentions/counts` | What shows talk about, what they share, what one episode mentions |
+| `arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })` | `GET /v1/mentions/counts` | What shows talk about, what they share, what one episode mentions. `mode`: `mentions`, `appearances`, or `both`; `limit`: 1 to 40. |
 | `arcmira.quote(videoIdOrUrl)` | `GET /v1/transcripts/{video_id}/quote` | A price check, not a spoken quote: the credits a Premium read of the whole video would use, and any on-demand cents. Uses no credits |
 | `arcmira.status({ channelId? })` | `GET /v1/channels/{id}/coverage`, `GET /v1/me` | Coverage and the index date, or the account the key spends (`account`, `role`), plan, credits and on-demand budget |
 | `arcmira.monitors.list()` | `GET /v1/monitors` | The user's monitors, with delivery settings and tracker counts |

@@ -4,7 +4,7 @@ Arcmira searches indexed YouTube and podcast transcripts, with a catalog of who 
 
 - MCP endpoint (Streamable HTTP): https://mcp.arcmira.com/mcp
 - Auth: sign in through the host (OAuth, no key), or Authorization: Bearer <arc_sk_ account key>
-- Tools: arcmira_describe returns the reference for a typed JavaScript client (resolve, search, mentions, momentum, sponsors, recommendations, episodes, transcript, occurrences, quote, status, monitors); arcmira_execute_read runs a program against it in a sandbox that reaches only api.arcmira.com, Premium transcripts included (a Premium read uses credits from the account's plan, then its on-demand budget); arcmira_execute_write adds monitor changes (create, update, add entities or exact names, move trackers; nothing is deleted); arcmira_feedback reports what was wrong, slow or missing. Filters take ids; resolve a name first.
+- Tools: arcmira_describe returns the reference for a typed JavaScript client (resolve, search, mentions, momentum, sponsors, recommendations, episodes, transcript, occurrences, quote, status, monitors); arcmira_execute_read runs a program against it in a sandbox that reaches only api.arcmira.com, Premium transcripts included (a Premium read uses credits from the account's plan, then its on-demand budget); arcmira_execute_write adds monitor changes (create, update, add entities or exact names, move trackers; nothing is deleted); arcmira_feedback accepts corrections, coverage requests, capability requests, and workflow feedback. Entity and channel filters take IDs; resolve names before applying them. Plain keyword search does not require resolution.
 - Plugin for Claude Code, Codex, Cursor and Gemini with six skills: https://github.com/arcmira/mcp/tree/master/plugins/arcmira
 - Sign up with an email address and no browser: POST https://api.arcmira.com/v1/signups?src=mcp-tool with {"email"}, then POST https://api.arcmira.com/v1/signups/verify with the code from that inbox
 - HTTP API the tools front: https://api.arcmira.com/v1 (OpenAPI at /v1/openapi.json)
@@ -13,3 +13,12 @@ Arcmira searches indexed YouTube and podcast transcripts, with a catalog of who 
 - Setup for each host: https://arcmira.com/agent-setup
 - Server card: https://mcp.arcmira.com/.well-known/mcp/server-card.json
 - Agent index: https://arcmira.com/llms.txt
+
+## Start a research task
+
+Call `arcmira_describe` once, then use `arcmira_execute_read` for a first search. Search YouTube videos and podcast transcripts for a specific phrase with `arcmira.search({ query, after: arcmira.daysAgo(60), before: arcmira.today(), limit: 5 })`. Return passage text, available speaker attribution, publication dates, transcript sources, and watch URLs. Read surrounding exchanges with `arcmira.transcript` before drawing conclusions.
+
+Search supports up to 20 passages; execute output is bounded. Use fewer passages or select fields if a result is truncated. Entity mentions use `arcmira.mentions`; spoken wording uses `arcmira.search`. Count media appearances with `arcmira.occurrences` and `mode: "appearances"`. Its accepted modes are `mentions`, `appearances`, and `both`, and its limit is 1 to 40. Use `arcmira.momentum` to compare attention, not to infer sentiment.
+
+- [Investment research workflow](https://arcmira.com/docs/workflows/investment-research): Follow transcript evidence into competing explanations, primary-source checks, and a research brief.
+- [Help shape Arcmira](https://arcmira.com/docs/feedback): Request sources and capabilities, correct results, or explain what would make a paid plan useful.
