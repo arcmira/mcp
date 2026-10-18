@@ -119,7 +119,7 @@ export const METHODS: readonly MethodDoc[] = [
     signature: 'arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })',
     returns: '{ rows[{entity_id, name, type, channel_id, channel_name, count (episodes), occurrences (times said)}], shared[{entity_id, name, type, by_channel[{channel_id, channel_name, count}]}], window{after, before}, as_of }',
     notes: [
-      'Ranked catalog counts per entity per channel: what a show talks about, how many episodes mentioned an entity in a window, what one episode mentions (videoIds). Needs channelIds (up to 8), entityIds (up to 20) or videoIds (up to 20). types: person | organization | product | topic | channel. With two or more channelIds read shared, not rows, for what both shows mention.',
+      'Ranked catalog counts per entity per channel: what a show talks about, how many episodes mentioned an entity in a window, what one episode mentions (videoIds). Needs channelIds (up to 8), entityIds (up to 20) or videoIds (up to 20). types: person | organization | product | topic | channel. mode: "mentions" (default), "appearances" or "both". limit: 1 to 40, default 20. With two or more channelIds read shared, not rows, for what both shows mention.',
     ],
   },
   {
@@ -211,7 +211,7 @@ if (!e) return { ask: show.ask };
 const ch = e.youtube_channel_id;
 const [s, ep] = await Promise.all([arcmira.status({ channelId: ch }), arcmira.episodes(ch, { limit: 1 })]);
 const what = await arcmira.occurrences({ videoIds: [ep.episodes[0].video_id], types: ["organization"], limit: 5 });
-return { show: e.name, channel_id: ch, assumed: Boolean(show.suggested), why: show.suggested?.evidence ?? null, videos_indexed: s.channel.searchable_videos, indexed_through: s.channel.indexed_through, latest: ep.episodes[0].title, mentions: what.rows.map(r => [r.name, r.entity_id, r.occurrences]) };`,
+return { show: e.name, channel_id: ch, assumed: Boolean(show.suggested), why: show.suggested?.evidence ?? null, videos_indexed: s.channel.searchable_videos, indexed_through: s.channel.indexed_through, latest: ep.episodes[0].title, mentions: what.rows.map(r => [r.name, r.entity_id, r.occurrences]) };   // indexed_through is a publication date; it does not guarantee every earlier episode is indexed`,
   },
   {
     title: 'What two shows both talk about (shared, not rows)',
@@ -279,7 +279,7 @@ export const MAX_CALLS = 40;
 export const ERRORS = `ERRORS. Methods throw ArcmiraError with .code, .message and, for gates, .unlock { tier, url }: id_required (resolve first), invalid_video, too_many (over an id cap), entity_not_found, filter_requires_paid (.param needs a paid plan), freshness_requires_paid (the window is newer than the plan serves), pagination_gated (a cursor past the free window), recommendations_not_enabled, paid_plan_required, transcript_unavailable, transcript_fetching (.retry_after), insufficient_scope (the sign-in lacks monitors:write or trackers:write; reconnecting with them lifts this), write_tool_required, rate_limited (.retry_after_seconds), call_budget (over ${MAX_CALLS} API calls in one program). Usage codes are under USAGE. See ${DOCS.errors}.`;
 
 const ROUTING =
-  'WHICH METHOD. A spoken quote or what was said about a topic: search. Whether and when a name came up: mentions. How hot something is: momentum. What a show talks about, what two shows share, what one episode mentions, how many episodes mentioned X in a window: occurrences. Who sponsors a show: sponsors. Who recommends a brand: recommendations. The latest episode: episodes(channelId, { limit: 1 }). How many videos a show has indexed and its as-of date: status({ channelId }). One video\'s words: transcript. The credits a Premium read of a video would use: quote. The account the key spends, the user\'s role there, plan, credits and on-demand budget: status(). Following entities over time: monitors (the MONITORS note on monitors.list).';
+  'WHICH METHOD. A spoken quote or what was said about a topic: search. Whether and when a name came up: mentions. The episodes a person appeared on: mentions with mode "appearances". How hot something is: momentum. What a show talks about, what two shows share, what one episode mentions, how many episodes mentioned X in a window: occurrences. Who sponsors a show: sponsors. Who recommends a brand: recommendations. The latest episode: episodes(channelId, { limit: 1 }). How many videos a show has indexed and its as-of date: status({ channelId }); its dates are publication dates and do not guarantee every earlier episode is indexed. One video\'s words: transcript. The credits a Premium read of a video would use: quote. The account the key spends, the user\'s role there, plan, credits and on-demand budget: status(). Following entities over time: monitors (the MONITORS note on monitors.list).';
 
 const WRITE_MARK = '   [arcmira_execute_write only]';
 
