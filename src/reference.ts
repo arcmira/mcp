@@ -43,7 +43,7 @@ const PREMIUM = `PREMIUM. A Premium read returns the lines. When the video is no
 
 export const COVERAGE_GUIDANCE = 'Search as_of is the newest publication date among the returned passages, not the date the whole index was updated. For channel freshness, call arcmira.status({ channelId }) and report channel.search_indexed_through for transcript search. A result date or an empty query does not establish missing recent episodes.';
 
-export const ID_RULE_HEAD = 'ID RULE. Filters take verbatim ids only: entity ids look like ent_14, channel ids like UC-DRzaGnL_vtBUpCFH5M0tg (UC plus 22 characters), video ids are 11 characters or a YouTube URL. A name where an id belongs throws id_required before any network call. Resolve first, then query:';
+export const ID_RULE_HEAD = 'ID RULE. Filters take verbatim ids only: entity ids look like ent_14, channel ids like UC-DRzaGnL_vtBUpCFH5M0tg (UC plus 22 characters), video ids are 11 characters or a YouTube URL. A name where an id belongs throws id_required before any network call. Resolve the name first, then pass its id:';
 
 export const ID_RULE_CODE = `const r = await arcmira.resolve("Sam", { context: "the My First Million co-host" });
 const e = r.best ?? r.suggested;          // a show: resolve with { type: "channel" }, use e.youtube_channel_id
@@ -329,8 +329,8 @@ export const MAX_INSTRUCTIONS = 2_000;
 /** The server instructions: the rules that change answers first, since a host may cut the tail. */
 export const SHORT_GUIDE = [
   'Arcmira searches indexed YouTube and podcast transcripts, with a catalog of who is mentioned where, who sponsors whom, and who recommends what on air.',
-  'arcmira_describe returns the arcmira JavaScript client reference; call it once before your first program. arcmira_execute_read runs a program against that client. arcmira_execute_write runs the same client plus monitor changes. arcmira_feedback records what was wrong, slow or missing; a result that warrants it names its call_id.',
-  'Write one program per question. Filters take ids only (ent_..., UC..., 11-character video ids), so resolve every name first with arcmira.resolve, passing the user\'s own words about the name as context. resolve answers best, suggested (one row stands out; say you assumed it) or ask (several fit; return ask.options for the user to pick). No answer means the name is not in the index.',
+  'arcmira_describe returns the JavaScript client reference; call it once before your first program. arcmira_execute_read runs a program against that client. arcmira_execute_write runs the same client plus monitor changes. arcmira_feedback records what was wrong, slow or missing; a result that warrants it names its call_id.',
+  'Write one program per question. A topic or phrase goes in query as typed. Resolve a name with arcmira.resolve when it becomes a filter: who said it, which show, or what it is about. Filters take ids only. Pass the user\'s words about it as context. resolve answers best, suggested (say you assumed it) or ask (the user picks from ask.options); name the entity used. No answer: not in the index.',
   'Date windows default to the last 90 days unless the user names one; reads on a delayed plan say where results stop. Counts cover the shows Arcmira indexes, not the whole web.',
   BUDGET_RULE,
   MONITOR_OFFER,
