@@ -9,6 +9,7 @@ export const DOCS = {
   api: 'https://arcmira.com/docs/api-reference',
   mcp: 'https://arcmira.com/docs/mcp-server',
   errors: 'https://arcmira.com/docs/errors',
+  feedback: 'https://arcmira.com/docs/feedback',
   llms: 'https://arcmira.com/llms.txt',
   openapi: 'https://api.arcmira.com/v1/openapi.json',
 } as const;
@@ -37,13 +38,13 @@ export const MONITOR_RULE = `MONITORS. A monitor sends alerts for the entities i
 export const MONITOR_OFFER = `Monitors can follow what a research turn found, and ${ALERT_PRICE}.`;
 
 /** The closing line of every skill. */
-export const FEEDBACK_LINE = 'If anything was wrong, slow, or missing for the user, send one arcmira_feedback.';
+export const FEEDBACK_LINE = 'If anything was wrong, slow, or missing for the user, or they want a source or capability Arcmira lacks, send one arcmira_feedback.';
 
 const PREMIUM = `PREMIUM. A Premium read returns the lines. When the video is not transcribed yet, the same read starts transcribing it, and the client reads again for about 20 seconds. State pending: eta_seconds says about how long and job.charge what it uses; the same read in a later program returns the lines and never uses credits twice. State failed or refunded: job.error or last_attempt.error says why. retry: true transcribes again and uses credits again, so send it only when the user asks for another attempt. Premium never falls back to captions; a captions read is a separate request. A Premium transcript uses credits for the whole video (300 credits per started 15 minutes); start and end never lower it. A plan without Premium throws paid_plan_required with unlock.`;
 
 export const COVERAGE_GUIDANCE = 'Search as_of is the newest publication date among the returned passages, not the date the whole index was updated. For channel freshness, call arcmira.status({ channelId }) and report channel.search_indexed_through for transcript search. A result date or an empty query does not establish missing recent episodes.';
 
-export const ID_RULE_HEAD = 'ID RULE. Filters take verbatim ids only: entity ids look like ent_14, channel ids like UC-DRzaGnL_vtBUpCFH5M0tg (UC plus 22 characters), video ids are 11 characters or a YouTube URL. A name where an id belongs throws id_required before any network call. Resolve first, then query:';
+export const ID_RULE_HEAD = 'ID RULE. Filters take verbatim ids only: entity ids look like ent_14, channel ids like UC-DRzaGnL_vtBUpCFH5M0tg (UC plus 22 characters), video ids are 11 characters or a YouTube URL. A name where an id belongs throws id_required before any network call. Resolve the name first, then pass its id:';
 
 export const ID_RULE_CODE = `const r = await arcmira.resolve("Sam", { context: "the My First Million co-host" });
 const e = r.best ?? r.suggested;          // a show: resolve with { type: "channel" }, use e.youtube_channel_id
@@ -71,17 +72,18 @@ export const METHODS: readonly MethodDoc[] = [
   },
   {
     name: 'search',
-    signature: 'arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, after?, before?, source?, limit? })',
-    returns: '{ chunks[{text, video_id, video_title, published_at, start_seconds, watch_url, cite_line, channel_id, channel_name, about[], speakers_by[]}], window{after, before}, as_of, note }',
+    signature: 'arcmira.search({ query, channelIds?, about?, entityIds?, speakerIds?, kind?, after?, before?, source?, limit? })',
+    returns: '{ chunks[{text, video_id, video_title, published_at, start_seconds, watch_url, cite_line, channel_id, channel_name, source, source_label, speakers[], score, about[], speakers_by[]}], window{after, before}, as_of, search_index{state, missing_before}, note }',
     notes: [
-      'Spoken passages that match the words in query (a topic, a phrase). channelIds: up to 8 UC ids. about: up to 8 ent_ ids of a brand or person the passage is about. speakerIds: up to 8 person ids; returns passages where that person says the query words, and each line of chunk.text starts with "Name: ". Speaker labels cover part of the index: when a speakerIds search is empty, read note before saying the person never said it, and try about with the same id for what others said about them. kind: sponsored | organic | mention, or an array of them (sponsored is ad reads, organic is unpaid recommendations). Never put a topic word in about; it goes in query. If a search with about, speakerIds or kind returns no chunks, rerun it with query and channelIds only before saying nothing was found. limit 1..20 (default 5). source: arcmira_premium | creator_captions | third_party_quick.',
+      'Spoken passages that match the words in query (a topic, a phrase). channelIds: up to 8 UC ids. about: up to 8 ent_ ids of a brand or person the passage is about. entityIds: up to 8 ids. A person limits results to episodes they appear in, whoever is speaking. A channel entity adds that channel to the scope. Other types match no episodes; use about for them. speakerIds: up to 8 person ids; returns passages where that person speaks the query words. Lines start with "Name: " when the speaker is known; a chunk can include other speakers\' lines. Speaker labels cover part of the index: when a speakerIds search is empty, read note before saying the person never said it, and try about with the same id for what others said about them. kind: sponsored | organic | mention, or an array of them (sponsored is ad reads, organic is unpaid recommendations). Never put a topic word in about; it goes in query. If a search with about, speakerIds or kind returns no chunks, rerun it with query and channelIds only before saying nothing was found. limit 1..20 (default 5). source: arcmira_premium | creator_captions | third_party_quick.',
+      'A chunk is a passage, not a clip: start_seconds is where it starts and there is no end time; transcript with start and end gives clip bounds. chunk.source is the machine-readable transcript source (arcmira_premium, creator_captions, third_party_quick) and source_label its display label. speakers lists speaker names when known. score ranks chunks within one call and is not comparable across calls. search_index.state is live, catching_up or unknown; while catching_up, passages published before search_index.missing_before may be missing.',
     ],
   },
   {
     name: 'mentions',
-    signature: 'arcmira.mentions({ entityId, channelId?, after?, before?, limit?, cursor? })',
+    signature: 'arcmira.mentions({ entityId, channelId?, mode?, after?, before?, limit?, cursor? })',
     returns: '{ entity{id, name, page}, mentions[{media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds, is_appearance, description}], window{after, before}, has_more, next_cursor }',
-    notes: ['When and where a name came up: one row per catalog mention, newest first, several rows per episode, limit 1..100. Never count rows to answer how many episodes: occurrences gives count per window. Rows carry no wording; for a spoken quote use search. Read the episode title before asserting a lone row: a title far from the entity (a jungle episode for a bank) is a homonym the catalog mislabelled.'],
+    notes: ['When and where a name came up: one row per catalog mention, newest first, several rows per episode, limit 1..100. mode: "both" (default), "mentions" (others talking about them) or "appearances" (the person on the episode; people only). For counts use occurrences. appearances on a non-person throws appearances_person_only. Never count rows to answer how many episodes: occurrences gives count per window. Rows carry no wording; for a spoken quote use search. Read the episode title before asserting a lone row: a title far from the entity (a jungle episode for a bank) is a homonym the catalog mislabelled.'],
   },
   {
     name: 'momentum',
@@ -118,7 +120,7 @@ export const METHODS: readonly MethodDoc[] = [
     signature: 'arcmira.occurrences({ channelIds?, entityIds?, videoIds?, types?, mode?, after?, before?, limit? })',
     returns: '{ rows[{entity_id, name, type, channel_id, channel_name, count (episodes), occurrences (times said)}], shared[{entity_id, name, type, by_channel[{channel_id, channel_name, count}]}], window{after, before}, as_of }',
     notes: [
-      'Ranked catalog counts per entity per channel: what a show talks about, how many episodes mentioned an entity in a window, what one episode mentions (videoIds). Needs channelIds (up to 8), entityIds (up to 20) or videoIds (up to 20). types: person | organization | product | topic | channel. With two or more channelIds read shared, not rows, for what both shows mention.',
+      'Ranked catalog counts per entity per channel: what a show talks about, how many episodes mentioned an entity in a window, what one episode mentions (videoIds). Needs channelIds (up to 8), entityIds (up to 20) or videoIds (up to 20). types: person | organization | product | topic | channel. mode: "mentions" (default), "appearances" or "both". limit: 1 to 40, default 20. With two or more channelIds read shared, not rows, for what both shows mention.',
     ],
   },
   {
@@ -210,7 +212,7 @@ if (!e) return { ask: show.ask };
 const ch = e.youtube_channel_id;
 const [s, ep] = await Promise.all([arcmira.status({ channelId: ch }), arcmira.episodes(ch, { limit: 1 })]);
 const what = await arcmira.occurrences({ videoIds: [ep.episodes[0].video_id], types: ["organization"], limit: 5 });
-return { show: e.name, channel_id: ch, assumed: Boolean(show.suggested), why: show.suggested?.evidence ?? null, videos_indexed: s.channel.searchable_videos, indexed_through: s.channel.indexed_through, latest: ep.episodes[0].title, mentions: what.rows.map(r => [r.name, r.entity_id, r.occurrences]) };`,
+return { show: e.name, channel_id: ch, assumed: Boolean(show.suggested), why: show.suggested?.evidence ?? null, videos_indexed: s.channel.searchable_videos, indexed_through: s.channel.indexed_through, latest: ep.episodes[0].title, mentions: what.rows.map(r => [r.name, r.entity_id, r.occurrences]) };   // indexed_through is a publication date; it does not guarantee every earlier episode is indexed`,
   },
   {
     title: 'What two shows both talk about (shared, not rows)',
@@ -223,7 +225,10 @@ return o.shared.slice(0, 5).map(s => ({ name: s.name, id: s.entity_id, episodes_
 const e = p.best ?? p.suggested;
 if (!e) return { ask: p.ask };
 const hits = await arcmira.search({ query: "ramp", speakerIds: [e.id], after: arcmira.daysAgo(90), limit: 5 });
-const said = hits.chunks.map(c => ({ lines: c.text.split("\\n").filter(l => l.startsWith(e.name + ": ")), url: c.watch_url, date: c.published_at }));
+const said = hits.chunks.map(c => {
+  const own = c.text.split("\\n").filter(l => l.startsWith(e.name + ": "));
+  return { lines: own.length ? own : [c.text], speaker_named_on_lines: own.length > 0, url: c.watch_url, date: c.published_at };
+});
 return { person: e.name, id: e.id, assumed: Boolean(p.suggested), why: p.suggested?.evidence ?? null, ...(said.length ? { said } : { none: hits.note }) };`,
   },
   {
@@ -275,7 +280,7 @@ export const MAX_CALLS = 40;
 export const ERRORS = `ERRORS. Methods throw ArcmiraError with .code, .message and, for gates, .unlock { tier, url }: id_required (resolve first), invalid_video, too_many (over an id cap), entity_not_found, filter_requires_paid (.param needs a paid plan), freshness_requires_paid (the window is newer than the plan serves), pagination_gated (a cursor past the free window), recommendations_not_enabled, paid_plan_required, transcript_unavailable, transcript_fetching (.retry_after), insufficient_scope (the sign-in lacks monitors:write or trackers:write; reconnecting with them lifts this), write_tool_required, rate_limited (.retry_after_seconds), call_budget (over ${MAX_CALLS} API calls in one program). Usage codes are under USAGE. See ${DOCS.errors}.`;
 
 const ROUTING =
-  'WHICH METHOD. A spoken quote or what was said about a topic: search. Whether and when a name came up: mentions. How hot something is: momentum. What a show talks about, what two shows share, what one episode mentions, how many episodes mentioned X in a window: occurrences. Who sponsors a show: sponsors. Who recommends a brand: recommendations. The latest episode: episodes(channelId, { limit: 1 }). How many videos a show has indexed and its as-of date: status({ channelId }). One video\'s words: transcript. The credits a Premium read of a video would use: quote. The account the key spends, the user\'s role there, plan, credits and on-demand budget: status(). Following entities over time: monitors (the MONITORS note on monitors.list).';
+  'WHICH METHOD. A spoken quote or what was said about a topic: search. Whether and when a name came up: mentions. The episodes a person appeared on: mentions with mode "appearances". How hot something is: momentum. What a show talks about, what two shows share, what one episode mentions, how many episodes mentioned X in a window: occurrences. Who sponsors a show: sponsors. Who recommends a brand: recommendations. The latest episode: episodes(channelId, { limit: 1 }). How many videos a show has indexed and its as-of date: status({ channelId }); its dates are publication dates and do not guarantee every earlier episode is indexed. One video\'s words: transcript. The credits a Premium read of a video would use: quote. The account the key spends, the user\'s role there, plan, credits and on-demand budget: status(). Following entities over time: monitors (the MONITORS note on monitors.list).';
 
 const WRITE_MARK = '   [arcmira_execute_write only]';
 
@@ -310,9 +315,9 @@ export function referenceText(topic?: string): string {
     '',
     ERRORS,
     '',
-    BUDGET_RULE,
+    `${BUDGET_RULE} If the user decides not to start a paid plan, you may offer to send their reason with arcmira_feedback (category "other"). Send only what the user said.`,
     '',
-    'FEEDBACK. arcmira_feedback records what was wrong, slow or missing. Pass call_id when a result named one.',
+    `FEEDBACK. arcmira_feedback records what was wrong, slow or missing for the user, and any source or capability they want that Arcmira lacks. Pass call_id when a result named one. See ${DOCS.feedback}.`,
     '',
     `DOCS. API reference ${DOCS.api}, MCP guide ${DOCS.mcp}, error codes ${DOCS.errors}, OpenAPI ${DOCS.openapi}, agent index ${DOCS.llms}.`,
   ].join('\n');
@@ -325,8 +330,8 @@ export const MAX_INSTRUCTIONS = 2_000;
 /** The server instructions: the rules that change answers first, since a host may cut the tail. */
 export const SHORT_GUIDE = [
   'Arcmira searches indexed YouTube and podcast transcripts, with a catalog of who is mentioned where, who sponsors whom, and who recommends what on air.',
-  'arcmira_describe returns the arcmira JavaScript client reference; call it once before your first program. arcmira_execute_read runs a program against that client. arcmira_execute_write runs the same client plus monitor changes. arcmira_feedback records what was wrong, slow or missing; a result that warrants it names its call_id.',
-  'Write one program per question. Filters take ids only (ent_..., UC..., 11-character video ids), so resolve every name first with arcmira.resolve, passing the user\'s own words about the name as context. resolve answers best, suggested (one row stands out; say you assumed it) or ask (several fit; return ask.options for the user to pick). No answer means the name is not in the index.',
+  'arcmira_describe returns the JavaScript client reference; call it once before your first program. arcmira_execute_read runs a program against that client. arcmira_execute_write runs the same client plus monitor changes. arcmira_feedback records what was wrong, slow or missing; a result that warrants it names its call_id.',
+  'Write one program per question. A topic or phrase goes in query as typed. Resolve a name with arcmira.resolve when it becomes a filter: who said it, which show, or what it is about. Filters take ids only. Pass the user\'s words about it as context. resolve answers best, suggested (say you assumed it) or ask (the user picks from ask.options); name the entity used. No answer: not in the index.',
   'Date windows default to the last 90 days unless the user names one; reads on a delayed plan say where results stop. Counts cover the shows Arcmira indexes, not the whole web.',
   BUDGET_RULE,
   MONITOR_OFFER,

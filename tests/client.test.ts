@@ -49,6 +49,25 @@ describe('the sandbox client', () => {
     assert.equal(urls.length, 0);
   });
 
+  it('mentions mode maps to is_appearance, and both (the default) sends none', async () => {
+    const { urls, fetch } = recording({ mentions: [] });
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch });
+    await arcmira.mentions({ entityId: 'ent_14' });
+    await arcmira.mentions({ entityId: 'ent_14', mode: 'both' });
+    await arcmira.mentions({ entityId: 'ent_14', mode: 'mentions' });
+    await arcmira.mentions({ entityId: 'ent_14', mode: 'appearances' });
+    assert.deepEqual(urls.map((u) => u.searchParams.get('is_appearance')), [null, null, 'false', 'true']);
+  });
+
+  it('mentions refuses any other mode before a call', async () => {
+    const { urls, fetch } = recording({ mentions: [] });
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch });
+    for (const mode of ['appearance', 'all', 'toString', true, null]) {
+      await assert.rejects(arcmira.mentions({ entityId: 'ent_14', mode }), (e: Error & { code: string }) => e.code === 'invalid_request' && /mode is both \(default\), mentions or appearances/.test(e.message));
+    }
+    assert.equal(urls.length, 0);
+  });
+
   it('maps every method to its v1 route with the CLI flag names as query keys', async () => {
     const { urls, fetch } = recording({ mentions: [], recommendations: [], chunks: [], rows: [], sponsors: [], episodes: [] });
     const { arcmira, meter } = mod.createArcmira({ base: 'https://api.arcmira.com/', fetch });

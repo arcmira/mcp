@@ -270,7 +270,7 @@ return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of
     ],
     traps: [
       '`search` ranks by the words in `query`; put the distinctive words of the phrase there, not a paraphrase.',
-      'A chunk found with `speakerIds` also holds other people\'s lines. Quote only lines that start with the speaker\'s name ("Chamath Palihapitiya: ..."), never the whole passage.',
+      'A chunk found with `speakerIds` can include other people\'s lines. Lines start with "Name: " when the speaker is known. Quote only the speaker\'s lines ("Chamath Palihapitiya: ..."), never the whole passage. When no line names a speaker, the passage still matched that person; say the attribution covers the passage, not each line.',
       'Caption lines are machine text: fix nothing inside the quotation marks. A premium transcript (`quality: "premium"`, paid plans) adds speaker ids into `speakers[]`.',
       'A caption read uses 4 credits per started 15 minutes of its `start`/`end` window, and of the whole episode without one. A Premium read uses credits for the whole video whatever the window.',
       'Some videos have no readable caption track yet (`transcript_unavailable`, `transcript_fetching`); quote the search chunk `text` for those and say the words come from the search passage.',
@@ -281,7 +281,7 @@ return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of
     description: 'Researches a person across podcasts and YouTube for interview or meeting prep: where they appeared, their own words, who discusses them. Uses arcmira.',
     title: 'Person research',
     summary:
-      'Three lenses on one person id. `momentum` gives attention and the shows that mention them most. `mentions` rows with `is_appearance` are episodes they were on. `search` with `speakerIds` returns their own words; `about` returns what others said about them.',
+      'Three lenses on one person id. `momentum` gives attention and the shows that mention them most. `mentions` with `mode: "appearances"` lists the episodes they were on. `search` with `speakerIds` returns their own words; `about` returns what others said about them.',
     asks: ['prep for an interview, a podcast booking or a meeting with someone', 'what has a person said recently, and where', 'who talks about a person, and is attention rising'],
     ids: [
       'Resolve with `{ type: "person" }`. A first name alone ("Sam") matches many people: pass what the user said about them (runs OpenAI, hosts a show) as `context`, and when resolve still answers `ask`, show its options.',
@@ -292,14 +292,14 @@ return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of
         code: `${pick('Jensen Huang', 'person')}
 const [m, rows, own] = await Promise.all([
   arcmira.momentum(id),
-  arcmira.mentions({ entityId: id, after: arcmira.daysAgo(90), limit: 40 }),
+  arcmira.mentions({ entityId: id, mode: "appearances", after: arcmira.daysAgo(90), limit: 40 }),
   arcmira.search({ query: "AI", speakerIds: [id], after: arcmira.daysAgo(180), limit: 5 }),
 ]);
 const about = await arcmira.search({ query: m.entity.name, about: [id], after: arcmira.daysAgo(90), limit: 3 });
 const appeared = new Map();
-for (const x of rows.mentions) if (x.is_appearance) appeared.set(x.media.video_id, { show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at });
+for (const x of rows.mentions) appeared.set(x.media.video_id, { show: x.media.source_channel?.name ?? null, episode: x.media.title, date: x.media.published_at });
 let fromAppearance = null;   // no speaker-tagged chunks: read their newest appearance instead
-const ep = own.chunks.length === 0 ? rows.mentions.find(x => x.is_appearance) : undefined;
+const ep = own.chunks.length === 0 ? rows.mentions[0] : undefined;
 if (ep) {
   try {
     const t = await arcmira.transcript(ep.media.video_id, { start: Math.max(0, ep.start_seconds - 5), end: ep.start_seconds + 90 });
@@ -313,7 +313,8 @@ return {
   person: { id, name: m.entity.name, page: m.entity.page, assumed, why },
   attention: { verdict: m.verdict, last_30d: m.volume.mentions_30d, prior_30d: m.volume.mentions_prior_30d, as_of: m.as_of, top_shows: m.top_shows.map(s => [s.channel_name, s.mentions]) },
   appeared_on: [...appeared.values()].slice(0, 8),
-  appeared_on_partial: rows.has_more,   // true: only the newest 40 mention rows were read
+  appeared_on_partial: rows.has_more || appeared.size > 8,
+  appeared_on_cursor: rows.has_more ? rows.next_cursor : null,
   in_their_words: own.chunks.map(c => ({ said: c.text.slice(0, 300), episode: c.video_title, show: c.channel_name, date: c.published_at, url: c.watch_url })),
   from_their_appearance: fromAppearance,
   said_about_them: about.chunks.map(c => ({ said: c.text.slice(0, 200), show: c.channel_name, date: c.published_at, url: c.watch_url })),
@@ -328,7 +329,7 @@ return {
     ],
     traps: [
       'A search with `about` returns other people talking; only `speakerIds` returns the person\'s own words. Speaker tags cover part of the index, so when the speaker search is empty, read a window of an episode they appeared on and say the lines come from their appearance, since caption lines do not name the speaker.',
-      'A chunk found with `speakerIds` also holds other people\'s lines. Quote only lines that start with the person\'s name.',
+      'A chunk found with `speakerIds` can include other people\'s lines. Lines start with "Name: " when the speaker is known. Quote only the person\'s lines. When no line names a speaker, say the attribution covers the passage, not each line.',
       'Put the user\'s topic in `query` for the speaker search (it needs a word or phrase of two or more characters).',
       'Mentions and momentum count the shows Arcmira indexes, not all media.',
     ],

@@ -65,7 +65,7 @@ Anything else (one video's transcript, a topic across shows, who recommends a pr
 ## Procedure
 
 1. Call \`arcmira_describe\` once before your first program. It is current on every call; \`arcmira_describe({ topic })\` narrows it to one method.
-2. Resolve every name in the question first, as the ID rule below says. Filters take ids only.
+2. A topic or phrase goes in \`query\` as typed. Resolve a name with \`arcmira.resolve\` when it becomes a filter: who said it, which show, or what it is about. Filters take ids only, as the ID rule below says.
 3. Before asserting a mention, read its description or passage and say which sense of the name it is (Mercury the bank, not the element).
 4. Write one \`arcmira_execute_read\` program per question. Resolve, check, and run every query the question needs inside that one program.
 5. Return only the fields the answer needs, not whole responses.

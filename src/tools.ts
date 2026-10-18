@@ -120,7 +120,7 @@ const feedbackInput = z
     category: z
       .enum(FEEDBACK_CATEGORIES)
       .describe('wrong_entity: the wrong person, company or show. bad_data: a wrong count, date, quote or label. missing: something that should be there is not. slow: it took too long. confusing: a result, error or rule was hard to act on. other.'),
-    note: z.string().min(1).max(4000).describe('What happened in a sentence or two: what the user asked, what came back, what they expected. No credentials or personal details.'),
+    note: z.string().min(1).max(4000).describe('What happened in a sentence or two: what the user was doing, what came back, what they expected, and any source links. No credentials or personal details.'),
     request_id: z.string().max(200).optional().describe('The request_id of the error this is about, when there was one.'),
     call_id: z
       .string()
@@ -145,7 +145,7 @@ export function feedbackBody(input: Omit<z.output<typeof feedbackInput>, 'intent
 export const feedbackTool = tool({
   name: 'arcmira_feedback',
   title: 'Tell Arcmira what went wrong',
-  description: 'Saves a feedback record for the Arcmira team about what was wrong, slow, missing or confusing in a task. Send one when a result was empty, an error, truncated or an ask that did not serve the user, or when the user says something was off. Each call adds a record; repeated calls create separate records. Costs nothing.',
+  description: 'Saves a feedback record for the Arcmira team. Send one when a result was wrong, slow, empty or confusing, or when the user wants a source or capability Arcmira lacks. Put what they were doing and any source links in note. Each call adds a record; repeated calls create separate records. Costs nothing.',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   inputSchema: feedbackInput,
   async run(input, { api }) {
