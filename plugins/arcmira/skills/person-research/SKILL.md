@@ -80,7 +80,7 @@ return {
 ## Traps
 
 - A search with `about` returns other people talking; only `speakerIds` returns the person's own words. Speaker tags cover part of the index, so when the speaker search is empty, read a window of an episode they appeared on and say the lines come from their appearance, since caption lines do not name the speaker.
-- A chunk found with `speakerIds` also holds other people's lines. Quote only lines that start with the person's name.
+- A chunk found with `speakerIds` can include other people's lines. Lines start with "Name: " when the speaker is known. Quote only the person's lines. When no line names a speaker, say the attribution covers the passage, not each line.
 - Put the user's topic in `query` for the speaker search (it needs a word or phrase of two or more characters).
 - Mentions and momentum count the shows Arcmira indexes, not all media.
 

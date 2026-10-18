@@ -71,10 +71,11 @@ export const METHODS: readonly MethodDoc[] = [
   },
   {
     name: 'search',
-    signature: 'arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, after?, before?, source?, limit? })',
-    returns: '{ chunks[{text, video_id, video_title, published_at, start_seconds, watch_url, cite_line, channel_id, channel_name, about[], speakers_by[]}], window{after, before}, as_of, note }',
+    signature: 'arcmira.search({ query, channelIds?, about?, entityIds?, speakerIds?, kind?, after?, before?, source?, limit? })',
+    returns: '{ chunks[{text, video_id, video_title, published_at, start_seconds, watch_url, cite_line, channel_id, channel_name, source, source_label, speakers[], score, about[], speakers_by[]}], window{after, before}, as_of, search_index{state, missing_before}, note }',
     notes: [
-      'Spoken passages that match the words in query (a topic, a phrase). channelIds: up to 8 UC ids. about: up to 8 ent_ ids of a brand or person the passage is about. speakerIds: up to 8 person ids; returns passages where that person says the query words, and each line of chunk.text starts with "Name: ". Speaker labels cover part of the index: when a speakerIds search is empty, read note before saying the person never said it, and try about with the same id for what others said about them. kind: sponsored | organic | mention, or an array of them (sponsored is ad reads, organic is unpaid recommendations). Never put a topic word in about; it goes in query. If a search with about, speakerIds or kind returns no chunks, rerun it with query and channelIds only before saying nothing was found. limit 1..20 (default 5). source: arcmira_premium | creator_captions | third_party_quick.',
+      'Spoken passages that match the words in query (a topic, a phrase). channelIds: up to 8 UC ids. about: up to 8 ent_ ids of a brand or person the passage is about. entityIds: up to 8 ids. A person limits results to episodes they appear in, whoever is speaking. A channel entity adds that channel to the scope. Other types match no episodes; use about for them. speakerIds: up to 8 person ids; returns passages where that person speaks the query words. Lines start with "Name: " when the speaker is known; a chunk can include other speakers\' lines. Speaker labels cover part of the index: when a speakerIds search is empty, read note before saying the person never said it, and try about with the same id for what others said about them. kind: sponsored | organic | mention, or an array of them (sponsored is ad reads, organic is unpaid recommendations). Never put a topic word in about; it goes in query. If a search with about, speakerIds or kind returns no chunks, rerun it with query and channelIds only before saying nothing was found. limit 1..20 (default 5). source: arcmira_premium | creator_captions | third_party_quick.',
+      'A chunk is a passage, not a clip: start_seconds is where it starts and there is no end time; transcript with start and end gives clip bounds. chunk.source is the machine-readable transcript source (arcmira_premium, creator_captions, third_party_quick) and source_label its display label. speakers lists speaker names when known. score ranks chunks within one call and is not comparable across calls. search_index.state is live, catching_up or unknown; while catching_up, passages published before search_index.missing_before may be missing.',
     ],
   },
   {
@@ -223,7 +224,10 @@ return o.shared.slice(0, 5).map(s => ({ name: s.name, id: s.entity_id, episodes_
 const e = p.best ?? p.suggested;
 if (!e) return { ask: p.ask };
 const hits = await arcmira.search({ query: "ramp", speakerIds: [e.id], after: arcmira.daysAgo(90), limit: 5 });
-const said = hits.chunks.map(c => ({ lines: c.text.split("\\n").filter(l => l.startsWith(e.name + ": ")), url: c.watch_url, date: c.published_at }));
+const said = hits.chunks.map(c => {
+  const own = c.text.split("\\n").filter(l => l.startsWith(e.name + ": "));
+  return { lines: own.length ? own : [c.text], speaker_named_on_lines: own.length > 0, url: c.watch_url, date: c.published_at };
+});
 return { person: e.name, id: e.id, assumed: Boolean(p.suggested), why: p.suggested?.evidence ?? null, ...(said.length ? { said } : { none: hits.note }) };`,
   },
   {
