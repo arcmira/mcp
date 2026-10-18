@@ -132,7 +132,7 @@ The client covers the same tasks as the CLI and SDKs. Argument names differ; use
 |---|---|---|
 | `arcmira.resolve(q, { type?, context?, limit? })` | `GET /v1/entities/resolve` | A name, `@handle`, URL or `UC` id to one of three answers: `best`, `suggested` (with `reason` and `evidence`), or `ask` with options |
 | `arcmira.search({ query, channelIds?, about?, speakerIds?, kind?, entityIds?, after?, before?, source?, limit? })` | `GET /v1/search` | Spoken slices for one topic, or about an entity, or spoken by a person, with watch links and dates |
-| `arcmira.mentions({ entityId, channelId?, after?, before?, limit?, cursor? })` | `GET /v1/mentions` | Has X mentioned Y, first seen, last seen |
+| `arcmira.mentions({ entityId, channelId?, mode?, after?, before?, limit?, cursor? })` | `GET /v1/mentions` | Has X mentioned Y, first seen, last seen. `mode`: `both` (default), `mentions`, or `appearances` (people only). |
 | `arcmira.momentum(entityId, { days? })` | `GET /v1/entities/{id}/momentum` | The last `days` (7 to 365, default 30) against the prior `days`, with a verdict and top shows for that window. 10 credits a call. |
 | `arcmira.sponsors(channelId, { minAdReads?, status?, limit? })` | `GET /v1/channels/{id}/sponsors` | Recurring sponsors of one show |
 | `arcmira.recommendations(entityId, { kind?, channelId?, after?, before?, limit?, cursor? })` | `GET /v1/recommendations?entity_id=` | Who recommends one entity, sponsored or organic, with the quote |

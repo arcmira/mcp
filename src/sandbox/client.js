@@ -92,6 +92,7 @@ const RETIRED_PREMIUM = 'arcmira.prepare and arcmira.wait are gone: arcmira.tran
 
 /** recommendations kind to /v1 class; all sends no class. */
 const KINDS = { sponsored: 'sponsored', organic: 'organic', all: undefined };
+const APPEARANCE_FILTER = new Map([['both', undefined], ['mentions', 'false'], ['appearances', 'true']]);
 const FREQUENCIES = new Set(['realtime', 'hourly', 'daily']);
 const PERSON_MATCH_MODES = new Set(['mentions', 'appearances', 'both']);
 /** The monitor fields POST /v1/monitors takes, by their /v1 names; PATCH also takes paused. */
@@ -226,10 +227,12 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       });
     },
     async mentions(options) {
-      const { entityId, channelId, after, before, limit = 10, cursor } = needOptions('mentions', options, 'arcmira.mentions({ entityId, channelId?, after?, before?, limit?, cursor? })');
+      const { entityId, channelId, mode = 'both', after, before, limit = 10, cursor } = needOptions('mentions', options, 'arcmira.mentions({ entityId, channelId?, mode?, after?, before?, limit?, cursor? })');
+      if (!APPEARANCE_FILTER.has(mode)) throw new ArcmiraError('mode is both (default), mentions or appearances.', 'invalid_request');
       return get('/v1/mentions', {
         entity_id: needEntityId(entityId, 'entityId'),
         channel_id: channelId === undefined ? undefined : needChannelId(channelId, 'channelId'),
+        is_appearance: APPEARANCE_FILTER.get(mode),
         after: bound(after, 'after'),
         before: bound(before, 'before'),
         limit,

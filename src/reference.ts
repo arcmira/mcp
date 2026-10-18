@@ -79,9 +79,9 @@ export const METHODS: readonly MethodDoc[] = [
   },
   {
     name: 'mentions',
-    signature: 'arcmira.mentions({ entityId, channelId?, after?, before?, limit?, cursor? })',
+    signature: 'arcmira.mentions({ entityId, channelId?, mode?, after?, before?, limit?, cursor? })',
     returns: '{ entity{id, name, page}, mentions[{media{video_id, title, published_at, channel_id, source_channel{name}}, start_seconds, is_appearance, description}], window{after, before}, has_more, next_cursor }',
-    notes: ['When and where a name came up: one row per catalog mention, newest first, several rows per episode, limit 1..100. Never count rows to answer how many episodes: occurrences gives count per window. Rows carry no wording; for a spoken quote use search. Read the episode title before asserting a lone row: a title far from the entity (a jungle episode for a bank) is a homonym the catalog mislabelled.'],
+    notes: ['When and where a name came up: one row per catalog mention, newest first, several rows per episode, limit 1..100. mode: "both" (default), "mentions" (others talking about them) or "appearances" (the person on the episode; people only). For counts use occurrences. appearances on a non-person throws appearances_person_only. Never count rows to answer how many episodes: occurrences gives count per window. Rows carry no wording; for a spoken quote use search. Read the episode title before asserting a lone row: a title far from the entity (a jungle episode for a bank) is a homonym the catalog mislabelled.'],
   },
   {
     name: 'momentum',

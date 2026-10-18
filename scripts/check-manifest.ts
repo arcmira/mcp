@@ -179,6 +179,7 @@ const SAMPLE_CALLS: Record<string, (a: Arcmira) => Promise<unknown>> = {
     a.mentions({
       entityId: 'ent_14',
       channelId: TBPN,
+      mode: 'appearances',
       after: '2026-01-01',
       before: '2026-09-01',
       limit: 10,
