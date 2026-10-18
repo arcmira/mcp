@@ -9,6 +9,7 @@ export const DOCS = {
   api: 'https://arcmira.com/docs/api-reference',
   mcp: 'https://arcmira.com/docs/mcp-server',
   errors: 'https://arcmira.com/docs/errors',
+  feedback: 'https://arcmira.com/docs/feedback',
   llms: 'https://arcmira.com/llms.txt',
   openapi: 'https://api.arcmira.com/v1/openapi.json',
 } as const;
@@ -37,7 +38,7 @@ export const MONITOR_RULE = `MONITORS. A monitor sends alerts for the entities i
 export const MONITOR_OFFER = `Monitors can follow what a research turn found, and ${ALERT_PRICE}.`;
 
 /** The closing line of every skill. */
-export const FEEDBACK_LINE = 'If anything was wrong, slow, or missing for the user, send one arcmira_feedback.';
+export const FEEDBACK_LINE = 'If anything was wrong, slow, or missing for the user, or they want a source or capability Arcmira lacks, send one arcmira_feedback.';
 
 const PREMIUM = `PREMIUM. A Premium read returns the lines. When the video is not transcribed yet, the same read starts transcribing it, and the client reads again for about 20 seconds. State pending: eta_seconds says about how long and job.charge what it uses; the same read in a later program returns the lines and never uses credits twice. State failed or refunded: job.error or last_attempt.error says why. retry: true transcribes again and uses credits again, so send it only when the user asks for another attempt. Premium never falls back to captions; a captions read is a separate request. A Premium transcript uses credits for the whole video (300 credits per started 15 minutes); start and end never lower it. A plan without Premium throws paid_plan_required with unlock.`;
 
@@ -314,9 +315,9 @@ export function referenceText(topic?: string): string {
     '',
     ERRORS,
     '',
-    BUDGET_RULE,
+    `${BUDGET_RULE} If the user decides not to start a paid plan, you may offer to send their reason with arcmira_feedback (category "other"). Send only what the user said.`,
     '',
-    'FEEDBACK. arcmira_feedback records what was wrong, slow or missing. Pass call_id when a result named one.',
+    `FEEDBACK. arcmira_feedback records what was wrong, slow or missing for the user, and any source or capability they want that Arcmira lacks. Pass call_id when a result named one. See ${DOCS.feedback}.`,
     '',
     `DOCS. API reference ${DOCS.api}, MCP guide ${DOCS.mcp}, error codes ${DOCS.errors}, OpenAPI ${DOCS.openapi}, agent index ${DOCS.llms}.`,
   ].join('\n');
