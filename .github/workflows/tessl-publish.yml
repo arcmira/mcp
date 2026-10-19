@@ -6,7 +6,6 @@ on:
       release_tag:
         description: Published MCP release tag to distribute
         required: true
-        default: v0.10.4
         type: string
 
 concurrency:
