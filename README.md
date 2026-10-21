@@ -2,6 +2,8 @@
 
 Search YouTube video and podcast transcripts, retrieve timestamped quotes, find entity mentions and media appearances, inspect organic endorsements and ad reads, and monitor new mentions with your agent.
 
+[Arcmira](https://arcmira.com) · [API docs](https://arcmira.com/docs) · [MCP setup](https://arcmira.com/docs/mcp-server)
+
 ## Connect Arcmira
 
 Add the remote MCP server at `https://mcp.arcmira.com/mcp` and sign in through your host. For setup instructions, use [Connect your agent](https://arcmira.com/agent-setup).
