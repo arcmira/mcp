@@ -57,7 +57,7 @@ export type ApiResult<T = Record<string, unknown>> =
       body?: Record<string, unknown>;
     };
 
-export type Query = Record<string, string | number | string[] | undefined | null>;
+export type Query = Record<string, string | number | boolean | string[] | undefined | null>;
 
 /** The per-key throttle as v1 reports it on every response: RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset. */
 export interface RateLimit {
@@ -68,9 +68,10 @@ export interface RateLimit {
 }
 
 export interface ApiClient {
-  /** One JSON POST the server itself makes (arcmira_feedback), with an Idempotency-Key when given. */
-  post<T = Record<string, unknown>>(path: string, body: Record<string, unknown>, options?: { idempotencyKey?: string }): Promise<ApiResult<T>>;
+  /** Authenticated JSON writes, with an Idempotency-Key when given. */
+  post<T = Record<string, unknown>>(path: string, body: Record<string, unknown>, options?: { idempotencyKey?: string; query?: Query }): Promise<ApiResult<T>>;
   get<T = Record<string, unknown>>(path: string, query?: Query): Promise<ApiResult<T>>;
+  patch<T = Record<string, unknown>>(path: string, body: Record<string, unknown>, options?: { idempotencyKey?: string; query?: Query }): Promise<ApiResult<T>>;
   /** Name the host every later call is made for. Sent upstream as x-arcmira-client. */
   setClient(client: ClientInfo | undefined): void;
   /** Name the tool call every later request belongs to. Sent upstream as x-arcmira-mcp-call and x-arcmira-mcp-tool. */
@@ -178,12 +179,13 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
     },
     routes: () => [...routes],
     get: (path, query = {}) => request(path, query),
-    post: (path, body, options = {}) => request(path, {}, { body, idempotency_key: options.idempotencyKey }),
+    post: (path, body, options = {}) => request(path, options.query ?? {}, { method: 'POST', body, idempotency_key: options.idempotencyKey }),
+    patch: (path, body, options = {}) => request(path, options.query ?? {}, { method: 'PATCH', body, idempotency_key: options.idempotencyKey }),
   };
   async function request<T = Record<string, unknown>>(
     path: string,
     query: Query = {},
-    send?: { body: Record<string, unknown>; idempotency_key?: string },
+    send?: { method: 'POST' | 'PATCH'; body: Record<string, unknown>; idempotency_key?: string },
   ): Promise<ApiResult<T>> {
     const url = new URL(base + path);
     for (const [key, value] of Object.entries(query)) {
@@ -195,11 +197,11 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
       url.searchParams.set(key, String(value));
     }
     url.searchParams.set('src', SRC);
-    routes.push(`${send ? 'POST' : 'GET'} ${url.pathname}`);
+    routes.push(`${send?.method ?? 'GET'} ${url.pathname}`);
     const response = await fetch(url, {
       redirect: 'manual',
       signal: AbortSignal.timeout(30_000),
-      method: send ? 'POST' : 'GET',
+      method: send?.method ?? 'GET',
       ...(send ? { body: JSON.stringify(send.body) } : {}),
       headers: {
         authorization: `Bearer ${apiKey}`,
