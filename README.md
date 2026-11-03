@@ -257,7 +257,12 @@ Install the remote connection and core Arcmira reference from this repository:
 gemini extensions install https://github.com/arcmira/mcp
 ```
 
-The root `gemini-extension.json` points to the same remote MCP and loads the `arcmira` skill as its context file, like the plugin bundle. Sign in through the MCP authorization flow. The root extension does not separately install the five optional task skills.
+Sign in when Gemini prompts for MCP authorization. The extension loads the core Arcmira reference. To also install skills for finding quotes, comparing shows, researching people and sponsors, and monitoring companies, run these commands in the project where you want to use them.
+
+```bash
+gemini skills install https://github.com/arcmira/mcp --path plugins/arcmira/skills --scope workspace
+gemini skills list
+```
 
 ## Develop
 
