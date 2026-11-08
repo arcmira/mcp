@@ -29,9 +29,10 @@ export function apiBase(env: Env): string {
   return (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
 }
 
-export function protectedResourceMetadata(origin: string, env: Env): Record<string, unknown> {
+/** The protected-resource document for one MCP path; `resource` is that path's own URL, as RFC 9728 requires. */
+export function protectedResourceMetadata(origin: string, env: Env, path: string = MCP_PATH): Record<string, unknown> {
   return {
-    resource: `${origin}${MCP_PATH}`,
+    resource: `${origin}${path}`,
     authorization_servers: [apiBase(env)],
     bearer_methods_supported: ['header'],
     scopes_supported: ['openid', 'profile', 'email', 'offline_access', 'read', 'recommendations:read', 'monitors:write', 'trackers:write'],
@@ -45,7 +46,7 @@ export function isOAuthBearer(key: string | null): key is string {
 }
 
 /** The 401 that starts the OAuth dance. The body names the sign-up, for a host that cannot run it. */
-export function challenge(origin: string, reason: CredentialFailure = 'no_credential'): Response {
+export function challenge(origin: string, reason: CredentialFailure = 'no_credential', path: string = MCP_PATH): Response {
   const error = noKeyError(reason);
   return Response.json(
     {
@@ -56,7 +57,7 @@ export function challenge(origin: string, reason: CredentialFailure = 'no_creden
     {
       status: 401,
       headers: {
-        'WWW-Authenticate': `Bearer resource_metadata="${origin}${PROTECTED_RESOURCE_PATH}"`,
+        'WWW-Authenticate': `Bearer resource_metadata="${origin}${PROTECTED_RESOURCE_PATH}${path === MCP_PATH ? '' : path}"`,
         'Access-Control-Expose-Headers': 'WWW-Authenticate',
       },
     },

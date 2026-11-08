@@ -12,6 +12,7 @@
 export const ENTITY_ID = /^ent_\d+$/;
 export const CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/;
 export const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+export const DATE_BOUND = /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:?\d{2}))?$/;
 
 export class ArcmiraError extends Error {
   constructor(message, code, extra = {}) {
@@ -64,7 +65,7 @@ function list(values, check, param, max) {
 /** One bound of a half-open window [after, before), sent as written: an ISO date or a datetime with offset, read in UTC. */
 function bound(value, param) {
   if (value === undefined || value === null || value === '') return undefined;
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:?\d{2}))?$/.test(value)) {
+  if (typeof value !== 'string' || !DATE_BOUND.test(value)) {
     throw new ArcmiraError(`${param} takes an ISO date like 2026-08-01 (or a datetime with offset); use arcmira.today() or arcmira.daysAgo(n).`, 'invalid_date');
   }
   return value;

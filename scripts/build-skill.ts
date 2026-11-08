@@ -113,7 +113,7 @@ description: ${JSON.stringify(DESCRIPTION)}
 
 # Arcmira
 
-Arcmira indexes YouTube transcripts, podcasts on YouTube included, and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes four tools. \`arcmira_describe\` returns the client reference: every method with its arguments and return fields, worked programs, quirks and error codes. \`arcmira_execute_read\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns; Premium transcripts included. \`arcmira_execute_write\` runs the same client plus the monitor writes. \`arcmira_feedback\` tells Arcmira what went wrong. The arcmira CLI has commands with the same names; \`arcmira <command> --help\`, \`arcmira schema <command>\` and \`arcmira examples\` are its reference.
+Arcmira indexes YouTube transcripts, podcasts on YouTube included, and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes six tools. \`arcmira_describe\` returns the client reference: every method with its arguments and return fields, worked programs, quirks and error codes. \`arcmira_execute_read\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns; Premium transcripts included. \`arcmira_execute_write\` runs the same client plus the monitor writes. \`arcmira_youtube_search\` and \`arcmira_youtube_transcript\` search and read transcripts in one call each, with no program. \`arcmira_feedback\` tells Arcmira what went wrong. The arcmira CLI has commands with the same names; \`arcmira <command> --help\`, \`arcmira schema <command>\` and \`arcmira examples\` are its reference.
 
 ## When to use
 

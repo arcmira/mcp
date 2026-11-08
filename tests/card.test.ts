@@ -51,12 +51,12 @@ describe('the server card', () => {
     for (const tool of card.tools) {
       assert.ok(tool.title.length > 0, `${tool.name} has no title`);
       assert.equal(tool.inputSchema.type, 'object');
-      assert.equal(tool.annotations.readOnlyHint, tool.name === 'arcmira_describe');
+      assert.equal(tool.annotations.readOnlyHint, ['arcmira_describe', 'arcmira_youtube_search', 'arcmira_youtube_transcript'].includes(tool.name));
       assert.deepEqual(tool._meta ?? null, tool.name === 'arcmira_execute_read' ? { 'anthropic/alwaysLoad': true } : null, `${tool.name} _meta matches tools/list`);
     }
     assert.deepEqual(
       card.tools.map((tool) => tool.name),
-      ['arcmira_describe', 'arcmira_execute_read', 'arcmira_execute_write', 'arcmira_feedback'],
+      ['arcmira_describe', 'arcmira_execute_read', 'arcmira_execute_write', 'arcmira_youtube_search', 'arcmira_youtube_transcript', 'arcmira_feedback'],
     );
   });
 
@@ -67,6 +67,6 @@ describe('the server card', () => {
     assert.equal(response.headers.get('cache-control'), 'public, max-age=3600');
     assert.equal(response.headers.get('access-control-allow-origin'), '*');
     const body = (await response.json()) as { tools: unknown[] };
-    assert.equal(body.tools.length, 4);
+    assert.equal(body.tools.length, 6);
   });
 });

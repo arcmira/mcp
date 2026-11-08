@@ -14,7 +14,7 @@ import {
   tokenIsLive,
 } from './auth.ts';
 import { ICON_PATH, SERVER_CARD_PATHS, serverCardResponse } from './card.ts';
-import { MCP_PATH, createServer, isRetiredTool, retiredToolResult, type CallTag } from './server.ts';
+import { APPS_PATH, MCP_PATH, SURFACES, createServer, isRetiredTool, retiredToolResult, type CallTag } from './server.ts';
 import { outboundAllowed, type Access, type SandboxHost } from './sandbox.ts';
 import { toolCallRecorder } from './telemetry.ts';
 import { TOOL_NAMES } from './tools.ts';
@@ -168,9 +168,10 @@ function sandboxFor(env: Env, ctx: ExecutionContext, key: string, inboundClient:
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname === MCP_PATH) {
+    const surface = SURFACES.get(url.pathname);
+    if (surface !== undefined) {
       const key = apiKeyOf(request);
-      if (key === null) return challenge(url.origin);
+      if (key === null) return challenge(url.origin, 'no_credential', surface.path);
       let failure;
       try {
         failure = isOAuthBearer(key) ? ((await tokenIsLive(key, env)) ? null : 'invalid') : await keyFailure(key, env);
@@ -194,19 +195,22 @@ export default {
           },
         );
       }
-      if (failure !== null) return challenge(url.origin, failure);
+      if (failure !== null) return challenge(url.origin, failure, surface.path);
       const retired = await retiredCall(request);
       if (retired !== null) return retired;
       const api = createApiClient(env, key);
       const client = request.headers.get(CLIENT_HEADER);
       const record = toolCallRecorder(env, ctx, request, key);
-      return createMcpHandler(() => createServer({ api, sandbox: sandboxFor(env, ctx, key, client), record }, env.CF_VERSION_METADATA?.id ?? null), {
-        route: MCP_PATH,
+      return createMcpHandler(() => createServer({ api, sandbox: sandboxFor(env, ctx, key, client), record }, env.CF_VERSION_METADATA?.id ?? null, surface), {
+        route: surface.path,
         allowedOriginHostnames: BROWSER_ORIGINS,
       })(request, env, ctx);
     }
     if (url.pathname === PROTECTED_RESOURCE_PATH || url.pathname === `${PROTECTED_RESOURCE_PATH}${MCP_PATH}`) {
       return Response.json(protectedResourceMetadata(url.origin, env), { headers: { 'cache-control': 'public, max-age=300' } });
+    }
+    if (url.pathname === `${PROTECTED_RESOURCE_PATH}${APPS_PATH}`) {
+      return Response.json(protectedResourceMetadata(url.origin, env, APPS_PATH), { headers: { 'cache-control': 'public, max-age=300' } });
     }
     if (url.pathname === AUTHORIZATION_SERVER_PATH) return authorizationServerMetadata(env);
     if (SERVER_CARD_PATHS.has(url.pathname)) return serverCardResponse(url.origin);

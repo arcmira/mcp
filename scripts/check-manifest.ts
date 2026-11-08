@@ -11,9 +11,10 @@
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { SRC } from '../src/api.ts';
+import { SRC, createApiClient } from '../src/api.ts';
 import { MAX_INSTRUCTIONS, METHODS, SCRIPTED_SPEND, referenceText } from '../src/reference.ts';
-import { FEEDBACK_CATEGORIES, SERVER_INSTRUCTIONS, TOOLS, feedbackBody } from '../src/tools.ts';
+import { FEEDBACK_CATEGORIES, SERVER_INSTRUCTIONS, TOOLS, TOOL_NAMES, feedbackBody, type ToolName } from '../src/tools.ts';
+import { youtubeSearchTool, youtubeTranscriptTool } from '../src/read-tools.ts';
 import server from '../server.json' with { type: 'json' };
 
 const arg = process.argv[2] ?? 'https://api.arcmira.com/v1/openapi.json';
@@ -114,6 +115,19 @@ function checkBody(label: string, operation: Operation, body: Record<string, unk
   }
 }
 
+/** Each tool's effect hints, readOnly, destructive, idempotent and openWorld, and why. */
+const HINTS: Record<ToolName, { hints: readonly [boolean, boolean, boolean, boolean]; why: string }> = {
+  arcmira_describe: { hints: [true, false, true, false], why: 'reference lookup reads no indexed content and starts nothing' },
+  arcmira_execute_read: { hints: [false, false, false, true], why: 'a Premium read can start a transcription that uses credits; it only adds' },
+  arcmira_execute_write: { hints: [false, true, false, true], why: 'it changes existing monitors' },
+  arcmira_youtube_search: { hints: [true, false, true, true], why: 'one search read over public videos' },
+  arcmira_youtube_transcript: { hints: [true, false, true, true], why: 'it reads captions or a transcript the account owns and never starts a transcription' },
+  arcmira_feedback: { hints: [false, false, false, false], why: 'each call stores a new feedback record' },
+};
+
+/** OpenAI's directory reads the plain tools' text: no pricing, plan or trial words, and no line about another tool. */
+const DIRECTORY_WORDS = /\b(plans?|pric(e|es|ing)|trials?|subscri\w*|upgrade\w*|paid|credits?|free|costs?)\b/i;
+
 function pathMatches(template: string, actual: string): boolean {
   return new RegExp(`^${template.replace(/\{[^}]+\}/g, '[^/]+')}$`).test(actual);
 }
@@ -133,14 +147,19 @@ for (const tool of TOOLS) {
   for (const hint of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const) {
     if (typeof tool.annotations[hint] !== 'boolean') fail(`${label}: annotation ${hint} must be a boolean`);
   }
-  const hints = tool.annotations;
-  const referenceOnly = tool.name === 'arcmira_describe';
-  const executesProgram = tool.name === 'arcmira_execute_read' || tool.name === 'arcmira_execute_write';
-  if (hints.readOnlyHint !== referenceOnly) fail(`${label}: only reference lookup is guaranteed not to persist data or start paid work`);
-  if (hints.destructiveHint !== (tool.name === 'arcmira_execute_write')) fail(`${label}: only the write tool changes existing records (monitors); a Premium read only adds`);
-  if (hints.openWorldHint !== executesProgram) fail(`${label}: programs can request arbitrary public videos`);
-  if (hints.idempotentHint !== referenceOnly) fail(`${label}: only reference lookup is guaranteed safe to repeat unchanged`);
+  const { readOnlyHint, destructiveHint, idempotentHint, openWorldHint } = tool.annotations;
+  const expected = HINTS[tool.name];
+  if ([readOnlyHint, destructiveHint, idempotentHint, openWorldHint].join() !== expected.hints.join())
+    fail(`${label}: readOnly, destructive, idempotent and openWorld hints must be ${expected.hints.join(', ')}: ${expected.why}`);
   if (!tool.name.startsWith('arcmira_')) fail(`${label}: tool names carry the arcmira_ prefix`);
+}
+for (const tool of [youtubeSearchTool, youtubeTranscriptTool]) {
+  const inputs = Object.entries((z.toJSONSchema(tool.inputSchema) as { properties?: Record<string, { description?: string }> }).properties ?? {});
+  for (const [where, text] of [['title', tool.title], ['description', tool.description], ...inputs.map(([name, p]) => [`input ${name}`, p.description ?? ''])]) {
+    const word = DIRECTORY_WORDS.exec(text)?.[0];
+    if (word) fail(`tool ${tool.name} ${where}: "${word}" is a pricing, plan or trial word, which OpenAI's directory does not allow`);
+    for (const other of TOOL_NAMES) if (other !== tool.name && text.includes(other)) fail(`tool ${tool.name} ${where}: names ${other}; a plain tool says what it does, not what another tool does`);
+  }
 }
 for (const [where, text] of [['server instructions', SERVER_INSTRUCTIONS], ['reference', referenceText()], ...TOOLS.map((t) => [t.name, t.description])]) {
   if (SCRIPTED_SPEND.test(text)) fail(`${where}: scripts what to ask or say about spend (${text.match(SCRIPTED_SPEND)![0]})`);
@@ -277,6 +296,31 @@ for (const [name, call] of Object.entries(SAMPLE_CALLS)) {
       access: 'write',
     }).arcmira,
   );
+  checkRequests(label, urls);
+}
+
+/** The plain tools call v1 through the server's own ApiClient; replay each with every input set, through a recording fetch. */
+const PLAIN_CALLS = [
+  { tool: youtubeSearchTool, input: { query: 'Ramp', channel: [TBPN], about: ['ent_14'], by: ['ent_99'], kind: ['sponsored', 'mention'], after: '2026-01-01', before: '2026-09-01', source: 'creator_captions', limit: 5 } },
+  { tool: youtubeTranscriptTool, input: { video: 'https://youtu.be/dQw4w9WgXcQ', start: 60, language: 'de,en' } },
+] as const;
+const realFetch = globalThis.fetch;
+for (const { tool, input } of PLAIN_CALLS) {
+  const urls: Array<{ url: URL; method: string; body: Record<string, unknown> | null }> = [];
+  globalThis.fetch = (async (target: string | URL | Request, init?: RequestInit) => {
+    urls.push({ url: new URL(String(target)), method: (init?.method ?? 'GET').toLowerCase(), body: null });
+    return Response.json({ chunks: [], state: 'ready', video: { id: 'dQw4w9WgXcQ' }, lines: [] });
+  }) as typeof fetch;
+  try {
+    const parsed = (tool.inputSchema as z.ZodType).parse(input) as never;
+    await tool.run(parsed, { api: createApiClient({}, 'arc_sk_manifest_check'), call: { id: 'mcpc_check', tool: tool.name }, sandbox: null });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  checkRequests(`tool ${tool.name}`, urls);
+}
+
+function checkRequests(label: string, urls: Array<{ url: URL; method: string; body: Record<string, unknown> | null }>): void {
   if (urls.length === 0) fail(`${label}: made no v1 call`);
   for (const { url, method, body } of urls) {
     const match = operations.find((entry) => entry.method === method && pathMatches(entry.path, url.pathname));
@@ -305,4 +349,4 @@ if (failures.length > 0) {
   for (const failure of failures) console.error(`  ${failure}`);
   process.exit(1);
 }
-console.log(`Manifest check against ${openapiUrl}: ${TOOLS.length} tools, ${Object.keys(SAMPLE_CALLS).length} client calls, every call matches a documented operation.`);
+console.log(`Manifest check against ${openapiUrl}: ${TOOLS.length} tools, ${Object.keys(SAMPLE_CALLS).length} client calls and ${PLAIN_CALLS.length} plain tool calls, every call matches a documented operation.`);
