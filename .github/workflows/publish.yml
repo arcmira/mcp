@@ -1,4 +1,5 @@
 name: Publish to the MCP registry
+run-name: Publish ${{ github.ref_name }} at ${{ github.sha }}
 
 on:
   workflow_dispatch:

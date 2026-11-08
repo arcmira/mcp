@@ -26,6 +26,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm sandbox:check
+      - run: pnpm skill:check
       - run: pnpm manifest:check
       - run: pnpm exec wrangler deploy
         env:
