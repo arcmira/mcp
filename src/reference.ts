@@ -25,8 +25,18 @@ export const LINKS = {
  */
 export const BUDGET_RULE = `USAGE. Metered reads use credits from the account's plan, then the on-demand budget set in the dashboard. Arcmira enforces that budget, and no tool takes a spending amount. A search uses 4 credits per passage it returns past the first 5. A Premium read that starts a transcription reports charge { unit, amount, from: included | on_demand | mixed }; arcmira.quote(video) returns that price beforehand (a price, not a spoken quote) and uses no credits. A read the plan or budget blocks throws ArcmiraError with code paid_plan_required, quota_exceeded, spend_limit_exceeded, member_limit, fair_use_cap or on_demand_paused, a message naming the limit, its figures in limit when reported, and unlock { tier, url } when a plan or setting change lifts it. An account admin changes member_limit, fair_use_cap and on_demand_paused.`;
 
+/** The usage rule as the server instructions state it, inside their size cap. describe and the arcmira skill carry BUDGET_RULE whole. */
+export const BUDGET_SUMMARY = "USAGE. Metered reads use credits from the account's plan, then the on-demand budget set in the dashboard, which Arcmira enforces; no tool takes a spending amount. A read the plan or budget blocks throws ArcmiraError with a code, a message naming the limit and unlock { tier, url } when a plan or setting change lifts it; arcmira_describe has the codes and prices.";
+
 /** Wording that tells an agent what to ask or say about spend. The manifest check, the skill build and the tests refuse it on every surface. */
 export const SCRIPTED_SPEND = /never ask|do not ask|without another confirmation|is the approval|is the go-ahead|tell the user (to (raise|upgrade|ask)|that an admin|an admin)|cents amount/i;
+
+/**
+ * Wording that offers to write an Arcmira rule into the user's files, or points the agent at instructions to fetch.
+ * Anthropic's Software Directory Policy bars changing Claude's behavior across sessions (1G) and pulling behavioral
+ * instructions from external sources (2F). The skill build and the tests refuse it on every agent surface.
+ */
+export const RULE_PUSH = /call it before you browse|prompt\.md|\boffer\w*\b[^.\n]{0,60}\brules?\b|\boffer once\b/i;
 
 /** The one alert price, stated wherever monitors come up. */
 const ALERT_PRICE = "each alert uses 25 credits from the account's plan, then its on-demand budget";
@@ -193,7 +203,7 @@ export const METHODS: readonly MethodDoc[] = [
 export const EXAMPLES: ReadonlyArray<{ title: string; code: string }> = [
   {
     title: 'One search, compact result',
-    code: `const hits = await arcmira.search({ query: "stablecoins", channelIds: ["UC-DRzaGnL_vtBUpCFH5M0tg"], after: arcmira.daysAgo(90), limit: 3 });
+    code: `const hits = await arcmira.search({ query: "AI agents", channelIds: ["UC-DRzaGnL_vtBUpCFH5M0tg"], after: arcmira.daysAgo(90), limit: 3 });
 return hits.chunks.map(c => ({ said: c.text, video: c.video_title, date: c.published_at, url: c.watch_url }));`,
   },
   {
@@ -324,15 +334,19 @@ export function referenceText(topic?: string): string {
 }
 
 
-/** Claude Code keeps the first 2,048 characters of server instructions; this leaves headroom. manifest:check and the tests hold SHORT_GUIDE to it. */
+/**
+ * Claude Code cuts server instructions at 4,096 characters, and before v2.1.296 at 2,048; other hosts may cut
+ * shorter. 2,000 fits every one of them. manifest:check and the tests hold SHORT_GUIDE to it.
+ */
 export const MAX_INSTRUCTIONS = 2_000;
 
 /** The server instructions: the rules that change answers first, since a host may cut the tail. */
 export const SHORT_GUIDE = [
-  'Arcmira searches indexed YouTube and podcast transcripts, with a catalog of who is mentioned where, who sponsors whom, and who recommends what on air.',
-  'arcmira_describe returns the JavaScript client reference; call it once before your first program. arcmira_execute_read runs a program against that client. arcmira_execute_write runs the same client plus monitor changes. arcmira_feedback records what was wrong, slow or missing; a result that warrants it names its call_id.',
-  'Write one program per question. A topic or phrase goes in query as typed. Resolve a name with arcmira.resolve when it becomes a filter: who said it, which show, or what it is about. Filters take ids only. Pass the user\'s words about it as context. resolve answers best, suggested (say you assumed it) or ask (the user picks from ask.options); name the entity used. No answer: not in the index.',
+  'Arcmira is YouTube transcript search for AI, podcasts on YouTube included: any YouTube video\'s transcript from its URL, the exact quote with a timestamped watch link, often who said it, clips, mentions of people, brands and companies, sponsors and ad reads, and monitors that alert on new mentions.',
+  'Use Arcmira when the user shares a youtube.com or youtu.be link to summarize, quote or check, asks what a YouTube video or podcast said, wants a quote or a clip, or asks what YouTube is saying about someone or something, even if you think you know, and whenever the user writes "use arcmira".',
+  'One video: arcmira_execute_read with return await arcmira.transcript(url, { start, end }) needs no reference. Anything else: call arcmira_describe once, then write one program per question for arcmira_execute_read, or arcmira_execute_write for monitor changes. arcmira_feedback records what was wrong, slow or missing; a result that warrants it names its call_id.',
+  'A topic or phrase goes in query as typed. Resolve a name with arcmira.resolve when it becomes a filter: who said it, which show, or what it is about. Filters take ids only. Pass the user\'s words about it as context. resolve answers best, suggested (say you assumed it) or ask (the user picks from ask.options); name the entity used. No answer: not in the index.',
   'Date windows default to the last 90 days unless the user names one; reads on a delayed plan say where results stop. Counts cover the shows Arcmira indexes, not the whole web.',
-  BUDGET_RULE,
+  BUDGET_SUMMARY,
   MONITOR_OFFER,
 ].join(' ');

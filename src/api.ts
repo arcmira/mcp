@@ -99,7 +99,7 @@ export function rateLimitOf(headers: Headers): RateLimit | null {
 
 const CREDENTIAL_MESSAGES: Record<CredentialFailure, string> = {
   no_credential:
-    'No credential was sent. Sign in through the host, or send Authorization: Bearer with an account key; with no account, POST unlock.action.url with an email to create one.',
+    'No credential was sent. Sign in through the host, or send Authorization: Bearer with an account key. If you don\'t have an Arcmira account yet, POST unlock.action.url with an email to create one.',
   invalid:
     'The key sent is not a live account key. Send a valid key with Authorization: Bearer, or POST unlock.action.url with an email to create an account.',
   revoked:

@@ -31,6 +31,7 @@ describe('the server card', () => {
         description: string;
         inputSchema: { type: string };
         annotations: { readOnlyHint: boolean };
+        _meta?: Record<string, unknown>;
       }>;
     };
     assert.equal(card.name, server.name);
@@ -51,6 +52,7 @@ describe('the server card', () => {
       assert.ok(tool.title.length > 0, `${tool.name} has no title`);
       assert.equal(tool.inputSchema.type, 'object');
       assert.equal(tool.annotations.readOnlyHint, tool.name === 'arcmira_describe');
+      assert.deepEqual(tool._meta ?? null, tool.name === 'arcmira_execute_read' ? { 'anthropic/alwaysLoad': true } : null, `${tool.name} _meta matches tools/list`);
     }
     assert.deepEqual(
       card.tools.map((tool) => tool.name),

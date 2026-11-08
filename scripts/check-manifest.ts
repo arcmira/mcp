@@ -146,7 +146,7 @@ for (const [where, text] of [['server instructions', SERVER_INSTRUCTIONS], ['ref
   if (SCRIPTED_SPEND.test(text)) fail(`${where}: scripts what to ask or say about spend (${text.match(SCRIPTED_SPEND)![0]})`);
 }
 if (SERVER_INSTRUCTIONS.includes('—')) fail('server instructions: em dash');
-if (SERVER_INSTRUCTIONS.length > MAX_INSTRUCTIONS) fail(`server instructions: ${SERVER_INSTRUCTIONS.length} characters, limit ${MAX_INSTRUCTIONS} (Claude Code cuts at 2,048)`);
+if (SERVER_INSTRUCTIONS.length > MAX_INSTRUCTIONS) fail(`server instructions: ${SERVER_INSTRUCTIONS.length} characters, limit ${MAX_INSTRUCTIONS} (Claude Code cuts at 4,096, and at 2,048 before v2.1.296)`);
 const reference = referenceText();
 if (reference.includes('—')) fail('reference: em dash');
 for (const method of METHODS) {

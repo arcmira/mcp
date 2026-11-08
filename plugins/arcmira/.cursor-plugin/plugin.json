@@ -1,7 +1,7 @@
 {
   "name": "arcmira",
-  "version": "0.10.7",
-  "description": "Find timestamped quotes, speakers, sponsors and recommendations in YouTube and podcast transcripts.",
+  "version": "0.10.8",
+  "description": "YouTube transcript search and monitoring for your AI: exact quotes, full transcripts and speakers.",
   "author": {
     "name": "Arcmira",
     "url": "https://arcmira.com"

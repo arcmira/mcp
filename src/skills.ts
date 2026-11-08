@@ -11,6 +11,22 @@
 
 import { MONITOR_RULE } from './reference.ts';
 
+/** write: the block runs in arcmira_execute_write; every other block runs in arcmira_execute_read. */
+export interface Program {
+  title: string;
+  code: string;
+  tool?: 'write';
+}
+
+/** Part of a task written to the skill's references/<file>, so its SKILL.md stays under the size a host reads whole. */
+export interface SkillReference {
+  file: string;
+  title: string;
+  /** A shared rule from reference.ts the reference carries whole, before its programs. */
+  rule?: string;
+  programs: readonly Program[];
+}
+
 export interface TaskSkill {
   name: string;
   /** Always-on text in every host's skill listing: keep it under 160 characters. */
@@ -22,13 +38,14 @@ export interface TaskSkill {
   ids: string[];
   /** The procedure, when the task is more than one program. */
   steps?: string[];
-  /** A shared rule from reference.ts the task carries whole, after its steps. */
-  rule?: string;
-  /** write: the block runs in arcmira_execute_write; every other block runs in arcmira_execute_read. */
-  programs: ReadonlyArray<{ title: string; code: string; tool?: 'write' }>;
+  programs: readonly Program[];
+  reference?: SkillReference;
   good: string[];
   traps: string[];
 }
+
+/** Every program a task skill ships, in its SKILL.md and its reference. */
+export const programsOf = (t: TaskSkill): readonly Program[] => [...t.programs, ...(t.reference?.programs ?? [])];
 
 /** How every task skill turns a name into the one entity the user meant; the pick block in each program does the rest. */
 export const PICK_STEPS = [
@@ -36,6 +53,9 @@ export const PICK_STEPS = [
   '`best` and `suggested` give the id. A `suggested` pick is an assumption: the answer names it, with `suggested.evidence` as the reason.',
   '`ask`: several entities fit, and `ask.options` goes back to the user. No answer at all: the name is not in the index.',
 ];
+
+/** Said before any download step, word for word. The clip program returns it beside every download command. */
+export const CLIP_RIGHTS = 'You need the rights to download, cut or reuse this video. Arcmira finds the moment and gives you the link and the seconds. It grants no rights to the video.';
 
 /** The guard every program opens with: ask options when several rows fit, else the one id and whether it was assumed. ID reruns it with the pick. */
 function pick(name: string, type?: 'person' | 'channel'): string {
@@ -55,7 +75,7 @@ const assumed = Boolean(r?.suggested), why = r?.suggested?.evidence ?? null;`;
 export const TASK_SKILLS: readonly TaskSkill[] = [
   {
     name: 'sponsor-research',
-    description: 'Sponsor and ad-read research on podcasts and YouTube: who sponsors a show, or which shows a brand sponsors, how often, since when. Uses arcmira.',
+    description: 'Use Arcmira for sponsor research on YouTube, podcasts included: who sponsors a show, which shows a brand sponsors, ad-read counts, first and last seen dates.',
     title: 'Sponsor research',
     summary:
       'Two directions. A show to its sponsors: `arcmira.sponsors(channelId)` ranks recurring sponsors by ad reads with first and last seen dates. A brand to the shows it sponsors: `arcmira.recommendations(entityId, { kind: "sponsored" })` lists each ad read, which the program groups by show.',
@@ -118,7 +138,7 @@ return {
   },
   {
     name: 'company-watch',
-    description: 'Watches a company or topic on podcasts and YouTube: what was said lately (shows, counts, momentum, quotes), then an Arcmira monitor to keep following it.',
+    description: 'Use Arcmira to watch what YouTube says about a company, podcasts included: recent mentions, counts, momentum and quotes, then alerts.',
     title: 'Company watch',
     summary:
       'Answers "what was said about X lately" in one program, over the last 90 days unless the user names a window: episode counts per show from `occurrences`, the trend from `momentum`, the catalog notes from `mentions`, and quotes from `search` about the entity. Then it turns "keep me posted on X" into a monitor that delivers. Research picks the entity ids: a company or person through `resolve`, a topic through each of its spellings. The user\'s own monitors decide where they go: one that fits, or a new one the user confirms. Only the save runs in `arcmira_execute_write`; everything before it reads.',
@@ -134,11 +154,10 @@ return {
       'A topic has spellings. Resolve each variant with `{ type: "topic" }` ("data centers", "datacenters", "data centre", "data center") and keep every distinct id: one tracker per spelling catches what one would miss.',
     ],
     steps: [
-      'What was said lately: run the first program and answer.',
-      'To follow the subject: the second program, in `arcmira_execute_read`, resolves every name and topic spelling (reuse ids the research already found) and reads the user\'s monitors, what each follows, and the connected Slack workspaces.',
-      'To save: the third program, in `arcmira_execute_write`, uses the monitor that fits or creates one, follows every id with `addEntities` and every unresolved name with `addName`, and returns each id that did not attach with its reason and `current_monitor_name`. A `canonical_entity_id` means the id was merged into that entity.',
+      'What was said lately: run the program below and answer.',
+      'To follow the subject: the read program in references/monitor.md resolves every name and topic spelling (reuse ids the research already found) and reads the user\'s monitors, what each follows, and the connected Slack workspaces.',
+      'To save: the write program there, in `arcmira_execute_write`, uses the monitor that fits or creates one, follows every id with `addEntities` and every unresolved name with `addName`, and returns each id that did not attach with its reason and `current_monitor_name`. A `canonical_entity_id` means the id was merged into that entity.',
     ],
-    rule: MONITOR_RULE,
     programs: [
       {
         title: 'The last 90 days about one company (arcmira_execute_read)',
@@ -162,9 +181,15 @@ return {
   quotes: quotes.chunks.map(c => ({ said: c.text.slice(0, 300), show: c.channel_name, episode: c.video_title, date: c.published_at, url: c.watch_url })),
 };`,
       },
-      {
-        title: 'Find what to follow, and the monitors that could hold it (arcmira_execute_read)',
-        code: `const NAMES = ["Linear", "Height"], TOPICS = ["data centers", "datacenters", "data centre"];   // the user's subjects; TOPICS: every spelling of one topic
+    ],
+    reference: {
+      file: 'monitor.md',
+      title: 'Follow and save to a monitor',
+      rule: MONITOR_RULE,
+      programs: [
+        {
+          title: 'Find what to follow, and the monitors that could hold it (arcmira_execute_read)',
+          code: `const NAMES = ["Linear", "Height"], TOPICS = ["data centers", "datacenters", "data centre"];   // the user's subjects; TOPICS: every spelling of one topic
 const follow = [], unresolved = [];
 for (const n of NAMES) {
   const r = await arcmira.resolve(n);
@@ -184,11 +209,11 @@ const existing = await Promise.all(monitors.slice(0, 10).map(async m => ({
 })));
 const slack = integrations.map(i => ({ slack_integration_id: i.id, workspace: i.team_name, slack_channel_id: i.default_channel_id, channel: i.channels.find(c => c.id === i.default_channel_id)?.name ?? null }));
 return { follow, unresolved, monitors: existing, more_monitors: Math.max(0, monitors.length - 10), slack };`,
-      },
-      {
-        title: 'Save to a monitor (arcmira_execute_write)',
-        tool: 'write',
-        code: `const MONITOR_ID = null;   // a fitting monitor's id from the first program, or null to create one
+        },
+        {
+          title: 'Save to a monitor (arcmira_execute_write)',
+          tool: 'write',
+          code: `const MONITOR_ID = null;   // a fitting monitor's id from the first program, or null to create one
 const IDS = ["ent_279443"];   // every id the user agreed to follow
 const NAMES = [];   // names resolve found nothing for that the user still wants followed: [{ name: "Acme Robotics", type: "organization" }]
 const DELIVERY = { name: "Linear", notify_frequency: "daily" };   // the user's answers, for a new monitor
@@ -210,8 +235,9 @@ return {
   not_attached: results.filter(r => !r.attached).map(r => ({ entity_id: r.entity_id, reason: r.reason, tracker_id: r.tracker_id ?? null, current_monitor_id: r.current_monitor_id ?? null, current_monitor_name: others.find(m => m.id === r.current_monitor_id)?.name ?? null })),
   by_name: byName,
 };`,
-      },
-    ],
+        },
+      ],
+    },
     good: [
       'For what was said: opens with the entity (name, type, id), gives the verdict with the 7-day and 30-day counts and `as_of`, the shows with episode counts for the stated window, and two or three quotes in the speakers\' words, each with show, date and `watch_url`.',
       'Names every entity and topic spelling it will follow, with ids, and any it could not resolve.',
@@ -230,7 +256,7 @@ return {
   },
   {
     name: 'find-quotes',
-    description: 'Finds exact spoken quotes and clip-ready moments on podcasts and YouTube: verbatim words, speaker, date, a timestamped link, clip start and end. Uses arcmira.',
+    description: 'Use Arcmira to find exact quotes on YouTube, podcasts included: the line, often who said it, the date, and a timestamped link with clip start and end.',
     title: 'Find quotes and clip moments',
     summary:
       '`search` finds the passage; `transcript` with `start` and `end` returns the exact lines around it with second offsets, which give the verbatim quote and the clip boundaries.',
@@ -278,7 +304,7 @@ return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of
   },
   {
     name: 'person-research',
-    description: 'Researches a person across podcasts and YouTube for interview or meeting prep: where they appeared, their own words, who discusses them. Uses arcmira.',
+    description: 'Use Arcmira to research a person from what they said on YouTube: appearances, their own words with timestamps, who discusses them. For interview prep.',
     title: 'Person research',
     summary:
       'Three lenses on one person id. `momentum` gives attention and the shows that mention them most. `mentions` with `mode: "appearances"` lists the episodes they were on. `search` with `speakerIds` returns their own words; `about` returns what others said about them.',
@@ -336,7 +362,7 @@ return {
   },
   {
     name: 'compare-shows',
-    description: 'Compares two podcasts or YouTube shows side by side: size, latest episode, what each talks about, what both cover, and shared sponsors. Uses arcmira.',
+    description: 'Use Arcmira to compare two YouTube channels or podcasts on YouTube: size, latest episode, topics, overlap and shared sponsors. For rival research.',
     title: 'Compare two shows',
     summary:
       '`status` sizes each show, `episodes` gives the latest, `occurrences` with both channel ids ranks what each covers and returns `shared` for what both mention, and `sponsors` of each, joined on entity id, gives shared sponsors.',
@@ -385,6 +411,283 @@ return {
       'With two or more `channelIds`, `occurrences` puts the overlap in `shared`; `rows` alone never shows it.',
       'Never count `episodes` to size a show; `status({ channelId }).channel.searchable_videos` is the count.',
       'An empty `shared` in a short window is an answer (no overlap in the window), not an error; widen the window only if the user asked for a longer one.',
+    ],
+  },
+  {
+    name: 'youtube-transcript-search',
+    description: 'Use Arcmira to read or summarize a YouTube video from its link, or to search YouTube transcripts across channels: the exact quote and the second.',
+    title: 'YouTube transcript search',
+    summary:
+      'Two jobs. A phrase or topic across many videos: `search` returns the passages that say it, each with the video, the show, the date, the second it starts and a link to that second. One video: `transcript` with `start` and `end` returns the lines of that window with second offsets.',
+    asks: ['search YouTube transcripts for a topic or phrase across channels', 'which video said a phrase, and at what second', 'the transcript of one YouTube video, or a window of it, with timestamps'],
+    ids: [
+      'A topic or phrase goes in `query` as typed and needs no resolve. Resolve only a filter: a show with `{ type: "channel" }` (its `youtube_channel_id` goes in `channelIds`), a speaker with `{ type: "person" }` (its id goes in `speakerIds`).',
+      'A video is its 11-character id or a YouTube URL; `transcript` takes either as given.',
+    ],
+    programs: [
+      {
+        title: 'A phrase across YouTube videos, last 90 days',
+        code: `const QUERY = "AI agents";   // the user's words, as typed
+const hits = await arcmira.search({ query: QUERY, after: arcmira.daysAgo(90), limit: 5 });
+return {
+  query: QUERY, window: hits.window, as_of: hits.as_of, index: hits.search_index?.state ?? null,
+  passages: hits.chunks.map(c => ({ said: c.text.slice(0, 300), video: c.video_title, video_id: c.video_id, show: c.channel_name, date: c.published_at, second: c.start_seconds, url: c.watch_url, speakers: c.speakers })),
+  ...(hits.chunks.length ? {} : { none: hits.note ?? null }),
+};`,
+      },
+      {
+        title: "One video's transcript, a window with timestamps",
+        code: `const VIDEO = "https://www.youtube.com/watch?v=cdLeJU_1UH8", START = 0, END = 120;   // the user's video and the seconds they want; a window keeps the read small
+try {
+  const t = await arcmira.transcript(VIDEO, { start: START, end: END });
+  return {
+    video: { id: t.video.id, title: t.video.title, show: t.video.channel_name, date: t.video.published_at, url: t.video.watch_url },
+    source: t.source, as_of: t.as_of,
+    lines: t.lines.map(l => \`[\${Math.round(l.start)}s] \${l.text}\`),
+  };
+} catch (err) {
+  return { video: VIDEO, error: err.code ?? "error", message: err.message, retry_after: err.retry_after ?? null };
+}`,
+      },
+    ],
+    good: [
+      'Quotes the passage words exactly, never paraphrased inside quotation marks, with the show, the video title, the date and a link that opens at the second.',
+      'Names a speaker only when the passage or a Premium transcript names one.',
+      'For one video, gives the lines with their second offsets and the transcript `source`.',
+      'Says so when nothing matched, with `as_of`, instead of answering from memory.',
+    ],
+    traps: [
+      '`search` ranks by the words in `query`; put the distinctive words of the phrase there, not a paraphrase. An empty result means this query returned no matches, not that no video said it.',
+      'A search uses 4 credits per passage it returns past the first 5. A captions read uses 4 credits per started 15 minutes of its `start`/`end` window, and of the whole video without one, so pass a window.',
+      'A Premium read (`quality: "premium"`, paid plans) labels speakers and uses credits for the whole video whatever the window; `arcmira.quote(video)` returns that price first and uses no credits.',
+      '`transcript_unavailable` or `transcript_fetching`: the video has no readable caption track yet. Answer from the search passage and say the words come from it.',
+    ],
+  },
+  {
+    name: 'podcast-transcript-search',
+    description: 'Use Arcmira to search podcast transcripts on YouTube for a topic, guest or phrase: which episodes covered it, what was said, and a timestamped link.',
+    title: 'Podcast transcript search',
+    summary:
+      '`search` with a show in `channelIds` finds the episodes that covered a topic, guest or phrase, with the words and a link to the second. `status({ channelId })` says how far the show\'s transcript search runs, and `episodes` lists its latest episodes, so an empty result can be told apart from a missing episode.',
+    asks: ['search podcast transcripts for a topic or phrase', 'which episodes of a podcast covered a topic or had a guest', 'find the moment in a podcast episode, with a timestamped link'],
+    ids: [
+      'A show resolves with `{ type: "channel" }`; its id is `youtube_channel_id` (a UC id). Users shorten show names ("All In"); say when the show was assumed.',
+      'A guest resolves with `{ type: "person" }`. Their id in `entityIds` limits results to episodes they appear in; in `speakerIds` it returns their own lines.',
+      'Across every podcast: drop the pick, `channelIds`, and the `status` and `episodes` calls.',
+    ],
+    programs: [
+      {
+        title: 'A topic on one podcast, last 90 days',
+        code: `${pick('All-In Podcast', 'channel')}
+const QUERY = "tariffs";   // the topic, guest name or phrase, as the user typed it
+const [hits, s, latest] = await Promise.all([
+  arcmira.search({ query: QUERY, channelIds: [id], after: arcmira.daysAgo(90), limit: 5 }),
+  arcmira.status({ channelId: id }),
+  arcmira.episodes(id, { limit: 3 }),
+]);
+const episodes = new Map();
+for (const c of hits.chunks) {
+  const ep = episodes.get(c.video_id) ?? { episode: c.video_title, date: c.published_at, moments: [] };
+  ep.moments.push({ second: c.start_seconds, said: c.text.slice(0, 300), url: c.watch_url });
+  episodes.set(c.video_id, ep);
+}
+return {
+  show: { name: e?.name ?? null, channel_id: id, assumed, why },
+  window: hits.window, as_of: hits.as_of, search_indexed_through: s.channel.search_indexed_through,
+  latest_episodes: latest.episodes.map(x => ({ title: x.title, date: x.published_at })),
+  episodes: [...episodes.values()],
+  ...(hits.chunks.length ? {} : { none: hits.note ?? null }),
+};`,
+      },
+    ],
+    good: [
+      'Names the show with its channel id, and says when it was assumed.',
+      'Lists the episodes that covered it, each with the date, the words said and a link that opens at the second.',
+      'Gives `search_indexed_through` for the show and the window it searched.',
+      'Says so when nothing matched, and that an empty result is not proof the show never said it.',
+    ],
+    traps: [
+      'An empty result means this query returned no matches. Check `search_indexed_through` and the latest episodes before saying the show never covered it; the newest episode may not be in transcript search yet.',
+      'A guest name in `query` matches only where the name is spoken. Resolve the guest and pass the id for the episodes they appear in.',
+      'Never count passages to say how many episodes covered a name; `occurrences` with the show and the entity id counts episodes.',
+      'A passage is not a clip: `start_seconds` is where it starts. `find-quotes` and `youtube-clip-finder` read the transcript lines for a start and an end.',
+    ],
+  },
+  {
+    name: 'brand-mention-monitoring',
+    description: 'Use Arcmira to monitor brand mentions on YouTube: how often a company or product comes up, which shows discuss it, whether it\'s rising, quotes and alerts.',
+    title: 'Brand mention monitoring',
+    summary:
+      'Measures a brand against the competitors the user names, in one program: `momentum` gives the verdict and the 7-day and 30-day mention counts, `occurrences` the shows that mention each brand most, and `search` quotes about the user\'s brand. Alerts by email or Slack are a monitor, which `company-watch` saves.',
+    asks: [
+      'how often a brand or product is mentioned on YouTube, podcasts included, and on which shows',
+      'is talk about our brand rising or fading, against competitors',
+      'brand mentions, media monitoring or competitor monitoring across shows',
+      'alerts when a brand is mentioned, by email or Slack',
+    ],
+    ids: [
+      'Resolve each brand with no type (the catalog types some companies as product). A brand name is often a common word ("Linear", "Ramp"): name each pick, for example "Linear, the software company", so the user can catch a wrong one.',
+      'Put the user\'s brand first in `BRANDS`, then each competitor they named.',
+    ],
+    steps: [
+      'Run the program and answer with one row per brand.',
+      'Before reporting a count, read the quotes and the top shows and say which sense of the name it is (Mercury the bank, not the planet). Drop a sense the user did not mean.',
+      'For alerts, load `company-watch` and run its second and third programs with the ids this program found.',
+    ],
+    programs: [
+      {
+        title: 'A brand against its competitors, 7 and 30 days',
+        code: `const BRANDS = ["Anthropic", "OpenAI"], IDS = [null, null];   // the user's brand first, then competitors. After an ask, put the picked option's id in IDS and run again
+const brands = [];
+for (const [i, n] of BRANDS.entries()) {
+  const r = IDS[i] ? null : await arcmira.resolve(n);   // no type: a company may be typed product
+  const e = r && (r.best ?? r.suggested);
+  if (r && !e) return { unresolved: n, ask: r.ask };
+  const id = IDS[i] ?? e.id;
+  const [m, occ] = await Promise.all([arcmira.momentum(id), arcmira.occurrences({ entityIds: [id], after: arcmira.daysAgo(30), limit: 5 })]);
+  brands.push({
+    name: m.entity.name, id, type: m.entity.type, page: m.entity.page, assumed: Boolean(r?.suggested), why: r?.suggested?.evidence ?? null,
+    verdict: m.verdict, last_7d: m.volume.mentions_7d, last_30d: m.volume.mentions_30d, prior_30d: m.volume.mentions_prior_30d, as_of: m.as_of,
+    top_shows: occ.rows.map(x => ({ show: x.channel_name, channel_id: x.channel_id, episodes: x.count })),
+  });
+}
+const lead = brands[0];
+let quotes = await arcmira.search({ query: lead.name, about: [lead.id], after: arcmira.daysAgo(30), limit: 3 });
+const quotesTagged = quotes.chunks.length > 0;   // false: the fallback matched the words, which can be a namesake; say so
+if (!quotesTagged) quotes = await arcmira.search({ query: lead.name, after: arcmira.daysAgo(30), limit: 3 });
+return {
+  brands, quotes_about: lead.name, quotes_tagged_to_brand: quotesTagged,
+  quotes: quotes.chunks.map(c => ({ said: c.text.slice(0, 300), show: c.channel_name, episode: c.video_title, date: c.published_at, url: c.watch_url })),
+};`,
+      },
+    ],
+    good: [
+      'Names each brand with its type and id, and any it assumed or set aside as a namesake.',
+      'One row per brand: the verdict, the 7-day, 30-day and prior 30-day counts, `as_of`, and the shows that mention it most with episode counts.',
+      'Two or three quotes about the user\'s brand in the speakers\' words, each with show, date and `watch_url`, and says when they matched the words rather than the brand.',
+      'For alerts, confirms what to follow and how it arrives before `company-watch` saves the monitor.',
+    ],
+    traps: [
+      'Counts measure the shows Arcmira indexes, not the internet. Cite `as_of` before saying a brand was not mentioned.',
+      'Each `momentum` call uses 10 credits at any window: one per brand.',
+      'A mention is not an ad read. Whether a mention was paid is `sponsor-research`: `recommendations` with `kind: "sponsored"` is a Pro+ read and can return `recommendations_not_enabled`. Explain the account-access limit and the required tier and link the API reports in `unlock`; never label a mention paid or organic without that read.',
+      'Read the quotes before asserting a lone mention: a show far from the brand is a namesake the catalog mislabelled.',
+    ],
+  },
+  {
+    name: 'what-did-they-say',
+    description: 'Use Arcmira when asked what someone said about something: a person\'s or company\'s own words from YouTube, with the show, the date and a timestamped link.',
+    title: 'What did they say',
+    summary:
+      'Answers "what did they say about it" from the transcripts. `search` with the speaker\'s id in `speakerIds` returns passages where they speak the topic words. When that is empty, `about` with the same id returns what others said about them, kept apart. A company speaks through its people or its own show.',
+    asks: ['what did a person say about a topic, in their own words', 'what did a company or its CEO say on a podcast or YouTube', 'who said a line, and where'],
+    ids: [
+      'A person resolves with `{ type: "person" }`; pass what the user said about them as `context`.',
+      'A company speaks through its people or its own show. Resolve the executive with `{ type: "person" }`, or the company\'s show with `{ type: "channel" }` and pass its `youtube_channel_id` in `channelIds`.',
+      'The topic words go in `query`, never in `about`.',
+      'For "who said this line", search the line with no speaker filter and read `speakers` on each passage.',
+    ],
+    programs: [
+      {
+        title: 'What one person said about a topic, last 90 days',
+        code: `${pick('Jensen Huang', 'person')}
+const TOPIC = "export controls";   // the topic in the user's words
+const after = arcmira.daysAgo(90);
+const own = await arcmira.search({ query: TOPIC, speakerIds: [id], after, limit: 5 });
+const about = own.chunks.length ? null : await arcmira.search({ query: TOPIC, about: [id], after, limit: 3 });
+const name = e?.name ?? null;
+const said = own.chunks.map(c => {
+  const mine = name ? c.text.split("\\n").filter(l => l.startsWith(name + ": ")) : [];
+  return { lines: mine.length ? mine : [c.text.slice(0, 300)], speaker_named_on_lines: mine.length > 0, show: c.channel_name, episode: c.video_title, date: c.published_at, url: c.watch_url };
+});
+return {
+  speaker: { id, name, assumed, why }, topic: TOPIC, window: own.window, as_of: own.as_of,
+  in_their_words: said,
+  ...(said.length ? {} : { note: own.note ?? null, said_about_them: (about?.chunks ?? []).map(c => ({ said: c.text.slice(0, 300), show: c.channel_name, date: c.published_at, url: c.watch_url })) }),
+};`,
+      },
+    ],
+    good: [
+      'Names the person it searched, with the id, and any namesake it set aside.',
+      'Quotes only the person\'s own lines, exactly as the transcript gives them, never paraphrased inside quotation marks, each with show, episode, date and `watch_url`.',
+      'When no line names a speaker, says the attribution covers the passage, not each line.',
+      'Keeps what others said about them apart from their own words, and says so when nothing matched, with `as_of`.',
+    ],
+    traps: [
+      'Speaker labels cover part of the index. An empty `speakerIds` search is not proof they never said it: read `note`, and give what others said about them as that, not as their words.',
+      'A chunk found with `speakerIds` can include other people\'s lines. Lines start with "Name: " when the speaker is known.',
+      '`search` needs a topic of two or more characters in `query`.',
+      'For the start and end of the moment, `find-quotes` and `youtube-clip-finder` read the transcript lines around the passage.',
+    ],
+  },
+  {
+    name: 'youtube-clip-finder',
+    description: 'Use Arcmira to find the clip: search YouTube transcripts for a moment, get a watch link at the second, start and end seconds, and an embed that starts there.',
+    title: 'Find a YouTube clip',
+    summary:
+      '`search` finds the passage. `transcript` with `start` and `end` returns the lines around it with second offsets, which give the cut points. The program returns a YouTube link that opens at the start, the start and end seconds, and an embed that plays that span.',
+    asks: [
+      'find the clip where someone says a thing, with start and end seconds',
+      'a link that opens the video at that second, or an embed of the moment',
+      'cut points for a video editor or an edit decision list',
+      'a quote with its moment, to cite or to review before cutting',
+    ],
+    ids: [
+      'A speaker resolves with `{ type: "person" }`; pass the id as `speakerIds`. A show goes in `channelIds` as its UC id.',
+      'A clip with no speaker: drop the pick and `speakerIds`, and search the phrase alone.',
+      'The phrase goes in `query` with its distinctive words, never in `about`.',
+    ],
+    steps: [
+      'Run the program. It reads 10 seconds before the passage and 50 after. Pick the lines that hold the moment and trim `start` and `end` to them, then use those seconds in the link and the embed.',
+      'Lead with `youtube_url`, the start and end seconds, and `embed`.',
+      `When the user wants the video file, say this line first, word for word: "${CLIP_RIGHTS}" Then give that clip's \`download.command\`, with the trimmed seconds. Run it only when the user asks you to; otherwise print it.`,
+      'Never add browser cookies or a login to the command, and never work around an age, region, membership or private restriction. When yt-dlp says the video needs a sign-in, stop and tell the user.',
+      'If yt-dlp is missing, link its install page: https://github.com/yt-dlp/yt-dlp#installation.',
+    ],
+    programs: [
+      {
+        title: 'The clip where one person says a phrase',
+        code: `${pick('Chamath', 'person')}
+const PHRASE = "Anthropic IPO";   // the distinctive words of the moment
+const RIGHTS = ${JSON.stringify(CLIP_RIGHTS)};
+const hits = await arcmira.search({ query: PHRASE, speakerIds: [id], limit: 5 });
+const clips = [];
+for (const c of hits.chunks.slice(0, 2)) {
+  const clip = { episode: c.video_title, show: c.channel_name, date: c.published_at, video_id: c.video_id, passage_url: c.watch_url };
+  try {
+    const t = await arcmira.transcript(c.video_id, { start: Math.max(0, c.start_seconds - 10), end: c.start_seconds + 50 });
+    clip.start = Math.floor(t.lines[0]?.start ?? c.start_seconds);
+    clip.end = Math.ceil(t.lines.at(-1)?.end ?? c.start_seconds + 60);
+    clip.lines = t.lines.map(l => ({ start: Math.floor(l.start), end: Math.ceil(l.end), text: l.text }));
+  } catch (err) {
+    clip.start = Math.floor(c.start_seconds);
+    clip.end = clip.start + 60;
+    clip.approximate = true;
+    clip.passage = c.text;
+    clip.transcript = err.code ?? "error";
+  }
+  clip.youtube_url = \`https://www.youtube.com/watch?v=\${c.video_id}&t=\${clip.start}\`;
+  clip.embed = \`https://www.youtube.com/embed/\${c.video_id}?start=\${clip.start}&end=\${clip.end}\`;
+  clip.download = { say_first: RIGHTS, command: \`yt-dlp --download-sections "*\${clip.start}-\${clip.end}" --force-keyframes-at-cuts -o "clip.%(ext)s" "https://www.youtube.com/watch?v=\${c.video_id}"\` };
+  clips.push(clip);
+}
+return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of, ...(clips.length ? { clips } : { none: hits.note ?? null }) };`,
+      },
+    ],
+    good: [
+      'Names the speaker or show it searched, with the id, and the episode title and date.',
+      'Gives `start` and `end` in whole seconds, trimmed to the moment, and says they come from caption lines, which are machine text.',
+      'Links `youtube_url` and `embed` with those seconds, and quotes only the speaker\'s lines.',
+      'Gives the download command only when the user wants the file, and always after the rights line.',
+      'Says so when nothing matched, with `as_of`.',
+    ],
+    traps: [
+      'Caption timing can drift by a second or two, and the player seeks to the nearest keyframe, so a clip can start a moment early. Tell the user to check the cut on the first play.',
+      'The embed `end` counts from the start of the video, not from `start`.',
+      'A caption read uses 4 credits per started 15 minutes of its window. Keep the window short.',
+      'Some videos have no caption track yet (`transcript_unavailable`, `transcript_fetching`): the program marks the clip `approximate`, from the passage start plus 60 seconds. Say so, and say the words come from the search passage.',
+      '`passage_url` opens the passage on arcmira.com and can start before the moment; label it as the passage, not the cut.',
+      'A chunk found with `speakerIds` can include other people\'s lines. Lines start with "Name: " when the speaker is known.',
     ],
   },
 ];

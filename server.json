@@ -2,12 +2,12 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.arcmira/arcmira",
   "title": "Arcmira: YouTube Transcript Search",
-  "description": "Find timestamped quotes, speakers, sponsors and recommendations in YouTube and podcast transcripts.",
+  "description": "YouTube transcript search and monitoring for your AI: exact quotes, full transcripts and speakers.",
   "repository": {
     "url": "https://github.com/arcmira/mcp",
     "source": "github"
   },
-  "version": "0.10.7",
+  "version": "0.10.8",
   "websiteUrl": "https://arcmira.com",
   "remotes": [
     {
@@ -16,7 +16,7 @@
       "headers": [
         {
           "name": "Authorization",
-          "description": "Bearer <key>. An arc_sk_ account key from arcmira.com; with no account, POST https://api.arcmira.com/v1/signups with an email address and verify the code. Omit the header and the host signs you in through OAuth.",
+          "description": "Bearer <key>. An arc_sk_ account key from arcmira.com. If you don't have an account yet, POST https://api.arcmira.com/v1/signups with an email address and verify the code. Omit the header and the host signs you in through OAuth.",
           "isRequired": false,
           "isSecret": true
         }

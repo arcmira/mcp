@@ -52,6 +52,7 @@ export function createServer(caller: Caller, deploy: string | null = null): McpS
         description: tool.description,
         inputSchema: tool.inputSchema,
         annotations: { ...tool.annotations, title: tool.title },
+        _meta: tool._meta,
       },
       async ({ intent, ...input }) => {
         const started = Date.now();
