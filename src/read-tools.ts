@@ -280,6 +280,8 @@ function transcriptWindow(transcript: Transcript, start: number): { metadata: Re
 
 const PREMIUM_ROUTE =
   'When a video has no caption track, its transcript comes only from a Premium transcription, which this tool never starts: arcmira_execute_read starts one with arcmira.transcript(video, { quality: "premium" }), and that read uses credits.';
+/** The same note where the program tools are not served (the /mcp/apps surface). */
+const NO_CAPTIONS = 'This video has no caption track Arcmira can read, so there are no lines to return.';
 
 function localError(type: string, code: string, message: string): ApiErrorBody {
   return { type, code, message, doc_url: `${DOCS.errors}#${code}`, request_id: `mcp_${crypto.randomUUID()}` };
@@ -289,7 +291,8 @@ function unreadable(): ApiErrorBody {
   return localError('server_error', 'upstream_unreadable', 'The Arcmira API answered in a shape this tool does not read. Retry in a few seconds.');
 }
 
-export const youtubeTranscriptTool: ToolSpec<typeof transcriptInput> = {
+/** The transcript tool; `unavailable` is the note a video without caption lines gets. */
+const transcriptTool = (unavailable: string): ToolSpec<typeof transcriptInput> => ({
   name: 'arcmira_youtube_transcript',
   title: 'Read a YouTube transcript',
   description:
@@ -301,16 +304,20 @@ export const youtubeTranscriptTool: ToolSpec<typeof transcriptInput> = {
     // No quality: the account default applies, and a Premium default only reads transcripts the account already owns.
     const answer = await api.get(`/v1/transcripts/${id}`, { language: input.language });
     if (!answer.ok) {
-      const route = answer.error.code === 'transcript_unavailable' ? { note: PREMIUM_ROUTE } : {};
+      const route = answer.error.code === 'transcript_unavailable' ? { note: unavailable } : {};
       return errorResult(answer.error, { ...answer.body, ...route, call_id: call.id });
     }
     const transcript = TranscriptBody.safeParse(answer.body);
     if (!transcript.success) {
       const state = typeof answer.body.state === 'string' ? answer.body.state : null;
       if (state === 'ready') return errorResult(unreadable(), { call_id: call.id });
-      return errorResult(localError('not_found', 'transcript_unavailable', `Arcmira has no caption lines to return for video ${id} (state ${state}).`), { state, note: PREMIUM_ROUTE, call_id: call.id });
+      return errorResult(localError('not_found', 'transcript_unavailable', `Arcmira has no caption lines to return for video ${id} (state ${state}).`), { state, note: unavailable, call_id: call.id });
     }
     const window = transcriptWindow(transcript.data, input.start ?? 0);
     return transcriptResult(window.metadata, window.text);
   },
-};
+});
+
+export const youtubeTranscriptTool = transcriptTool(PREMIUM_ROUTE);
+/** For /mcp/apps, which serves no program tool for the note to name. */
+export const appsTranscriptTool = transcriptTool(NO_CAPTIONS);

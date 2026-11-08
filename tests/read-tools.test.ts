@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.ts';
 import { OUTPUT_BUDGET } from '../src/output.ts';
-import { callTool, listTools, textOf, type ToolReply } from './handler.ts';
+import { callTool, listTools, textOf, withFetch, type ToolReply } from './handler.ts';
 
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
 const VIDEO = 'dQw4w9WgXcQ';
@@ -333,5 +333,66 @@ describe('credentials on the plain tools', () => {
       const body = reply.result.structuredContent as { error: { code: string; reason: string } };
       assert.deepEqual([body.error.code, body.error.reason], ['invalid_api_key', 'revoked'], tool);
     }
+  });
+});
+
+describe('/mcp/apps', () => {
+  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+    worker.fetch(
+      new Request(`https://mcp.arcmira.com${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers },
+        body: JSON.stringify(body),
+      }),
+      {},
+      { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext,
+    );
+
+  it('lists only the two plain read tools and feedback, while /mcp keeps all six', async () => {
+    assert.deepEqual((await listTools('/mcp/apps')).map((t) => t.name), ['arcmira_youtube_search', 'arcmira_youtube_transcript', 'arcmira_feedback']);
+    assert.equal((await listTools()).length, 6);
+  });
+
+  it('sends no server instructions, since the approved ones name tools it does not serve', async () => {
+    const initialize = { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } } };
+    const read = async (path: string) => {
+      const text = await (await post(path, initialize, { authorization: 'Bearer arc_sk_fixture' })).text();
+      const data = text.split('\n').find((line) => line.startsWith('data:'));
+      return (JSON.parse(data ? data.slice(5) : text) as { result: { instructions?: string } }).result;
+    };
+    await withFetch(() => Response.json({ id: 'caller' }), async () => {
+      assert.equal((await read('/mcp/apps')).instructions, undefined);
+      assert.ok((await read('/mcp')).instructions);
+    });
+  });
+
+  it('points its 401 at its own protected-resource document, which names /mcp/apps as the resource', async () => {
+    const apps = await post('/mcp/apps', { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+    assert.equal(apps.status, 401);
+    assert.equal(apps.headers.get('www-authenticate'), 'Bearer resource_metadata="https://mcp.arcmira.com/.well-known/oauth-protected-resource/mcp/apps"');
+    const root = await post('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+    assert.equal(root.headers.get('www-authenticate'), 'Bearer resource_metadata="https://mcp.arcmira.com/.well-known/oauth-protected-resource"', '/mcp is unchanged');
+
+    const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
+    const doc = async (path: string) => (await (await worker.fetch(new Request(`https://mcp.arcmira.com${path}`), {}, ctx)).json()) as { resource: string; authorization_servers: string[] };
+    assert.equal((await doc('/.well-known/oauth-protected-resource/mcp/apps')).resource, 'https://mcp.arcmira.com/mcp/apps');
+    assert.equal((await doc('/.well-known/oauth-protected-resource')).resource, 'https://mcp.arcmira.com/mcp');
+    assert.equal((await doc('/.well-known/oauth-protected-resource/mcp')).resource, 'https://mcp.arcmira.com/mcp');
+    assert.deepEqual((await doc('/.well-known/oauth-protected-resource/mcp/apps')).authorization_servers, (await doc('/.well-known/oauth-protected-resource')).authorization_servers);
+  });
+
+  it('runs the plain tools there, and a video with no captions gets a note that names no missing tool', async () => {
+    const search = upstream(() => Response.json(SEARCH_BODY));
+    const found = await callTool('arcmira_youtube_search', { query: 'stablecoins' }, search.handler, {}, '/mcp/apps');
+    assert.equal(found.result.isError, undefined, textOf(found));
+    assert.equal(JSON.parse(textOf(found)).results.length, 1);
+
+    const none = upstream(() => apiError(404, { type: 'not_found', code: 'transcript_unavailable', message: 'This video has no captions in en.' }));
+    const reply = await callTool('arcmira_youtube_transcript', { video: VIDEO }, none.handler, {}, '/mcp/apps');
+    assert.equal(reply.result.isError, true);
+    assert.doesNotMatch(textOf(reply), /arcmira_execute|arcmira_describe|credits/);
+    const program = (await callTool('arcmira_execute_read', { code: 'return 1' }, none.handler, {}, '/mcp/apps')) as Partial<ToolReply> & { error?: { message: string } };
+    assert.ok(program.error !== undefined || program.result?.isError === true, 'the program tool is not served on /mcp/apps');
+    assert.match(JSON.stringify(program), /arcmira_execute_read/);
   });
 });

@@ -8,7 +8,7 @@ import { errorResult, okResult, textResult, type ToolResult } from './result.ts'
 import { renderExecution, runProgram, type Access, type Execution, type SandboxHost } from './sandbox.ts';
 import { OUTPUT_LIMITS } from './output.ts';
 import { intentParam } from './telemetry.ts';
-import { youtubeSearchTool, youtubeTranscriptTool } from './read-tools.ts';
+import { appsTranscriptTool, youtubeSearchTool, youtubeTranscriptTool } from './read-tools.ts';
 
 export const TOOL_NAMES = [
   'arcmira_describe',
@@ -168,6 +168,8 @@ export const feedbackTool = tool({
 });
 
 export const TOOLS: readonly AnyToolSpec[] = [describeTool, executeReadTool, executeWriteTool, youtubeSearchTool, youtubeTranscriptTool, feedbackTool];
+/** The /mcp/apps surface: named, typed tools only, for directories that refuse a program runner. */
+export const APPS_TOOLS: readonly AnyToolSpec[] = [youtubeSearchTool, appsTranscriptTool, feedbackTool];
 
 async function execute(source: string, access: Access, { sandbox, call }: ToolContext): Promise<ToolResult> {
   if (sandbox === null) return errorResult(sandboxUnavailable());

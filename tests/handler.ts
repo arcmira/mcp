@@ -21,8 +21,9 @@ export async function callTool(
   args: Record<string, unknown>,
   upstream: (url: URL, init?: RequestInit) => Response,
   env: Record<string, unknown> = {},
+  path = '/mcp',
 ) {
-  const request = new Request('https://mcp.arcmira.com/mcp', {
+  const request = new Request(`https://mcp.arcmira.com${path}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -78,8 +79,8 @@ export interface ListedTool {
 }
 
 /** One tools/list through the Worker's fetch, the way a host sends it. */
-export async function listTools(): Promise<ListedTool[]> {
-  const request = new Request('https://mcp.arcmira.com/mcp', {
+export async function listTools(path = '/mcp'): Promise<ListedTool[]> {
+  const request = new Request(`https://mcp.arcmira.com${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer arc_sk_fixture' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),

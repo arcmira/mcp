@@ -5,9 +5,22 @@ import { noKeyError, type ApiClient } from './api.ts';
 import { clientLabel, errorResult, withBuild, withRateLimit } from './result.ts';
 import type { Access, SandboxHost } from './sandbox.ts';
 import { callId, inputState, outline, type Recorder } from './telemetry.ts';
-import { RETIRED_TOOLS, SERVER_INSTRUCTIONS, TOOLS, retiredToolResult } from './tools.ts';
+import { APPS_TOOLS, RETIRED_TOOLS, SERVER_INSTRUCTIONS, TOOLS, retiredToolResult, type AnyToolSpec } from './tools.ts';
 
 export const MCP_PATH = '/mcp';
+export const APPS_PATH = '/mcp/apps';
+
+/** What one MCP path serves. `/mcp/apps` has no instructions: the approved ones name the program tools it leaves out. */
+export interface Surface {
+  path: string;
+  tools: readonly AnyToolSpec[];
+  instructions?: string;
+}
+
+export const SURFACES: ReadonlyMap<string, Surface> = new Map([
+  [MCP_PATH, { path: MCP_PATH, tools: TOOLS, instructions: SERVER_INSTRUCTIONS }],
+  [APPS_PATH, { path: APPS_PATH, tools: APPS_TOOLS }],
+]);
 
 export interface Caller {
   /** The v1 client for this caller, used for the handshake key check and the rate-limit meta. Null with no credential. */
@@ -33,8 +46,8 @@ export interface CallTag {
  * One server per request. Tools close over the caller's credential, so nothing about a caller
  * outlives its request. `deploy` is this Worker's version id, null under local dev.
  */
-export function createServer(caller: Caller, deploy: string | null = null): McpServer {
-  const server = new McpServer({ name: 'arcmira', version: pkg.version }, { instructions: SERVER_INSTRUCTIONS });
+export function createServer(caller: Caller, deploy: string | null = null, surface: Surface = SURFACES.get(MCP_PATH)!): McpServer {
+  const server = new McpServer({ name: 'arcmira', version: pkg.version }, surface.instructions ? { instructions: surface.instructions } : {});
   const build = (result: Parameters<typeof withBuild>[0]) => {
     const execution = z.object({ api_build: z.string().nullable() }).safeParse(result._meta?.['arcmira.com/execution']);
     return withBuild(result, {
@@ -44,7 +57,7 @@ export function createServer(caller: Caller, deploy: string | null = null): McpS
       client: clientLabel(server.server.getClientVersion()),
     });
   };
-  for (const tool of TOOLS) {
+  for (const tool of surface.tools) {
     server.registerTool(
       tool.name,
       {
