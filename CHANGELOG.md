@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased: plain YouTube read tools
+## 0.10.9: plain YouTube read tools
 
 Two read-only tools take typed arguments and run no program: `arcmira_youtube_search` and `arcmira_youtube_transcript`. They sit beside code mode, so `/mcp` lists six tools. The four code-mode tools, their annotations and the server instructions are unchanged.
 
