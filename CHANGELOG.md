@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.14: Claude Code loads the reference, the program runner and feedback upfront
+
+The server instructions tell an agent to call `arcmira_describe` before writing a program, but in Claude Code's default view `arcmira_describe` waited behind tool search, and so did `arcmira_feedback`. This release loads both upfront beside `arcmira_execute_read`, and routes the instructions to programs.
+
+- `_meta: { "anthropic/alwaysLoad": true }` moves from `arcmira_youtube_search` and `arcmira_youtube_transcript` to `arcmira_describe` and `arcmira_feedback`. `arcmira_execute_read` keeps it. The two plain read tools stay on `/mcp` behind tool search, and on `/mcp/apps` as before.
+- What Claude Code loads upfront from `/mcp`, server instructions included, falls from 9,325 to 6,754 characters, about 2,330 to 1,690 tokens.
+- The routing sentence is now "Call arcmira_describe once, then write one program per question for arcmira_execute_read, or arcmira_execute_write for monitor changes. One video needs no reference: return await arcmira.transcript(url, { start, end }); read a long one in start and end windows, one call each." The name sentence is now "Resolve a name with arcmira.resolve when it becomes a filter; filters take ids only." The instructions are 1,914 of 2,000 characters.
+- In a blind tool-choice test of this text, with 3 Haiku and 3 Sonnet runs, every Arcmira request went to an Arcmira tool and every control avoided Arcmira. Keeping 0.10.13's routing with the new upfront set did worse: 4 misses in 6 runs, and agents still loaded the plain tools through tool search. Without the long-video clause, 1 run in 6 sent a complete 3-hour transcript to another server's transcript tool, citing the 12,000-character output cap. With it, all 6 read it in windows.
+- The `category` and `call_id` descriptions in `arcmira_feedback` are shorter. The enum and the pattern already carry the rest.
+
 ## 0.10.13: the plain tools in Claude Code's first view, and arcmira.price
 
 A blind tool-choice test on 0.10.11 found that in Claude Code's default view the two plain tools almost never got picked: 0 to 2 of 24 per run. Only `arcmira_execute_read` loaded upfront, and the server instructions sent one-video reads to it. With every description visible, the plain tools took 82% to 85% of picks. This release makes that the default.
