@@ -187,6 +187,11 @@ describe('arcmira_youtube_search', () => {
 });
 
 /** A long transcript: three hours, a line every 1.4 to 3.4 seconds, so some lines share a second. */
+/** The API's caption note, and the sentences it adds for a default-Premium account that owns no Premium transcript. */
+const CAPTION_NOTE = "This transcript is the video's own caption track. `language` says which track you got.";
+const DEFAULT_PREMIUM_NOTE =
+  "These are captions because this account's default transcript quality is premium and the account has no Premium transcript of this video. Pass quality=premium to start one with credits from the account's plan, then its on-demand budget, or quality=captions to drop this note.";
+
 function longTranscript(withSpeakers: boolean) {
   const lines: Array<{ start: number; end: number; text: string; speaker?: number }> = [];
   let start = 0.37;
@@ -297,6 +302,18 @@ describe('arcmira_youtube_transcript', () => {
     assert.deepEqual(api.requests.map((url) => url.pathname), [`/v1/transcripts/${VIDEO}`]);
   });
 
+  it('replaces the API\'s quality=premium advice to a default-Premium account with the way this server starts one, and keeps other notes as sent', async () => {
+    const api = upstream(() => Response.json({ ...longTranscript(false), note: `${CAPTION_NOTE} ${DEFAULT_PREMIUM_NOTE}` }));
+    const reply = await callTool('arcmira_youtube_transcript', { video: VIDEO }, api.handler);
+    const note = metadataOf(reply).note as string;
+    assert.ok(note.startsWith(CAPTION_NOTE), note);
+    assert.doesNotMatch(note, /quality=/);
+    assert.match(note, /no Premium transcript of this video\. arcmira_execute_read starts one/);
+
+    const plain = upstream(() => Response.json({ ...longTranscript(false), note: CAPTION_NOTE }));
+    assert.equal(metadataOf(await callTool('arcmira_youtube_transcript', { video: VIDEO }, plain.handler)).note, CAPTION_NOTE);
+  });
+
   it('refuses a value that names no YouTube video before any read', async () => {
     const api = upstream(() => Response.json(longTranscript(false)));
     const reply = await callTool('arcmira_youtube_transcript', { video: 'https://vimeo.com/channels/staffpicks' }, api.handler);
@@ -394,5 +411,11 @@ describe('/mcp/apps', () => {
     const program = (await callTool('arcmira_execute_read', { code: 'return 1' }, none.handler, {}, '/mcp/apps')) as Partial<ToolReply> & { error?: { message: string } };
     assert.ok(program.error !== undefined || program.result?.isError === true, 'the program tool is not served on /mcp/apps');
     assert.match(JSON.stringify(program), /arcmira_execute_read/);
+  });
+
+  it('tells a default-Premium account its lines are captions, with no quality argument, credits or other tool', async () => {
+    const api = upstream(() => Response.json({ ...longTranscript(false), note: `${CAPTION_NOTE} ${DEFAULT_PREMIUM_NOTE}` }));
+    const note = metadataOf(await callTool('arcmira_youtube_transcript', { video: VIDEO }, api.handler, {}, '/mcp/apps')).note as string;
+    assert.equal(note, `${CAPTION_NOTE} These are captions because this account has no Premium transcript of this video.`);
   });
 });

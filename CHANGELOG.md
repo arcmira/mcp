@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.10: transcript notes without a quality argument
+
+`arcmira_youtube_transcript` no longer passes on advice to use an argument it doesn't take.
+
+- For an account whose default transcript quality is Premium and that owns no Premium transcript of the video, the API serves captions with a note that ends "Pass quality=premium to start one … or quality=captions to drop this note." The tool sends no `quality` and takes none, so the tool now replaces that ending. On `/mcp` the note says "These are captions because this account has no Premium transcript of this video." and then that `arcmira_execute_read` starts one with `arcmira.transcript(video, { quality: "premium" })`, which uses credits. On `/mcp/apps` it keeps only the first sentence, so it names no other tool and no credits. The rest of the API's note, and every other note, is passed on as sent.
+
 ## 0.10.9: plain YouTube read tools
 
 Two read-only tools take typed arguments and run no program: `arcmira_youtube_search` and `arcmira_youtube_transcript`. They sit beside code mode, so `/mcp` lists six tools. The four code-mode tools, their annotations and the server instructions are unchanged.
@@ -12,7 +18,7 @@ Two read-only tools take typed arguments and run no program: `arcmira_youtube_se
 - `/mcp/apps` is a second MCP path on the same OAuth for directories that refuse a program runner. It serves only `arcmira_youtube_search`, `arcmira_youtube_transcript` and `arcmira_feedback`, with no server instructions, and its transcript note names no tool it doesn't serve. Its 401 points at `/.well-known/oauth-protected-resource/mcp/apps`, whose `resource` is `https://mcp.arcmira.com/mcp/apps`. `/mcp` and its metadata are unchanged.
 - A gate, a refused credential, a missing video and `freshness_requires_paid` come back as the API sent them, with `isError` and the result's `call_id`. An empty search names its `call_id` too.
 - `manifest:check` holds every tool's four hints in one table. It replays both plain tools through the server's own API client against the OpenAPI document, and it fails a plain tool's title, description or input text that has a pricing, plan or trial word or names another tool. `tool_retired` lists the tools from the tool table.
-- These are the separate operation tools an OpenAI directory listing needs. That listing also needs an MCP path that serves them without the program tools, which this release does not add.
+- These are the separate operation tools an OpenAI directory listing needs, and `/mcp/apps` serves them without the program tools.
 
 ## 0.10.8: YouTube transcript search
 
