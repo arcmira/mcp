@@ -22,7 +22,7 @@ export function serverCard(origin: string): Record<string, unknown> {
   return {
     $schema: server.$schema,
     name: server.name,
-    title: 'Arcmira: YouTube Transcript Search',
+    title: server.title,
     description: server.description,
     version: server.version,
     websiteUrl: server.websiteUrl,
@@ -44,6 +44,7 @@ export function serverCard(origin: string): Record<string, unknown> {
       description: tool.description,
       inputSchema: z.toJSONSchema(tool.inputSchema, { io: 'input' }),
       annotations: { ...tool.annotations, title: tool.title },
+      ...(tool._meta ? { _meta: tool._meta } : {}),
     })),
   };
 }

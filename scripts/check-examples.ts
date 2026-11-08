@@ -14,7 +14,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { EXAMPLES } from '../src/reference.ts';
-import { TASK_SKILLS } from '../src/skills.ts';
+import { TASK_SKILLS, programsOf } from '../src/skills.ts';
 
 type Client = {
   createArcmira(o: { base: string; fetch: typeof fetch }): { arcmira: object; meter: { calls: number } };
@@ -78,7 +78,7 @@ function undefinedPaths(value: unknown, path = '$', out: string[] = []): string[
 
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (...args: string[]) => (...args: unknown[]) => Promise<unknown>;
 let failed = 0;
-const PROGRAMS = [...EXAMPLES, ...TASK_SKILLS.flatMap((s) => s.programs.map((p) => ({ title: `${s.name}: ${p.title}`, code: p.code, write: p.tool === 'write' })))];
+const PROGRAMS = [...EXAMPLES, ...TASK_SKILLS.flatMap((s) => programsOf(s).map((p) => ({ title: `${s.name}: ${p.title}`, code: p.code, write: p.tool === 'write' })))];
 for (const [i, example] of PROGRAMS.entries()) {
   if ('write' in example && example.write) {
     console.log(`${i + 1}. ${example.title}: skipped (writes to the account)`);

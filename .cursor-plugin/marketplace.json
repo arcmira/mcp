@@ -7,7 +7,7 @@
     {
       "name": "arcmira",
       "source": "./plugins/arcmira",
-      "description": "Find timestamped quotes, speakers, sponsors and recommendations in YouTube and podcast transcripts."
+      "description": "YouTube transcript search and monitoring for your AI: exact quotes, full transcripts and speakers."
     }
   ]
 }

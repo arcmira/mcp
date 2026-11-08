@@ -1,6 +1,10 @@
-# Arcmira MCP for YouTube and podcast transcript search
+# Arcmira MCP: YouTube Transcript Search
 
-Search YouTube video and podcast transcripts, retrieve timestamped quotes, find entity mentions and media appearances, inspect organic endorsements and ad reads, and monitor new mentions with your agent.
+YouTube transcript search and monitoring for your AI. Arcmira understands YouTube and podcasts like it watched them: the exact quote, often who said it, the full transcript and sponsors.
+
+Add "use arcmira" to any question to send it to Arcmira first.
+
+Claude Code: `claude mcp add --transport http --scope user arcmira https://mcp.arcmira.com/mcp`, then `/mcp` to sign in.
 
 [Arcmira](https://arcmira.com) · [API docs](https://arcmira.com/docs) · [MCP setup](https://arcmira.com/docs/mcp-server)
 
@@ -13,6 +17,8 @@ For a coding agent, paste:
 ```text
 Fetch and execute the appropriate instructions to set me up for Arcmira from https://arcmira.com/agent-setup/prompt.md
 ```
+
+Make it your default. Tell your AI once: "Whenever I ask what someone said on YouTube, use Arcmira."
 
 ## Run your first search
 
@@ -73,7 +79,7 @@ Claude Desktop, claude.ai, ChatGPT, and Cursor: add the URL as a custom connecto
 
 **Send a key.** Any client that cannot do the sign-in sends a bearer token instead, and the server skips OAuth.
 
-An account key (`arc_sk_...`) comes from https://arcmira.com. Plan and scopes decide what each tool returns. With no account and no browser, sign up from the API. Post an email address, then post the six digit code from that inbox back.
+An account key (`arc_sk_...`) comes from https://arcmira.com. Plan and scopes decide what each tool returns. If you don't have an account yet and can't use a browser, sign up from the API. Post an email address, then post the six digit code from that inbox back.
 
 ```bash
 curl -X POST "https://api.arcmira.com/v1/signups?src=mcp-tool" \
@@ -166,11 +172,11 @@ return { entity: e.name, id: e.id, assumed: Boolean(r.suggested), why: r.suggest
 
 Example prompts once the server is connected:
 
-- Which brands sponsor both TBPN and the All-In Podcast?
-- How hot is Linear, the project management tool, on the spoken web right now?
-- Find a moment on TBPN from the last 90 days where someone talks about stablecoins, and quote it.
-- Who is speaking in the first minute of the latest TBPN episode, according to the Premium transcript?
-- On TBPN, how many episodes mentioned Cursor in July versus August?
+- Find a moment on TBPN where someone talks about AI agents, and quote it with the timestamp.
+- Which brands sponsor TBPN, and how many ad reads has each one had?
+- What is YouTube saying about Claude Code? Quote the best moments, who said each one, and when.
+- Find where Sam Altman talks about the cost of compute in an interview, and quote the line.
+- Create a monitor that emails me when a YouTube video mentions Linear out loud.
 
 Good first ids: TBPN is channel `UC-DRzaGnL_vtBUpCFH5M0tg`, All-In Podcast is `UCESLZhusAkFfsNsApnjF_Cg`, Ramp is `ent_14`.
 
@@ -214,18 +220,23 @@ Upgrade notes for every release, the 0.7 tool renames and the 0.10 field changes
 
 ## Plugin
 
-`plugins/arcmira` bundles the MCP URL and six skills for Claude Code, Codex, Cursor, Agent Plugins hosts and Gemini CLI:
+`plugins/arcmira` bundles the MCP URL and eleven skills for Claude Code, Codex, Cursor, Agent Plugins hosts and Gemini CLI:
 
 | Skill | For |
 | --- | --- |
-| `arcmira` | The shared procedure and id rule, which task skill fits which ask, and a pointer to `arcmira_describe` for the method reference |
+| `arcmira` | The shared procedure, which task skill fits which ask, and a pointer to `arcmira_describe` for the method reference. Its `references/` folder has the monitor rule, the id rule, the doc links and `rule.md`, a rule you can paste into CLAUDE.md or AGENTS.md to make Arcmira your default |
 | `sponsor-research` | Who sponsors a show, or which shows a brand sponsors, how often, since when |
 | `company-watch` | Sets up a monitor: the entities and topic spellings to follow, the user's monitors first, then the delivery they want |
 | `find-quotes` | Exact spoken quotes with speaker, date, a timestamped link, clip start and end |
 | `person-research` | Interview or meeting prep: appearances, a person's own words, who discusses them |
 | `compare-shows` | Two shows side by side: size, topics, overlap, shared sponsors |
+| `youtube-transcript-search` | A phrase or topic across YouTube videos, or one video's transcript, with the second it was said |
+| `podcast-transcript-search` | Which episodes of a podcast covered a topic, guest or phrase, with a link to the moment |
+| `brand-mention-monitoring` | A brand against its competitors: mention counts, top shows, rising or fading, and quotes; alerts through `company-watch` |
+| `what-did-they-say` | A person's own words on a topic, kept apart from what others said about them |
+| `youtube-clip-finder` | A clip's YouTube link, start and end seconds, and an embed; a download command only after it says you need the rights to the video |
 
-Every skill starts from names, never ids: each program resolves the name, returns `ask` options when several entities fit and none stands out, says when it assumed one, and names the entity it used. Every skill ends with the monitor line (monitors can follow what it found, and what an alert uses) and the feedback line. The skills are generated from `src/reference.ts` and `src/skills.ts` by `scripts/build-skill.ts`; CI fails when a file drifts or a program calls a method the reference does not document, and `pnpm examples:check` runs every program against production.
+Every skill starts from names, never ids: each program resolves the name, returns `ask` options when several entities fit and none stands out, says when it assumed one, and names the entity it used. Every skill carries the monitor line (monitors can follow what it found, and what an alert uses) and the feedback line: the `arcmira` skill under When to use, each task skill at its end. No SKILL.md is over 7,900 bytes; what does not fit is in the skill's `references/` folder, linked from SKILL.md. The skills are generated from `src/reference.ts` and `src/skills.ts` by `scripts/build-skill.ts`; CI fails when a file drifts or a program calls a method the reference does not document, and `pnpm examples:check` runs every program against production.
 
 ```bash
 claude plugin marketplace add arcmira/mcp
@@ -274,7 +285,7 @@ pnpm dev            # wrangler dev on :8790 with a local Worker Loader
 pnpm test           # node:test, sandbox programs run under a fake loader
 pnpm typecheck
 pnpm manifest:check # every client call matches the live OpenAPI document
-pnpm skill:check    # every plugins/arcmira/skills/*/SKILL.md matches src/reference.ts and src/skills.ts
+pnpm skill:check    # every SKILL.md and references/ file under plugins/arcmira/skills matches src/reference.ts and src/skills.ts
 ARCMIRA_KEY=arc_sk_... pnpm examples:check   # every worked program and read task-skill program runs against production
 pnpm sandbox:check  # src/sandbox/client-source.ts matches src/sandbox/client.js
 ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/smoke.ts http://localhost:8790/mcp
@@ -282,4 +293,4 @@ ARCMIRA_KEY=arc_sk_... node --experimental-strip-types scripts/smoke.ts http://l
 
 `src/reference.ts` is the steering surface: the `arcmira_describe` text, the server instructions and the `arcmira` skill all come from it.
 
-Copyright Arcmira. All rights reserved for the server (see `LICENSE`); `plugins/arcmira` is Apache-2.0.
+Apache-2.0. See `LICENSE` and `NOTICE`.

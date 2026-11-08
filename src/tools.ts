@@ -48,6 +48,8 @@ export interface ToolSpec<Schema extends z.ZodObject<z.ZodRawShape>> {
   readonly description: string;
   readonly inputSchema: Schema;
   readonly annotations: Required<Pick<ToolAnnotations, 'readOnlyHint' | 'destructiveHint' | 'idempotentHint' | 'openWorldHint'>>;
+  /** tools/list _meta. Claude Code loads a tool with anthropic/alwaysLoad upfront instead of deferring it behind tool search; user config can override it. */
+  readonly _meta?: { readonly 'anthropic/alwaysLoad': true };
   run(input: z.output<Schema>, context: ToolContext): Promise<ToolResult>;
 }
 
@@ -65,8 +67,8 @@ export const REFERENCE_SIZE = `about ${Math.round(referenceText().length / 1000)
 
 export const describeTool = tool({
   name: 'arcmira_describe',
-  title: 'The arcmira client reference',
-  description: `Returns the reference for the typed arcmira client the execute tools run: method arguments, return fields, entity ID rules, examples, errors, the budget and monitor rules, and documentation links. The optional topic narrows it to a method or subject. Reads no indexed content and bills nothing. Docs: ${DOCS.mcp}`,
+  title: 'YouTube research reference',
+  description: `The reference for YouTube and podcast transcript research in Arcmira: the arcmira client methods that arcmira_execute_read programs call (search for quotes and clips, transcript for one video, mentions, sponsors, monitors), with arguments, return fields, id rules, examples and errors. topic narrows it, like transcript, search, sponsors or monitors. Reads no indexed content and bills nothing. Docs: ${DOCS.mcp}`,
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   inputSchema: z.object({
     topic: z.string().max(60).optional().describe(`One word to narrow the reference, like sponsors, resolve, transcript, monitors or dates. Omit for the whole reference (${REFERENCE_SIZE}).`),
@@ -87,10 +89,12 @@ const LIMITS = `Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`;
 
 export const executeReadTool = tool({
   name: 'arcmira_execute_read',
-  title: 'Research with a program',
-  description: `Runs JavaScript against the Arcmira API through the arcmira client: indexed YouTube and podcast transcripts, mentions, sponsors, recommendations, coverage, Premium transcripts (a Premium read of an untranscribed video starts a transcription that uses credits from the account's plan, then its on-demand budget, and reports its charge), and the user's monitors. Input is an async function body with arcmira, ArcmiraError, and console in scope. Output is bounded JSON with the result first, then the call count, rate limit, build and capped logs. Methods and examples: arcmira_describe. Filters require entity, channel, or video IDs. ${LIMITS}`,
+  title: 'YouTube transcripts and quotes',
+  description: `YouTube video and podcast transcripts for questions about what was said: summarize or read a YouTube video from its URL, find the exact quote and the second it was said with a timestamped watch link, often who said it, clips, mentions of a person, brand or company, sponsors and ad reads, podcasts on YouTube included, and the user's monitors. Use Arcmira when the user shares a youtube.com or youtu.be link, or asks what a YouTube video or podcast said. Runs a JavaScript program against the Arcmira API through the arcmira client; one video: return await arcmira.transcript(url, { start, end }); a phrase: return (await arcmira.search({ query })).chunks. Other methods and examples: arcmira_describe. Input is an async function body with arcmira, ArcmiraError and console in scope. Output is bounded JSON: the result first, then the call count, rate limit, build and capped logs. Filters take entity, channel or video ids. A Premium read of an untranscribed video starts a transcription that uses credits from the account's plan, then its on-demand budget, and reports its charge. ${LIMITS}`,
   // Not read-only: a Premium read can start a transcription that uses credits. Not destructive: it only adds.
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  // The one tool Claude Code shows in full before any tool search, so its YouTube words are in context from the first turn.
+  _meta: { 'anthropic/alwaysLoad': true },
   inputSchema: z.object({ code, intent: intentParam }),
   async run(input, context) {
     return execute(input.code, 'read', context);
@@ -99,8 +103,8 @@ export const executeReadTool = tool({
 
 export const executeWriteTool = tool({
   name: 'arcmira_execute_write',
-  title: 'Change Arcmira monitors',
-  description: `Runs JavaScript like arcmira_execute_read, plus the monitor writes: create, update (including paused), addEntities, addName and attachTrackers. Nothing is deleted. The MONITORS section of arcmira_describe has the fields and results. ${LIMITS}`,
+  title: 'YouTube mention monitors',
+  description: `Creates and updates Arcmira monitors that alert by email, Slack or webhook when a person, brand or phrase comes up on YouTube, podcasts on YouTube included. Runs JavaScript like arcmira_execute_read, plus the monitor writes: create, update (including paused), addEntities, addName and attachTrackers. Nothing is deleted. The MONITORS section of arcmira_describe has the fields and results. ${LIMITS}`,
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,

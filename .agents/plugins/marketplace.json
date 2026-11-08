@@ -1,7 +1,7 @@
 {
   "name": "arcmira",
   "interface": {
-    "displayName": "Arcmira"
+    "displayName": "Arcmira: YouTube Transcript Search"
   },
   "plugins": [
     {

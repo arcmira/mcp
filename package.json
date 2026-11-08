@@ -1,7 +1,7 @@
 {
   "name": "@arcmira/mcp",
-  "version": "0.10.7",
-  "description": "Find timestamped quotes, speakers, sponsors and recommendations in YouTube and podcast transcripts.",
+  "version": "0.10.8",
+  "description": "YouTube transcript search and monitoring for your AI: exact quotes, full transcripts and speakers.",
   "keywords": [
     "mcp",
     "mcp-server",
@@ -18,7 +18,7 @@
   ],
   "private": true,
   "mcpName": "io.github.arcmira/arcmira",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "author": "Arcmira",
   "homepage": "https://arcmira.com",
   "repository": {

@@ -7,7 +7,11 @@
       "description": "Find timestamped quotes, follow speaker appearances, and compare discussions across indexed YouTube videos.",
       "skills": [
         "arcmira",
+        "youtube-transcript-search",
         "find-quotes",
+        "what-did-they-say",
+        "youtube-clip-finder",
+        "podcast-transcript-search",
         "person-research",
         "compare-shows"
       ]
@@ -17,7 +21,8 @@
       "description": "Research channel sponsors and recommendations, then monitor entities for new mentions.",
       "skills": [
         "sponsor-research",
-        "company-watch"
+        "company-watch",
+        "brand-mention-monitoring"
       ]
     }
   ]

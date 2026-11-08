@@ -92,17 +92,42 @@ describe('withRateLimit', () => {
   });
 });
 
+interface ListedTool {
+  name: string;
+  annotations: Record<string, unknown>;
+  inputSchema: { properties: Record<string, unknown> };
+  _meta?: Record<string, unknown>;
+}
+
+/** One tools/list through the Worker's fetch, the way a host sends it. */
+async function listTools(): Promise<ListedTool[]> {
+  const request = new Request('https://mcp.arcmira.com/mcp', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer arc_sk_fixture' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+  });
+  const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
+  const text = await withFetch(() => Response.json({ id: 'caller' }), async () => (await worker.fetch(request, {}, ctx)).text());
+  const data = text.split('\n').find((line) => line.startsWith('data:'));
+  return (JSON.parse(data ? data.slice(5) : text) as { result: { tools: ListedTool[] } }).result.tools;
+}
+
 describe('the four tools through the handler', () => {
+  it('tools/list marks arcmira_execute_read, and no other tool, to load upfront in Claude Code', async () => {
+    const tools = await listTools();
+    assert.deepEqual(
+      Object.fromEntries(tools.map((t) => [t.name, t._meta ?? null])),
+      {
+        arcmira_describe: null,
+        arcmira_execute_read: { 'anthropic/alwaysLoad': true },
+        arcmira_execute_write: null,
+        arcmira_feedback: null,
+      },
+    );
+  });
+
   it('tools/list distinguishes reference lookup, paid programs and persisted feedback', async () => {
-    const request = new Request('https://mcp.arcmira.com/mcp', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer arc_sk_fixture' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
-    });
-    const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
-    const text = await withFetch(() => Response.json({ id: 'caller' }), async () => (await worker.fetch(request, {}, ctx)).text());
-    const data = text.split('\n').find((line) => line.startsWith('data:'));
-    const tools = (JSON.parse(data ? data.slice(5) : text) as { result: { tools: Array<{ name: string; annotations: Record<string, unknown>; inputSchema: { properties: Record<string, unknown> } }> } }).result.tools;
+    const tools = await listTools();
     assert.deepEqual(
       Object.fromEntries(tools.map((t) => [t.name, [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.idempotentHint, t.annotations.openWorldHint]])),
       {
