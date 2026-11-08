@@ -413,9 +413,10 @@ describe('/mcp/apps', () => {
     assert.match(JSON.stringify(program), /arcmira_execute_read/);
   });
 
-  it('tells a default-Premium account its lines are captions, with no quality argument, credits or other tool', async () => {
+  it('keeps only the caption note for a default-Premium account: no quality argument, tier, credits or other tool', async () => {
     const api = upstream(() => Response.json({ ...longTranscript(false), note: `${CAPTION_NOTE} ${DEFAULT_PREMIUM_NOTE}` }));
-    const note = metadataOf(await callTool('arcmira_youtube_transcript', { video: VIDEO }, api.handler, {}, '/mcp/apps')).note as string;
-    assert.equal(note, `${CAPTION_NOTE} These are captions because this account has no Premium transcript of this video.`);
+    assert.equal(metadataOf(await callTool('arcmira_youtube_transcript', { video: VIDEO }, api.handler, {}, '/mcp/apps')).note, CAPTION_NOTE);
+    const only = upstream(() => Response.json({ ...longTranscript(false), note: DEFAULT_PREMIUM_NOTE }));
+    assert.equal(metadataOf(await callTool('arcmira_youtube_transcript', { video: VIDEO }, only.handler, {}, '/mcp/apps')).note, undefined);
   });
 });

@@ -285,7 +285,7 @@ const NO_PREMIUM = 'These are captions because this account has no Premium trans
 interface TranscriptNotes {
   /** A video with no caption lines. */
   readonly unavailable: string;
-  /** Captions read for an account whose default quality is Premium and that owns no Premium transcript of the video. */
+  /** Captions read for an account whose default quality is Premium and that owns no Premium transcript of the video; empty drops the sentence. */
   readonly captions: string;
 }
 
@@ -293,10 +293,10 @@ const PROGRAM_NOTES: TranscriptNotes = {
   unavailable: `When a video has no caption track, its transcript comes only from a Premium transcription, which this tool never starts: ${START_PREMIUM}`,
   captions: `${NO_PREMIUM} ${START_PREMIUM}`,
 };
-/** Where the program tools are not served (the /mcp/apps surface), the notes name no other tool and no credits. */
+/** Where the program tools are not served (the /mcp/apps surface), the notes name no other tool, tier or credits. */
 const APPS_NOTES: TranscriptNotes = {
   unavailable: 'This video has no caption track Arcmira can read, so there are no lines to return.',
-  captions: NO_PREMIUM,
+  captions: '',
 };
 
 /** The API ends a default-Premium account's caption note with this sentence and its quality=premium advice. */
@@ -305,7 +305,7 @@ const PREMIUM_DEFAULT = "These are captions because this account's default trans
 function captionNote(note: string | null | undefined, captions: string): string | undefined {
   if (!note) return undefined;
   const at = note.indexOf(PREMIUM_DEFAULT);
-  return at < 0 ? note : [note.slice(0, at).trim(), captions].filter(Boolean).join(' ');
+  return at < 0 ? note : [note.slice(0, at).trim(), captions].filter(Boolean).join(' ') || undefined;
 }
 
 function localError(type: string, code: string, message: string): ApiErrorBody {
