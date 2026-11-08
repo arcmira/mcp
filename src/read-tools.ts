@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import type { ApiErrorBody } from './api.ts';
+import type { ApiClient, ApiErrorBody } from './api.ts';
 import { OUTPUT_BUDGET } from './output.ts';
 import { DOCS } from './reference.ts';
-import { errorResult, okResult, transcriptResult } from './result.ts';
+import { errorResult, okResult, transcriptResult, type ToolResult } from './result.ts';
 import { CHANNEL_ID, DATE_BOUND, ENTITY_ID, videoIdOf } from './sandbox/client.js';
 import { intentParam } from './telemetry.ts';
 import type { ToolSpec } from './tools.ts';
@@ -17,20 +17,15 @@ const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: 
 /** The window the server instructions state when the user names none. */
 const DEFAULT_WINDOW_DAYS = 90;
 
-const entityIds = (describe: string) =>
-  z.array(z.string().regex(ENTITY_ID, 'an entity id is ent_ and a number, like ent_14')).max(8).optional().describe(describe);
+const names = (describe: string) => z.array(z.string().trim().min(2).max(120)).max(8).optional().describe(describe);
 const date = (describe: string) =>
   z.string().regex(DATE_BOUND, 'an ISO date like 2026-08-01, or a datetime with offset').optional().describe(describe);
 
 const searchInput = z.object({
   query: z.string().min(2).max(500).describe('The words to find, a topic or a phrase, as the user put them.'),
-  channel: z
-    .array(z.string().regex(CHANNEL_ID, "a YouTube channel id is UC plus 22 characters, like a result's channel_id"))
-    .max(8)
-    .optional()
-    .describe('Up to 8 YouTube channel ids (UC plus 22 characters), like the channel_id of a result. Not channel names.'),
-  about: entityIds('Up to 8 entity ids (ent_ and a number) of a person, brand or company the passage is about, like an id from the about or speakers of a result. Not names; topic words go in query.'),
-  by: entityIds('Up to 8 person ids (ent_ and a number): only passages where that person says the words, like an id from the speakers of a result. Speaker labels cover part of the index.'),
+  channel: names('Up to 8 YouTube channels or shows: the name as the user wrote it, like TBPN, or a channel_id from a result (UC plus 22 characters).'),
+  about: names('Up to 8 people, brands or companies the passage is about: the name as the user wrote it, or an id from the about or speakers of a result (ent_ and a number). Topic words go in query.'),
+  by: names('Up to 8 people who say the words: the name as the user wrote it, or an id from the speakers of a result. Speaker labels cover part of the index.'),
   kind: z
     .array(z.enum(['sponsored', 'organic', 'mention']))
     .max(3)
@@ -109,6 +104,46 @@ function searchAnswer(body: z.output<typeof SearchBody>): Record<string, unknown
   });
 }
 
+const Pick = z.object({ id: z.string(), name: z.string(), youtube_channel_id: z.string().nullish() });
+const ResolveBody = z.object({
+  best: Pick.nullish(),
+  suggested: Pick.extend({ evidence: z.string().nullish() }).nullish(),
+  ask: z.object({ options: z.array(z.object({ id: z.string(), label: z.string() })) }).nullish(),
+});
+
+type Filter = 'channel' | 'about' | 'by';
+type Ids = { ok: true; ids: string[] | undefined } | { ok: false; result: ToolResult };
+
+/**
+ * The ids for one filter. An id passes through. A name is resolved once: the entity Arcmira is sure of, else the one
+ * it suggests, recorded in `named` with the evidence. A name with no single match stops the search and lists the options.
+ */
+async function idsFor(api: ApiClient, filter: Filter, values: string[] | undefined, named: Record<string, unknown>[], callId: string): Promise<Ids> {
+  if (!values?.length) return { ok: true, ids: undefined };
+  const channel = filter === 'channel';
+  const ids: string[] = [];
+  for (const value of values) {
+    if ((channel ? CHANNEL_ID : ENTITY_ID).test(value)) {
+      ids.push(value);
+      continue;
+    }
+    const answer = await api.get('/v1/entities/resolve', { q: value, type: channel ? 'channel' : undefined, limit: 5 });
+    if (!answer.ok) return { ok: false, result: errorResult(answer.error, { ...answer.body, call_id: callId }) };
+    const body = ResolveBody.safeParse(answer.body);
+    if (!body.success) return { ok: false, result: errorResult(unreadable(), { call_id: callId }) };
+    const pick = body.data.best ?? body.data.suggested;
+    const id = channel ? pick?.youtube_channel_id : pick?.id;
+    if (!pick || !id) {
+      const what = channel ? 'YouTube channel' : 'person, brand or company';
+      const error = localError('invalid_request_error', 'name_not_resolved', `${filter}: "${value}" matches no single ${what} in Arcmira. Pass one of the options' ids, or put the name in query.`);
+      return { ok: false, result: errorResult({ ...error, param: filter }, { call_id: callId, options: body.data.ask?.options.map(({ id, label }) => ({ id, label })) ?? [] }) };
+    }
+    ids.push(id);
+    named.push(defined({ filter, name: value, matched: pick.name, id, assumed: body.data.best ? undefined : body.data.suggested?.evidence || true }));
+  }
+  return { ok: true, ids };
+}
+
 function daysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 }
@@ -117,25 +152,33 @@ export const youtubeSearchTool: ToolSpec<typeof searchInput> = {
   name: 'arcmira_youtube_search',
   title: "Search what's said on YouTube",
   description:
-    "Searches what was said in YouTube videos, podcasts on YouTube included, and returns the matching passages: the lines, often with who said each one, and for each passage the video title, channel, publish date, the second it starts and a watch link that opens there. Use Arcmira when the user asks what someone said on YouTube or in a podcast, wants a quote with the moment it was said, or asks what YouTube is saying about a person, brand or topic. query takes the words as the user put them. channel, about and by narrow the search and take ids, not names: the channel_id of a result, or an id from its speakers or about. With neither after nor before it covers the last 90 days.",
+    "Searches what was said in YouTube videos, podcasts on YouTube included, and returns the matching passages: the lines, often with who said each one, and for each passage the video title, channel, publish date, the second it starts and a watch link that opens there. Use Arcmira when the user asks what someone said on YouTube or in a podcast, wants a quote with the moment it was said, or asks what YouTube is saying about a person, brand or topic. query takes the words as the user put them. channel, about and by narrow the search and take names as the user wrote them, or ids from a result; resolved says which entity each name matched, and assumed marks a best guess to tell the user about. With neither after nor before it covers the last 90 days.",
   annotations: READ_ONLY,
   inputSchema: searchInput,
   async run(input, { api, call }) {
+    const named: Record<string, unknown>[] = [];
+    const channel = await idsFor(api, 'channel', input.channel, named, call.id);
+    if (!channel.ok) return channel.result;
+    const about = await idsFor(api, 'about', input.about, named, call.id);
+    if (!about.ok) return about.result;
+    const by = await idsFor(api, 'by', input.by, named, call.id);
+    if (!by.ok) return by.result;
+    const resolved = named.length ? named : undefined;
     const answer = await api.get('/v1/search', {
       q: input.query,
-      channel_ids: input.channel,
-      about: input.about,
-      by: input.by,
+      channel_ids: channel.ids,
+      about: about.ids,
+      by: by.ids,
       kind: input.kind,
       after: input.after ?? (input.before === undefined ? daysAgo(DEFAULT_WINDOW_DAYS) : undefined),
       before: input.before,
       source: input.source,
       limit: input.limit,
     });
-    if (!answer.ok) return errorResult(answer.error, { ...answer.body, call_id: call.id });
+    if (!answer.ok) return errorResult(answer.error, defined({ ...answer.body, resolved, call_id: call.id }));
     const body = SearchBody.safeParse(answer.body);
     if (!body.success) return errorResult(unreadable(), { call_id: call.id });
-    const result = searchAnswer(body.data);
+    const result = defined({ ...searchAnswer(body.data), resolved });
     return okResult(body.data.chunks.length === 0 ? { ...result, call_id: call.id } : result);
   },
 };

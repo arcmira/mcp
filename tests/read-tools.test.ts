@@ -119,14 +119,54 @@ describe('arcmira_youtube_search', () => {
     assert.equal(bounded.requests[0]!.searchParams.get('after'), null, 'a window the caller bounds is sent as given');
   });
 
-  it('refuses a name where an id belongs before any search request', async () => {
-    for (const args of [{ query: 'agents', by: ['Jensen Huang'] }, { query: 'agents', channel: ['TBPN'] }, { query: 'agents', after: 'last week' }]) {
-      const api = upstream(() => Response.json(SEARCH_BODY));
-      const reply = await callTool('arcmira_youtube_search', args, api.handler);
-      assert.equal(reply.result.isError, true);
-      assert.match(textOf(reply), /Input validation error/);
-      assert.deepEqual(api.requests, [], JSON.stringify(args));
-    }
+  it('resolves names in channel, about and by, then searches with their ids and says what each name matched', async () => {
+    const resolve: Record<string, unknown> = {
+      'TBPN|channel': { best: { id: 'ent_5', name: 'TBPN', youtube_channel_id: TBPN }, suggested: null, ask: null },
+      'Ramp|': { best: null, suggested: { id: 'ent_14', name: 'Ramp', evidence: '10x the appearances of the next match' }, ask: null },
+      'Jensen Huang|': { best: { id: 'ent_7', name: 'Jensen Huang' }, suggested: null, ask: null },
+    };
+    const api = upstream((url) =>
+      url.pathname === '/v1/entities/resolve' ? Response.json(resolve[`${url.searchParams.get('q')}|${url.searchParams.get('type') ?? ''}`]) : Response.json(SEARCH_BODY),
+    );
+    const reply = await callTool('arcmira_youtube_search', { query: 'agents', channel: ['TBPN'], about: ['Ramp', 'ent_20'], by: ['Jensen Huang'], after: '2026-01-01' }, api.handler);
+    assert.equal(reply.result.isError, undefined, textOf(reply));
+    assert.deepEqual(
+      api.requests.map((url) => [url.pathname, Object.fromEntries(url.searchParams)]),
+      [
+        ['/v1/entities/resolve', { q: 'TBPN', type: 'channel', limit: '5', src: 'mcp-tool' }],
+        ['/v1/entities/resolve', { q: 'Ramp', limit: '5', src: 'mcp-tool' }],
+        ['/v1/entities/resolve', { q: 'Jensen Huang', limit: '5', src: 'mcp-tool' }],
+        ['/v1/search', { q: 'agents', channel_ids: TBPN, about: 'ent_14,ent_20', by: 'ent_7', after: '2026-01-01', src: 'mcp-tool' }],
+      ],
+    );
+    assert.deepEqual(JSON.parse(textOf(reply)).resolved, [
+      { filter: 'channel', name: 'TBPN', matched: 'TBPN', id: TBPN },
+      { filter: 'about', name: 'Ramp', matched: 'Ramp', id: 'ent_14', assumed: '10x the appearances of the next match' },
+      { filter: 'by', name: 'Jensen Huang', matched: 'Jensen Huang', id: 'ent_7' },
+    ]);
+  });
+
+  it('stops before searching when a name matches no single entity, and lists the options', async () => {
+    const options = [
+      { id: 'ent_31', name: 'Jordan', type: 'organization', label: 'Jordan, organization, 40 appearances' },
+      { id: 'ent_32', name: 'Michael Jordan', type: 'person', label: 'Michael Jordan, person, 900 appearances' },
+    ];
+    const api = upstream((url) => (url.pathname === '/v1/entities/resolve' ? Response.json({ best: null, suggested: null, ask: { question: 'Which Jordan?', options } }) : Response.json(SEARCH_BODY)));
+    const reply = await callTool('arcmira_youtube_search', { query: 'sneakers', about: ['Jordan'] }, api.handler);
+    assert.equal(reply.result.isError, true);
+    const body = reply.result.structuredContent as { error: Record<string, unknown>; options: unknown[] };
+    assert.equal(body.error.code, 'name_not_resolved');
+    assert.equal(body.error.param, 'about');
+    assert.deepEqual(body.options, options.map(({ id, label }) => ({ id, label })));
+    assert.deepEqual(api.requests.map((url) => url.pathname), ['/v1/entities/resolve'], 'no search runs on a guess');
+  });
+
+  it('refuses a date that is not a date before any request', async () => {
+    const api = upstream(() => Response.json(SEARCH_BODY));
+    const reply = await callTool('arcmira_youtube_search', { query: 'agents', after: 'last week' }, api.handler);
+    assert.equal(reply.result.isError, true);
+    assert.match(textOf(reply), /Input validation error/);
+    assert.deepEqual(api.requests, []);
   });
 
   it('surfaces freshness_requires_paid with its gate, unlock and limit as the API sent them', async () => {
