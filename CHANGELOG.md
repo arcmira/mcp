@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.12: the /mcp/apps caption note says there is no Premium transcript
+
+On `/mcp/apps`, when an account whose default transcript quality is Premium owns no Premium transcript of a video, the caption read's note now opens with "This account has no Premium transcript of this video, so these are the video's own captions." The API's own opening sentence, which says the same thing about the caption track, is dropped, and the rest of its note follows as sent. The note names no price, credits, quality argument or other tool. 0.10.11 had removed the sentence, and this brings back the fact in the order a reader needs it. `/mcp` is unchanged.
+
 ## 0.10.11: no tier named in the /mcp/apps caption note
 
 On `/mcp/apps`, a default-Premium account's caption read now keeps only the API's caption note, which says the transcript is the video's own caption track. 0.10.10 added "These are captions because this account has no Premium transcript of this video." there, and directory rules read a paid tier named in a tool answer as promotion. `/mcp` is unchanged.
