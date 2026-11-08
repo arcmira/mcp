@@ -230,7 +230,10 @@ test('the server instructions say what Arcmira is, then when to use it, and hono
   assert.match(trigger, /asks what a YouTube video or podcast said/);
   assert.match(trigger, /even if you think you know/);
   assert.match(trigger, /writes "use arcmira"\.$/);
-  assert.match(SERVER_INSTRUCTIONS, /Pass the user's words about it as context\./);
+  assert.match(SERVER_INSTRUCTIONS, /One video, read whole: arcmira_youtube_transcript\. A quote or topic across videos: arcmira_youtube_search\./);
+  assert.match(SERVER_INSTRUCTIONS, /arcmira_youtube_search takes a show, speaker or subject by name\. In a program, resolve a name/);
+  const { ID_RULE_CODE } = await import('../src/reference.ts');
+  assert.match(ID_RULE_CODE, /arcmira\.resolve\("[^"]+", \{ context: /, 'the reference keeps the hint to pass the user\'s words as context');
   assert.doesNotMatch(SERVER_INSTRUCTIONS, /before (you )?brows/i);
 });
 
