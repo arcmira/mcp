@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.11: no tier named in the /mcp/apps caption note
+
+On `/mcp/apps`, a default-Premium account's caption read now keeps only the API's caption note, which says the transcript is the video's own caption track. 0.10.10 added "These are captions because this account has no Premium transcript of this video." there, and directory rules read a paid tier named in a tool answer as promotion. `/mcp` is unchanged.
+
 ## 0.10.10: transcript notes without a quality argument
 
 `arcmira_youtube_transcript` no longer passes on advice to use an argument it doesn't take.
