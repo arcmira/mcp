@@ -8,7 +8,7 @@
  * a write from the read tool). With no key the transport must answer 401 with the OAuth
  * challenge, and the script stops there. Prints one line per call and never prints the key. Exit 1
  * when any call is not what the manifest promises. Most probes make one or two API reads. The
- * budget probe makes 40. The purchase probes read a free quote with arcmira.quote, then send a raw
+ * budget probe makes 40. The purchase probes read a free price with arcmira.price, then send a raw
  * POST /v1/transcriptions from the read sandbox, which the outbound refuses before any request (a
  * Premium purchase happens only inside the transcript GET). The key's usage is read before and after
  * each to show neither spent anything. The write tool only lists monitors; the smoke never changes
@@ -139,7 +139,7 @@ async function spend(): Promise<string> {
 const beforeQuote = await spend();
 const quote = await client.callTool({
   name: 'arcmira_execute_read',
-  arguments: { code: `const q = await arcmira.quote("${UNOWNED_VIDEO}"); return { owned: q.owned, eligible: q.eligible, rows: q.quote.rows, charge: q.charge };` },
+  arguments: { code: `const q = await arcmira.price("${UNOWNED_VIDEO}"); return { owned: q.owned, eligible: q.eligible, rows: q.quote.rows, charge: q.charge };` },
 });
 const quoteText = textOf(quote);
 const quoted = quote.isError === true ? null : (JSON.parse(quoteText) as { value: { owned: boolean; rows: number } }).value;

@@ -318,8 +318,12 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
         limit,
       });
     },
-    async quote(video) {
+    async price(video) {
       return get(`/v1/transcripts/${videoIdOf(video)}/quote`);
+    },
+    /** The old name of price, until the next release. */
+    async quote(video) {
+      return arcmira.price(video);
     },
     async prepare() {
       throw new ArcmiraError(RETIRED_PREMIUM, 'method_retired');

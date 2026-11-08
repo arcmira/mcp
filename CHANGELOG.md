@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The price check in code mode is now `arcmira.price(video)`: the credits a Premium read of the whole video would use, and how much would come from the on-demand budget. It uses no credits. Everywhere else in Arcmira, "quote" means a spoken quote, and agents mixed the two up. `arcmira.quote(video)` still works as the old name until the release after this one. The reference, both skills and the README name only `price`. The API route and its `quote` field keep their names.
+
 ## 0.10.12: the /mcp/apps caption note says there is no Premium transcript
 
 On `/mcp/apps`, when an account whose default transcript quality is Premium owns no Premium transcript of a video, the caption read's note now opens with "This account has no Premium transcript of this video, so these are the video's own captions." The API's own opening sentence, which says the same thing about the caption track, is dropped, and the rest of its note follows as sent. The note names no price, credits, quality argument or other tool. 0.10.11 had removed the sentence, and this brings back the fact in the order a reader needs it. `/mcp` is unchanged.

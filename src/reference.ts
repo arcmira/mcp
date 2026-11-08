@@ -23,7 +23,7 @@ export const LINKS = {
  * the limit and the API enforces it. Stated as facts, never as instructions on what to ask or say
  * (Anthropic directory review, 2026-10-11); SCRIPTED_SPEND fails the build on the old wording.
  */
-export const BUDGET_RULE = `USAGE. Metered reads use credits from the account's plan, then the on-demand budget set in the dashboard. Arcmira enforces that budget, and no tool takes a spending amount. A search uses 4 credits per passage it returns past the first 5. A Premium read that starts a transcription reports charge { unit, amount, from: included | on_demand | mixed }; arcmira.quote(video) returns that price beforehand (a price, not a spoken quote) and uses no credits. A read the plan or budget blocks throws ArcmiraError with code paid_plan_required, quota_exceeded, spend_limit_exceeded, member_limit, fair_use_cap or on_demand_paused, a message naming the limit, its figures in limit when reported, and unlock { tier, url } when a plan or setting change lifts it. An account admin changes member_limit, fair_use_cap and on_demand_paused.`;
+export const BUDGET_RULE = `USAGE. Metered reads use credits from the account's plan, then the on-demand budget set in the dashboard. Arcmira enforces that budget, and no tool takes a spending amount. A search uses 4 credits per passage it returns past the first 5. A Premium read that starts a transcription reports charge { unit, amount, from: included | on_demand | mixed }; arcmira.price(video) returns that price beforehand and uses no credits. A read the plan or budget blocks throws ArcmiraError with code paid_plan_required, quota_exceeded, spend_limit_exceeded, member_limit, fair_use_cap or on_demand_paused, a message naming the limit, its figures in limit when reported, and unlock { tier, url } when a plan or setting change lifts it. An account admin changes member_limit, fair_use_cap and on_demand_paused.`;
 
 /** The usage rule as the server instructions state it, inside their size cap. describe and the arcmira skill carry BUDGET_RULE whole. */
 export const BUDGET_SUMMARY = "USAGE. Metered reads use credits from the account's plan, then the on-demand budget set in the dashboard, which Arcmira enforces; no tool takes a spending amount. A read the plan or budget blocks throws ArcmiraError with a code, a message naming the limit and unlock { tier, url } when a plan or setting change lifts it; arcmira_describe has the codes and prices.";
@@ -134,10 +134,10 @@ export const METHODS: readonly MethodDoc[] = [
     ],
   },
   {
-    name: 'quote',
-    signature: 'arcmira.quote(videoIdOrUrl)',
+    name: 'price',
+    signature: 'arcmira.price(videoIdOrUrl)',
     returns: '{ video_id, duration_seconds, owned, eligible, quote{quarters, rows}, charge{unit, amount, from: included | on_demand | mixed}, max_on_demand_cents }',
-    notes: ['A price check, not a spoken quote: the credits a Premium read of the whole video would use, and how much of it would come from the on-demand budget. It uses no credits and starts nothing.'],
+    notes: ['The credits a Premium read of the whole video would use, and how much of it would come from the on-demand budget. The API calls this price the quote. It uses no credits and starts nothing. arcmira.quote(video) is the old name and still works until the next release.'],
   },
   {
     name: 'status',

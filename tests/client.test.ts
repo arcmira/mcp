@@ -85,7 +85,7 @@ describe('the sandbox client', () => {
     await arcmira.occurrences({ videoIds: ['dQw4w9WgXcQ'], types: ['organization', 'product'], before: '2026-08-31' });
     await arcmira.status({ channelId: TBPN });
     await arcmira.status();
-    await arcmira.quote('dQw4w9WgXcQ');
+    await arcmira.price('dQw4w9WgXcQ');
     const seen = urls.map((u) => `${u.pathname}?${u.searchParams}`);
     assert.deepEqual(seen, [
       '/v1/entities/resolve?q=Ramp&type=organization&limit=8',
@@ -105,6 +105,18 @@ describe('the sandbox client', () => {
       '/v1/transcripts/dQw4w9WgXcQ/quote?',
     ]);
     assert.equal(meter.calls, 15);
+  });
+
+  it('price reads the Premium price of a video, and quote, its old name, reads the same route', async () => {
+    const paths: string[] = [];
+    const fetch = async (input: string) => {
+      paths.push(new URL(input).pathname);
+      return Response.json({ video_id: 'dQw4w9WgXcQ', owned: false });
+    };
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch }) as unknown as { arcmira: Record<'price' | 'quote', (video: string) => Promise<{ video_id: string }>> };
+    assert.equal((await arcmira.price('https://youtu.be/dQw4w9WgXcQ')).video_id, 'dQw4w9WgXcQ');
+    assert.equal((await arcmira.quote('dQw4w9WgXcQ')).video_id, 'dQw4w9WgXcQ');
+    assert.deepEqual(paths, ['/v1/transcripts/dQw4w9WgXcQ/quote', '/v1/transcripts/dQw4w9WgXcQ/quote']);
   });
 
   it('monitor methods: reads in either access, writes only with access write, each write a JSON body with its own Idempotency-Key', async () => {
