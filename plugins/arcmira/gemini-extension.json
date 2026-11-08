@@ -1,6 +1,6 @@
 {
   "name": "arcmira",
-  "version": "0.10.12",
+  "version": "0.10.13",
   "description": "YouTube transcript search and monitoring for your AI: exact quotes, full transcripts and speakers.",
   "mcpServers": {
     "arcmira": {

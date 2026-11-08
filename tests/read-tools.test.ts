@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.ts';
 import { OUTPUT_BUDGET } from '../src/output.ts';
+import { youtubeSearchTool } from '../src/read-tools.ts';
 import { callTool, listTools, textOf, withFetch, type ToolReply } from './handler.ts';
 
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
@@ -61,10 +62,11 @@ const SEARCH_BODY = {
 };
 
 describe('arcmira_youtube_search', () => {
-  it('is listed read-only, idempotent and open-world, with a title and no upfront load', async () => {
+  it('is listed read-only, idempotent and open-world, with a title, and loads upfront in Claude Code', async () => {
     const tool = (await listTools()).find((t) => t.name === 'arcmira_youtube_search');
     assert.deepEqual(tool?.annotations, { title: "Search what's said on YouTube", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true });
-    assert.equal(tool?._meta, undefined);
+    assert.deepEqual(tool?._meta, { 'anthropic/alwaysLoad': true });
+    assert.match(youtubeSearchTool.description, /who sponsors a channel, or which creators recommend a product\./);
   });
 
   it('sends each argument as the /v1/search parameter it names, and returns each passage as lines with its second and link', async () => {

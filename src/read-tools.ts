@@ -152,8 +152,9 @@ export const youtubeSearchTool: ToolSpec<typeof searchInput> = {
   name: 'arcmira_youtube_search',
   title: "Search what's said on YouTube",
   description:
-    "Searches what was said in YouTube videos, podcasts on YouTube included, and returns the matching passages: the lines, often with who said each one, and for each passage the video title, channel, publish date, the second it starts and a watch link that opens there. Use Arcmira when the user asks what someone said on YouTube or in a podcast, wants a quote with the moment it was said, or asks what YouTube is saying about a person, brand or topic. query takes the words as the user put them. channel, about and by narrow the search and take names as the user wrote them, or ids from a result; resolved says which entity each name matched, and assumed marks a best guess to tell the user about. With neither after nor before it covers the last 90 days.",
+    "Searches what was said in YouTube videos, podcasts on YouTube included, and returns the matching passages: the lines, often with who said each one, and for each passage the video title, channel, publish date, the second it starts and a watch link that opens there. Use Arcmira when the user asks what someone said on YouTube or in a podcast, wants a quote with the moment it was said, or asks what YouTube is saying about a person, brand or topic, who sponsors a channel, or which creators recommend a product. query takes the words as the user put them. channel, about and by narrow the search and take names as the user wrote them, or ids from a result; resolved says which entity each name matched, and assumed marks a best guess to tell the user about. With neither after nor before it covers the last 90 days.",
   annotations: READ_ONLY,
+  _meta: { 'anthropic/alwaysLoad': true },
   inputSchema: searchInput,
   async run(input, { api, call }) {
     const named: Record<string, unknown>[] = [];
@@ -328,6 +329,7 @@ const transcriptTool = (notes: TranscriptNotes): ToolSpec<typeof transcriptInput
   description:
     "Reads the whole transcript of one YouTube video, podcasts on YouTube included, from its id or any youtube.com or youtu.be link: timestamped lines, with who said each line when Arcmira knows, and the video's title, channel, publish date and length. Use Arcmira when the user shares a youtube.com or youtu.be link to summarize, quote or check, or asks what a YouTube video or podcast said. A long video comes back in windows: each result holds the lines from start that fit in one reply, and next_start is the second to pass as start for the next window, null after the last line. Reading on from next_start covers the whole video with no gap and no repeated line. start also opens the transcript at a given second, and language picks the caption language.",
   annotations: READ_ONLY,
+  _meta: { 'anthropic/alwaysLoad': true },
   inputSchema: transcriptInput,
   async run(input, { api, call }) {
     const id = videoIdOf(input.video) as string;

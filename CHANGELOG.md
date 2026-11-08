@@ -1,7 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.10.13: the plain tools in Claude Code's first view, and arcmira.price
 
+A blind tool-choice test on 0.10.11 found that in Claude Code's default view the two plain tools almost never got picked: 0 to 2 of 24 per run. Only `arcmira_execute_read` loaded upfront, and the server instructions sent one-video reads to it. With every description visible, the plain tools took 82% to 85% of picks. This release makes that the default.
+
+- `arcmira_youtube_search` and `arcmira_youtube_transcript` carry `_meta: { "anthropic/alwaysLoad": true }` in tools/list and the server card, beside `arcmira_execute_read`. Claude Code shows all three in full before any tool search.
+- The server instructions route by task. "One video, read whole: arcmira_youtube_transcript. A quote or topic across videos: arcmira_youtube_search." replaces "One video: arcmira_execute_read with return await arcmira.transcript(url, { start, end }) needs no reference." In a pilot of that sentence, pasted-link reads went to `arcmira_youtube_transcript` 54 of 54 times, up from 3. Both whole-transcript misses, which blamed the program tool's 12,000-character cap, went away.
+- The name sentence now says "arcmira_youtube_search takes a show, speaker or subject by name. In a program, resolve a name with arcmira.resolve when it becomes a filter; filters there take ids only." In a pilot of both sentences, cross-video asks went to `arcmira_youtube_search` 30 of 45 times for Sonnet, up from 2, and 32 of 45 for Haiku. Every request and control still scored right. The hint to pass the user's words as context stays in the describe reference's ID rule. The instructions are 1,980 of 2,000 characters.
+- The `arcmira_youtube_search` description adds "who sponsors a channel, or which creators recommend a product". `/mcp/apps` has no server instructions, and a sponsor question there once went to web search.
 - The price check in code mode is now `arcmira.price(video)`: the credits a Premium read of the whole video would use, and how much would come from the on-demand budget. It uses no credits. Everywhere else in Arcmira, "quote" means a spoken quote, and agents mixed the two up. `arcmira.quote(video)` still works as the old name until the release after this one. The reference, both skills and the README name only `price`. The API route and its `quote` field keep their names.
 
 ## 0.10.12: the /mcp/apps caption note says there is no Premium transcript

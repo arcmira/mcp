@@ -23,7 +23,7 @@ describe('withRateLimit', () => {
 });
 
 describe('the six tools through the handler', () => {
-  it('tools/list marks arcmira_execute_read, and no other tool, to load upfront in Claude Code', async () => {
+  it('tools/list marks arcmira_execute_read and the two plain read tools, and no other tool, to load upfront in Claude Code', async () => {
     const tools = await listTools();
     assert.deepEqual(
       Object.fromEntries(tools.map((t) => [t.name, t._meta ?? null])),
@@ -31,8 +31,8 @@ describe('the six tools through the handler', () => {
         arcmira_describe: null,
         arcmira_execute_read: { 'anthropic/alwaysLoad': true },
         arcmira_execute_write: null,
-        arcmira_youtube_search: null,
-        arcmira_youtube_transcript: null,
+        arcmira_youtube_search: { 'anthropic/alwaysLoad': true },
+        arcmira_youtube_transcript: { 'anthropic/alwaysLoad': true },
         arcmira_feedback: null,
       },
     );

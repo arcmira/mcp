@@ -52,7 +52,7 @@ describe('the server card', () => {
       assert.ok(tool.title.length > 0, `${tool.name} has no title`);
       assert.equal(tool.inputSchema.type, 'object');
       assert.equal(tool.annotations.readOnlyHint, ['arcmira_describe', 'arcmira_youtube_search', 'arcmira_youtube_transcript'].includes(tool.name));
-      assert.deepEqual(tool._meta ?? null, tool.name === 'arcmira_execute_read' ? { 'anthropic/alwaysLoad': true } : null, `${tool.name} _meta matches tools/list`);
+      assert.deepEqual(tool._meta ?? null, ['arcmira_execute_read', 'arcmira_youtube_search', 'arcmira_youtube_transcript'].includes(tool.name) ? { 'anthropic/alwaysLoad': true } : null, `${tool.name} _meta matches tools/list`);
     }
     assert.deepEqual(
       card.tools.map((tool) => tool.name),
