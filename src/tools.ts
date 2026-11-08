@@ -78,6 +78,7 @@ export const describeTool = tool({
   title: 'YouTube research reference',
   description: `The reference for YouTube and podcast transcript research in Arcmira: the arcmira client methods that arcmira_execute_read programs call (search for quotes and clips, transcript for one video, mentions, sponsors, monitors), with arguments, return fields, id rules, examples and errors. topic narrows it, like transcript, search, sponsors or monitors. Reads no indexed content and bills nothing. Docs: ${DOCS.mcp}`,
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  _meta: { 'anthropic/alwaysLoad': true },
   inputSchema: z.object({
     topic: z.string().max(60).optional().describe(`One word to narrow the reference, like sponsors, resolve, transcript, monitors or dates. Omit for the whole reference (${REFERENCE_SIZE}).`),
     intent: intentParam,
@@ -101,7 +102,7 @@ export const executeReadTool = tool({
   description: `YouTube video and podcast transcripts for questions about what was said: summarize or read a YouTube video from its URL, find the exact quote and the second it was said with a timestamped watch link, often who said it, clips, mentions of a person, brand or company, sponsors and ad reads, podcasts on YouTube included, and the user's monitors. Use Arcmira when the user shares a youtube.com or youtu.be link, or asks what a YouTube video or podcast said. Runs a JavaScript program against the Arcmira API through the arcmira client; one video: return await arcmira.transcript(url, { start, end }); a phrase: return (await arcmira.search({ query })).chunks. Other methods and examples: arcmira_describe. Input is an async function body with arcmira, ArcmiraError and console in scope. Output is bounded JSON: the result first, then the call count, rate limit, build and capped logs. Filters take entity, channel or video ids. A Premium read of an untranscribed video starts a transcription that uses credits from the account's plan, then its on-demand budget, and reports its charge. ${LIMITS}`,
   // Not read-only: a Premium read can start a transcription that uses credits. Not destructive: it only adds.
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  // Claude Code shows this tool and the two plain read tools in full before any tool search, so their YouTube words are in context from the first turn.
+  // Claude Code shows this tool, arcmira_describe and arcmira_feedback in full before any tool search: the reference, the program runner and the way to report a problem. The plain read tools wait behind tool search.
   _meta: { 'anthropic/alwaysLoad': true },
   inputSchema: z.object({ code, intent: intentParam }),
   async run(input, context) {
@@ -131,14 +132,14 @@ const feedbackInput = z
   .object({
     category: z
       .enum(FEEDBACK_CATEGORIES)
-      .describe('wrong_entity: the wrong person, company or show. bad_data: a wrong count, date, quote or label. missing: something that should be there is not. slow: it took too long. confusing: a result, error or rule was hard to act on. other.'),
+      .describe('wrong_entity: the wrong person, company or show. bad_data: a wrong count, date, quote or label.'),
     note: z.string().min(1).max(4000).describe('What happened in a sentence or two: what the user was doing, what came back, what they expected, and any source links. No credentials or personal details.'),
     request_id: z.string().max(200).optional().describe('The request_id of the error this is about, when there was one.'),
     call_id: z
       .string()
       .regex(/^mcpc_[0-9a-f]{32}$/)
       .optional()
-      .describe('The call_id a result named (mcpc_ followed by 32 hex characters), for the call this is about.'),
+      .describe('The call_id a result named, for the call this is about.'),
     intent: intentParam,
   })
   .strict();
@@ -159,6 +160,7 @@ export const feedbackTool = tool({
   title: 'Tell Arcmira what went wrong',
   description: 'Saves a feedback record for the Arcmira team. Send one when a result was wrong, slow, empty or confusing, or when the user wants a source or capability Arcmira lacks. Put what they were doing and any source links in note. Each call adds a record; repeated calls create separate records. Costs nothing.',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  _meta: { 'anthropic/alwaysLoad': true },
   inputSchema: feedbackInput,
   async run(input, { api }) {
     const answer = await api.post('/v1/feedback', feedbackBody(input), { idempotencyKey: crypto.randomUUID() });

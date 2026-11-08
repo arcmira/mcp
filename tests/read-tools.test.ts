@@ -62,10 +62,10 @@ const SEARCH_BODY = {
 };
 
 describe('arcmira_youtube_search', () => {
-  it('is listed read-only, idempotent and open-world, with a title, and loads upfront in Claude Code', async () => {
+  it('is listed read-only, idempotent and open-world, with a title, and waits behind tool search in Claude Code', async () => {
     const tool = (await listTools()).find((t) => t.name === 'arcmira_youtube_search');
     assert.deepEqual(tool?.annotations, { title: "Search what's said on YouTube", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true });
-    assert.deepEqual(tool?._meta, { 'anthropic/alwaysLoad': true });
+    assert.equal(tool?._meta, undefined);
     assert.match(youtubeSearchTool.description, /who sponsors a channel, or which creators recommend a product\./);
   });
 
