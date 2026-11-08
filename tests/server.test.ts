@@ -2,83 +2,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import openapi from './fixtures/openapi.json' with { type: 'json' };
 import responses from './fixtures/transcription-responses.json' with { type: 'json' };
-import worker from '../src/index.ts';
-import { outboundAllowed, type Access } from '../src/sandbox.ts';
 import pkg from '../package.json' with { type: 'json' };
 import { BUILD_META, RATE_LIMIT_META, okResult, withRateLimit } from '../src/result.ts';
 import { METHODS } from '../src/reference.ts';
 import { fakeLoader } from './fake-loader.ts';
-import { TOOL_CALLS_PATH } from '../src/telemetry.ts';
+import { callTool, listTools, textOf } from './handler.ts';
 
 const RATE_LIMIT = { limit: 20, remaining: 17, reset: 1788819360 };
-
-function withFetch<T>(handler: (url: URL, init?: RequestInit) => Response, body: () => Promise<T>): Promise<T> {
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
-    handler(new URL(input instanceof Request ? input.url : String(input)), init)) as typeof fetch;
-  return body().finally(() => {
-    globalThis.fetch = original;
-  });
-}
-
-interface ToolReply {
-  result: { content: Array<{ type: string; text: string }>; structuredContent?: unknown; isError?: boolean; _meta?: Record<string, unknown> };
-}
-
-/** One tools/call through the Worker's fetch, the way a host sends it. The reply is one SSE message. */
-async function callTool(
-  name: string,
-  args: Record<string, unknown>,
-  upstream: (url: URL, init?: RequestInit) => Response,
-  env: Record<string, unknown> = {},
-) {
-  const request = new Request('https://mcp.arcmira.com/mcp', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json, text/event-stream',
-      authorization: 'Bearer arc_sk_fixture',
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: { name, arguments: args },
-    }),
-  });
-  const deferred: Promise<unknown>[] = [];
-  /**
-   * The outbound for the access the tool asked for, applying the Worker's allowlist (tests/outbound.test.ts
-   * covers ApiOutbound itself). In node the sandbox shares the parent's global fetch, so the real
-   * outbound's upstream call would be metered as a second program call.
-   */
-  const outboundFor = ({ props }: { props: { access?: Access } }) => ({
-    async fetch(request: Request) {
-      const url = new URL(request.url);
-      if (!outboundAllowed(props.access ?? 'read', request.method, url.pathname))
-        return Response.json({ error: { type: 'invalid_request_error', code: 'outbound_refused', message: 'refused' } }, { status: 403 });
-      return upstream(url, { method: request.method, headers: request.headers, body: request.method === 'GET' ? undefined : await request.text() });
-    },
-  });
-  const ctx = {
-    waitUntil: (p: Promise<unknown>) => deferred.push(p),
-    passThroughOnException() {},
-    props: {},
-    exports: { ApiOutbound: outboundFor },
-  } as unknown as ExecutionContext;
-  // Tool-call telemetry posts land here, never on the network or the test's upstream.
-  const handler = (url: URL, init?: RequestInit) => (url.pathname === TOOL_CALLS_PATH ? new Response(null, { status: 202 }) : upstream(url, init));
-  const text = await withFetch(handler, async () => {
-    const response = await worker.fetch(request, env, ctx);
-    const body = await response.text();
-    await Promise.all(deferred);
-    return body;
-  });
-  const data = text.split('\n').find((line) => line.startsWith('data:'));
-  return JSON.parse(data ? data.slice(5) : text) as ToolReply;
-}
-
-const textOf = (reply: ToolReply) => reply.result.content.map((c) => c.text).join('\n');
 
 describe('withRateLimit', () => {
   it('adds the budget under the namespaced _meta key and leaves a result alone without one', () => {
@@ -92,27 +22,7 @@ describe('withRateLimit', () => {
   });
 });
 
-interface ListedTool {
-  name: string;
-  annotations: Record<string, unknown>;
-  inputSchema: { properties: Record<string, unknown> };
-  _meta?: Record<string, unknown>;
-}
-
-/** One tools/list through the Worker's fetch, the way a host sends it. */
-async function listTools(): Promise<ListedTool[]> {
-  const request = new Request('https://mcp.arcmira.com/mcp', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer arc_sk_fixture' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
-  });
-  const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
-  const text = await withFetch(() => Response.json({ id: 'caller' }), async () => (await worker.fetch(request, {}, ctx)).text());
-  const data = text.split('\n').find((line) => line.startsWith('data:'));
-  return (JSON.parse(data ? data.slice(5) : text) as { result: { tools: ListedTool[] } }).result.tools;
-}
-
-describe('the four tools through the handler', () => {
+describe('the six tools through the handler', () => {
   it('tools/list marks arcmira_execute_read, and no other tool, to load upfront in Claude Code', async () => {
     const tools = await listTools();
     assert.deepEqual(
@@ -121,12 +31,14 @@ describe('the four tools through the handler', () => {
         arcmira_describe: null,
         arcmira_execute_read: { 'anthropic/alwaysLoad': true },
         arcmira_execute_write: null,
+        arcmira_youtube_search: null,
+        arcmira_youtube_transcript: null,
         arcmira_feedback: null,
       },
     );
   });
 
-  it('tools/list distinguishes reference lookup, paid programs and persisted feedback', async () => {
+  it('tools/list distinguishes reference lookup, paid programs, plain reads and persisted feedback', async () => {
     const tools = await listTools();
     assert.deepEqual(
       Object.fromEntries(tools.map((t) => [t.name, [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.idempotentHint, t.annotations.openWorldHint]])),
@@ -134,6 +46,8 @@ describe('the four tools through the handler', () => {
         arcmira_describe: [true, false, true, false],
         arcmira_execute_read: [false, false, false, true],
         arcmira_execute_write: [false, true, false, true],
+        arcmira_youtube_search: [true, false, true, true],
+        arcmira_youtube_transcript: [true, false, true, true],
         arcmira_feedback: [false, false, false, false],
       },
     );

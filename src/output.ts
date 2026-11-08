@@ -2,7 +2,7 @@ import type { Execution } from "./sandbox.ts";
 
 export const RESULT_CAP = 20_000;
 export const LOG_CAP = 4_000;
-const OUTPUT_BUDGET = 12_000;
+export const OUTPUT_BUDGET = 12_000;
 const STRING_CAP = 3_000;
 const ARRAY_CAP = 100;
 const CUT_LIMIT = 5;

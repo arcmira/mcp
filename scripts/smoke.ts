@@ -18,6 +18,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import pkg from '../package.json' with { type: 'json' };
 import { METHODS } from '../src/reference.ts';
+import { TOOLS } from '../src/tools.ts';
 
 const url = new URL(process.argv[2] ?? 'https://mcp.arcmira.com/mcp');
 const key = process.env.ARCMIRA_KEY ?? '';
@@ -83,17 +84,17 @@ let failed = false;
 const tools = await client.listTools();
 const names = tools.tools.map((tool) => tool.name).sort();
 console.log(`tools/list: ${names.join(', ')}`);
-if (names.join(',') !== 'arcmira_describe,arcmira_execute_read,arcmira_execute_write,arcmira_feedback') {
+const expected = TOOLS.map((tool) => tool.name).sort();
+if (names.join(',') !== expected.join(',')) {
   failed = true;
-  console.log('  expected arcmira_describe, arcmira_execute_read, arcmira_execute_write and arcmira_feedback');
+  console.log(`  expected ${expected.join(', ')}`);
 }
 for (const tool of tools.tools) {
   const hints = tool.annotations ?? {};
-  const referenceOnly = tool.name === 'arcmira_describe';
-  const executesProgram = tool.name === 'arcmira_execute_read' || tool.name === 'arcmira_execute_write';
-  if (!(hints.readOnlyHint === referenceOnly && hints.destructiveHint === (tool.name === 'arcmira_execute_write') && hints.idempotentHint === referenceOnly && hints.openWorldHint === executesProgram)) {
+  const spec = TOOLS.find((t) => t.name === tool.name)?.annotations;
+  if (spec === undefined || (['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const).some((hint) => hints[hint] !== spec[hint])) {
     failed = true;
-    console.log(`  ${tool.name}: hints wrong ${JSON.stringify(hints)}`);
+    console.log(`  ${tool.name}: hints ${JSON.stringify(hints)}, expected ${JSON.stringify(spec ?? null)}`);
   }
 }
 const instructions = client.getInstructions() ?? '';

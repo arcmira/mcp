@@ -64,12 +64,12 @@ export function okResult(body: Record<string, unknown>): ToolResult {
 }
 
 /**
- * A transcript: the rendered lines, then the rest of the body as JSON, both as text and no
+ * A transcript window: the metadata as JSON, then the rendered lines, both as text and no
  * structuredContent. Claude Code hands the model structuredContent in place of the content blocks
  * when a result carries both, so any structured copy without the lines hides the transcript.
  */
-export function transcriptResult(text: string, metadata: Record<string, unknown>): ToolResult {
-  return { content: [{ type: 'text', text }, { type: 'text', text: JSON.stringify(metadata) }] };
+export function transcriptResult(metadata: Record<string, unknown>, lines: string): ToolResult {
+  return { content: [{ type: 'text', text: JSON.stringify(metadata) }, ...(lines ? [{ type: 'text' as const, text: lines }] : [])] };
 }
 
 /**

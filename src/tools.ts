@@ -8,8 +8,16 @@ import { errorResult, okResult, textResult, type ToolResult } from './result.ts'
 import { renderExecution, runProgram, type Access, type Execution, type SandboxHost } from './sandbox.ts';
 import { OUTPUT_LIMITS } from './output.ts';
 import { intentParam } from './telemetry.ts';
+import { youtubeSearchTool, youtubeTranscriptTool } from './read-tools.ts';
 
-export const TOOL_NAMES = ['arcmira_describe', 'arcmira_execute_read', 'arcmira_execute_write', 'arcmira_feedback'] as const;
+export const TOOL_NAMES = [
+  'arcmira_describe',
+  'arcmira_execute_read',
+  'arcmira_execute_write',
+  'arcmira_youtube_search',
+  'arcmira_youtube_transcript',
+  'arcmira_feedback',
+] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
 /** Every retired tool name and what replaced it. A call to one answers tool_retired naming the replacement. */
@@ -159,7 +167,7 @@ export const feedbackTool = tool({
   },
 });
 
-export const TOOLS: readonly AnyToolSpec[] = [describeTool, executeReadTool, executeWriteTool, feedbackTool];
+export const TOOLS: readonly AnyToolSpec[] = [describeTool, executeReadTool, executeWriteTool, youtubeSearchTool, youtubeTranscriptTool, feedbackTool];
 
 async function execute(source: string, access: Access, { sandbox, call }: ToolContext): Promise<ToolResult> {
   if (sandbox === null) return errorResult(sandboxUnavailable());
@@ -201,7 +209,7 @@ export function retiredToolResult(name: string): ToolResult {
   return errorResult({
     type: 'invalid_request_error',
     code: 'tool_retired',
-    message: `${name} was retired. Use ${RETIRED_TOOLS[name] ?? 'arcmira_describe, then arcmira_execute_read'}. The tools are arcmira_describe, arcmira_execute_read, arcmira_execute_write and arcmira_feedback; refresh the tool list to see them.`,
+    message: `${name} was retired. Use ${RETIRED_TOOLS[name] ?? 'arcmira_describe, then arcmira_execute_read'}. The tools are ${TOOL_NAMES.slice(0, -1).join(', ')} and ${TOOL_NAMES.at(-1)}; refresh the tool list to see them.`,
     doc_url: DOCS.mcp,
     request_id: `mcp_${crypto.randomUUID()}`,
   });

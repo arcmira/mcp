@@ -16,7 +16,8 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "allowJs": true
   },
   "include": [
     "src/**/*.ts",

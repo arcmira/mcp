@@ -18,9 +18,10 @@ try {
  const discoveryText=await discovery.text();
  const discoveryEvent=discoveryText.split('\n').find(line=>line.startsWith('data: '));
  const listed=JSON.parse(discoveryEvent?discoveryEvent.slice(6):discoveryText).result.tools;
- assert.deepEqual(listed.map(tool=>tool.name).sort(),['arcmira_describe','arcmira_execute_read','arcmira_execute_write','arcmira_feedback']);
- for(const tool of listed){const referenceOnly=tool.name==='arcmira_describe';const executesProgram=tool.name==='arcmira_execute_read'||tool.name==='arcmira_execute_write';assert.equal(tool.annotations.readOnlyHint,referenceOnly);assert.equal(tool.annotations.destructiveHint,tool.name==='arcmira_execute_write');assert.equal(tool.annotations.idempotentHint,referenceOnly);assert.equal(tool.annotations.openWorldHint,executesProgram);}
- console.log('four-tool discovery and annotations passed');
+ const hints={arcmira_describe:[true,false,true,false],arcmira_execute_read:[false,false,false,true],arcmira_execute_write:[false,true,false,true],arcmira_youtube_search:[true,false,true,true],arcmira_youtube_transcript:[true,false,true,true],arcmira_feedback:[false,false,false,false]};
+ assert.deepEqual(listed.map(tool=>tool.name).sort(),Object.keys(hints).sort());
+ for(const tool of listed){const a=tool.annotations;assert.deepEqual([a.readOnlyHint,a.destructiveHint,a.idempotentHint,a.openWorldHint],hints[tool.name],tool.name);}
+ console.log('six-tool discovery and annotations passed');
  let result=await run('return await arcmira.status({});');assert.equal(result.calls,1);assert.equal(result.ok,true);
  result=await run('for(let i=0;i<40;i++) await fetch("http://127.0.0.1:18791/v1/me"); return "forty";');assert.equal(result.calls,40);assert.equal(result.ok,true);
  result=await run('return await Promise.all(Array.from({length:41},()=>unmetered("http://127.0.0.1:18791/v1/me"))); }; const unmetered=globalThis.fetch.bind(globalThis); const unused=()=>{');assert.equal(result.calls_started,40);assert.equal(result.ok,false);if(result.in_flight) { assert.equal(result.calls,null);assert.equal(result.outcome_uncertain,true); }
