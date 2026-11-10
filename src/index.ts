@@ -196,7 +196,8 @@ export default {
         );
       }
       if (failure !== null) return challenge(url.origin, failure, surface.path);
-      const retired = await retiredCall(request);
+      // The retired names were /mcp tools; /mcp/apps never served them.
+      const retired = surface.path === MCP_PATH ? await retiredCall(request) : null;
       if (retired !== null) return retired;
       const api = createApiClient(env, key);
       const client = request.headers.get(CLIENT_HEADER);

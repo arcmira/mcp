@@ -95,10 +95,16 @@ function searchAnswer(body: z.output<typeof SearchBody>, surface: Surface): Reco
         about: refs(chunk.about),
       }),
     ),
-    window,
-    as_of,
-    search_index: search_index?.state === 'live' ? undefined : search_index,
-    ...surface.searchNotes({ note, freshness, unlock, access, window, matched: chunks.length > 0 }),
+    ...surface.searchMeta({
+      window,
+      as_of,
+      note,
+      search_index: search_index?.state === 'live' ? undefined : search_index,
+      freshness,
+      unlock,
+      access,
+      matched: chunks.length > 0,
+    }),
   });
 }
 
@@ -137,7 +143,7 @@ async function idsFor(api: ApiClient, surface: Surface, filter: Filter, values: 
       return { ok: false, result: surface.refusal({ ...error, param: filter }, { call_id: callId, options: body.data.ask?.options.map(({ id, label }) => ({ id, label })) ?? [] }) };
     }
     ids.push(id);
-    named.push(defined({ filter, name: value, matched: pick.name, id, assumed: body.data.best ? undefined : body.data.suggested?.evidence || true }));
+    named.push(defined({ filter, name: value, matched: pick.name, id, assumed: body.data.best ? undefined : surface.note(body.data.suggested?.evidence) || true }));
   }
   return { ok: true, ids };
 }
@@ -316,7 +322,7 @@ const transcriptTool = (surface: Surface): ToolSpec<typeof transcriptInput> => (
     if (!transcript.success) {
       const state = typeof answer.body.state === 'string' ? answer.body.state : null;
       if (state === 'ready') return surface.refusal(unreadable(), { call_id: call.id });
-      return surface.refusal(localError('not_found', 'transcript_unavailable', `Arcmira has no caption lines to return for video ${id} (state ${state}).`), { state, note: surface.transcript.unavailable, call_id: call.id });
+      return surface.refusal(localError('not_found', 'transcript_unavailable', `Arcmira has no caption lines to return for video ${id} (state ${state}).`), { state, note: surface.transcript.notReady, call_id: call.id });
     }
     const window = transcriptWindow({ ...transcript.data, note: surface.note(captionNote(transcript.data.note, surface.transcript)) }, input.start ?? 0);
     return transcriptResult(window.metadata, window.text);

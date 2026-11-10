@@ -9,10 +9,18 @@ import { callTool, type ToolReply } from './handler.ts';
  */
 
 const VIDEO = 'dQw4w9WgXcQ';
-const PLAN = /\b(?:Pro\+?|Premium|Free|paid|upgrade|trial)\b/i;
-const OTHER_LINK = /https?:\/\/(?!(?:www\.)?youtube\.com\/watch\?)\S+/i;
+/** A plan name, also inside a snake_case name like filter_requires_paid or arcmira_premium. */
+const PLAN = /(?<![a-z])(?:pro\+?|premium|free|paid|upgrad\w*|trials?)(?![a-z])/i;
+/** A link that is not a YouTube watch link, with or without its scheme. */
+const OTHER_LINK = /https?:\/\/(?!(?:www\.)?youtube\.com\/watch\?)\S+|(?<![\w.])(?!(?:www\.)?youtube\.com\/watch\?)(?:[a-z0-9-]+\.)+(?:com|net|org|io|ai|dev|app)(?![a-z0-9-])/i;
+/** The fields that carry a gate or an offer. */
+const GATE_FIELDS = ['gate', 'details', 'unlock', 'freshness', 'access', 'doc_url'];
 const PRICING = 'https://arcmira.com/pricing?src=mcp-tool';
+/** A search result links its passage on Arcmira's watch page; the link is the result itself, not an offer. */
+const RESULT_LINK = `https://arcmira.com/watch?v=${VIDEO}&t=10`;
 const pro = { tier: 'pro', url: PRICING, offer: null };
+/** Sentences a later API wording could add, each naming an offer without a plan name. */
+const FUTURE_WORDING = 'Upgrading lifts this limit. Sponsor reads cost $20 a month. Subscribe to see more. A higher tier reads them. Buy more credits at arcmira.com/dashboard/billing.';
 
 /** The API's refusals as v1 words them today, gates and unlocks included. */
 const REFUSALS: Record<string, { status: number; error: Record<string, unknown> }> = {
@@ -28,6 +36,7 @@ const REFUSALS: Record<string, { status: number; error: Record<string, unknown> 
   quota: { status: 402, error: { type: 'quota_exceeded', code: 'quota_exceeded', gate: 'rows', unlock: pro, details: { limit: { kind: 'plan_credits', used: 1000, limit: 1000 } }, message: 'This account has used its 1,000 plan credits this month. Open unlock.url to start a 7-day Pro trial.' } },
   member_limit: { status: 402, error: { type: 'quota_exceeded', code: 'member_limit', gate: 'rows', message: "The included credits are used and this person's $20 monthly on-demand limit is reached; both reset on 2026-12-01. An admin raises the limit on the Team page at https://arcmira.com/dashboard/members." } },
   feature: { status: 403, error: { type: 'permission_error', code: 'feature_not_available', gate: 'plan', unlock: { ...pro, tier: 'pro_plus' }, message: 'Sponsor reads require Pro+. Open unlock.url to start Pro+.' } },
+  future_wording: { status: 403, error: { type: 'permission_error', code: 'feature_not_available', gate: 'plan', message: `${FUTURE_WORDING} Sponsor reads are not available for this key.` } },
   api: { status: 403, error: { type: 'permission_error', code: 'api_not_enabled', gate: 'plan', unlock: pro, message: 'API access requires Pro. Open unlock.url to start a 7-day Pro trial.' } },
   pagination: { status: 403, error: { type: 'permission_error', code: 'pagination_gated', gate: 'pagination', unlock: pro, message: 'Results past the first 10 require Pro. Open unlock.url to start a 7-day Pro trial, or omit cursor for the free window.' } },
   premium_quality: { status: 403, error: { type: 'permission_error', code: 'premium_transcript_requested', gate: 'exposure_law', unlock: pro, message: 'Premium transcripts require Pro. Open unlock.url to start a 7-day Pro trial.' } },
@@ -44,13 +53,14 @@ const refusal = ({ status, error }: { status: number; error: Record<string, unkn
 /** Every apps route that forwards an API answer: search, a search filter's name lookup, a transcript, feedback. */
 const ROUTES: Array<{ name: string; tool: string; args: Record<string, unknown>; path: string }> = [
   { name: 'search', tool: 'arcmira_youtube_search', args: { query: 'stablecoins' }, path: '/v1/search' },
-  { name: 'search filter lookup', tool: 'arcmira_youtube_search', args: { query: 'stablecoins', channel: ['TBPN'] }, path: '/v1/entities/resolve' },
+  { name: 'search filter lookup', tool: 'arcmira_youtube_search', args: { query: 'stablecoins', channel: ['Example Show'] }, path: '/v1/entities/resolve' },
   { name: 'transcript', tool: 'arcmira_youtube_transcript', args: { video: VIDEO }, path: `/v1/transcripts/${VIDEO}` },
-  { name: 'feedback', tool: 'arcmira_feedback', args: { category: 'wrong_result', note: 'test' }, path: '/v1/feedback' },
+  { name: 'feedback', tool: 'arcmira_feedback', args: { category: 'other', note: 'test' }, path: '/v1/feedback' },
 ];
 
-const replyFor = (tool: string, args: Record<string, unknown>, answer: (url: URL) => Response, path = '/mcp/apps') =>
-  callTool(tool, args, (url) => (url.pathname === '/v1/me' ? Response.json({ id: 'caller' }) : answer(url)), {}, path) as Promise<ToolReply>;
+/** One apps tool call; `asked` collects every upstream path the call reached. */
+const replyFor = (tool: string, args: Record<string, unknown>, answer: (url: URL) => Response, path = '/mcp/apps', asked: string[] = []) =>
+  callTool(tool, args, (url) => (url.pathname === '/v1/me' ? Response.json({ id: 'caller' }) : (asked.push(url.pathname), answer(url))), {}, path) as Promise<ToolReply>;
 
 /** Every key and string a reply's text blocks carry. */
 function strings(reply: ToolReply): string[] {
@@ -74,34 +84,39 @@ function assertPlanFree(texts: string[], where: string) {
   for (const text of texts) {
     assert.doesNotMatch(text, PLAN, `${where}: ${text}`);
     assert.doesNotMatch(text, OTHER_LINK, `${where}: ${text}`);
-    assert.notEqual(text, 'unlock', `${where} carries an unlock`);
+    assert.doesNotMatch(text, /\s{2}/, `${where} has a double space: ${text}`);
+    assert.ok(!GATE_FIELDS.includes(text), `${where} carries ${text}`);
   }
 }
 
-const errorOf = (reply: ToolReply) => (reply.result.structuredContent as { error: { message: string } }).error;
+const errorOf = (reply: ToolReply) => (reply.result.structuredContent as { error: { code: string; message: string } }).error;
 const bodyOf = (reply: ToolReply) => JSON.parse(reply.result.content[0]!.text) as Record<string, unknown>;
 
 describe('/mcp/apps names no plan, price or offer', () => {
   it('in any refusal the API can send, on every route', async () => {
     for (const route of ROUTES) {
       for (const [name, sent] of Object.entries(REFUSALS)) {
-        const reply = await replyFor(route.tool, route.args, (url) => (url.pathname === route.path ? refusal(sent) : Response.json({})));
+        const asked: string[] = [];
+        const reply = await replyFor(route.tool, route.args, (url) => (url.pathname === route.path ? refusal(sent) : Response.json({})), '/mcp/apps', asked);
+        assert.ok(asked.includes(route.path), `${route.name} ${name} never reached ${route.path}`);
         assert.equal(reply.result.isError, true, `${route.name} ${name}`);
         assertPlanFree(strings(reply), `${route.name} ${name}`);
       }
     }
   });
 
-  it('says the approved sentence for each gate', async () => {
-    const message = async (name: string, route = ROUTES[0]!) =>
-      errorOf(await replyFor(route.tool, route.args, (url) => (url.pathname === route.path ? refusal(REFUSALS[name]!) : Response.json({})))).message;
-    assert.equal(await message('filter_before'), "The before filter isn't available here. Search again without it.");
-    assert.equal(await message('filter_source'), "The source filter isn't available here. Search again without it.");
-    assert.equal(await message('freshness'), 'Results here cover videos published up to 2026-10-11. Set after to 2026-10-11 or earlier.');
-    assert.equal(await message('quota'), 'This account is out of Arcmira credits for now.');
-    assert.equal(await message('member_limit'), 'This account is out of Arcmira credits for now.');
-    assert.equal(await message('rate'), 'Too many requests. Retry after 5 seconds.', 'a refusal with no offer keeps its words');
-    assert.equal(await message('no_key'), 'The key sent has been revoked.');
+  it('says the approved sentence and a neutral code for each gate', async () => {
+    const error = async (name: string, route = ROUTES[0]!) =>
+      errorOf(await replyFor(route.tool, route.args, (url) => (url.pathname === route.path ? refusal(REFUSALS[name]!) : Response.json({}))));
+    assert.deepEqual(await error('filter_before'), { type: 'permission_error', param: 'before', request_id: 'req_fixture', code: 'filter_unavailable', message: "The before filter isn't available here. Search again without it." });
+    assert.equal((await error('filter_source')).message, "The source filter isn't available here. Search again without it.");
+    assert.deepEqual(await error('freshness'), { type: 'permission_error', param: 'after', request_id: 'req_fixture', code: 'outside_date_range', message: 'Results here cover videos published up to 2026-10-11. Set after to 2026-10-11 or earlier.' });
+    assert.equal((await error('quota')).message, 'This account is out of Arcmira credits for now.');
+    assert.equal((await error('member_limit')).message, 'This account is out of Arcmira credits for now.');
+    assert.equal((await error('premium_quality')).code, 'not_available');
+    assert.equal((await error('future_wording')).message, 'Sponsor reads are not available for this key.', 'only the plain sentence of a new wording passes');
+    assert.equal((await error('rate')).message, 'Too many requests. Retry after 5 seconds.', 'a refusal with no offer keeps its words');
+    assert.equal((await error('no_key')).message, 'The key sent has been revoked.');
   });
 
   it("answers a transcript with the caption sentence, or with YouTube's own not-found sentence and no caption note", async () => {
@@ -117,20 +132,35 @@ describe('/mcp/apps names no plan, price or offer', () => {
     assert.equal(errorOf(upstreamChanged).message, 'This video has no caption track Arcmira can read, so there are no lines to return.', 'only the exact sentence passes');
   });
 
+  it('never calls a transcript Arcmira is still preparing captionless', async () => {
+    const transcript = ROUTES[2]!;
+    for (const [status, body] of [
+      [202, { state: 'pending', quality: 'premium', video_id: VIDEO, job: { status: 'running', next_poll_seconds: 30 } }],
+      [200, { state: 'failed', quality: 'premium', video_id: VIDEO, note: 'The last Premium transcript for this video failed. Read again with retry=true.' }],
+    ] as const) {
+      const reply = await replyFor(transcript.tool, transcript.args, () => Response.json(body, { status }));
+      assert.equal(errorOf(reply).message, "Arcmira can't return this here.", body.state);
+      assert.equal(bodyOf(reply).note, undefined, body.state);
+      assertPlanFree(strings(reply), `transcript ${body.state}`);
+    }
+  });
+
   it("in a search answer's note when the account's results stop before today", async () => {
     const search = ROUTES[0]!;
     const hit = 'Quote text as a spoken beat of a few sentences and cite watch_url with published_at.';
     const cut = 'Results on this plan stop at 2026-10-11; media published after it requires Pro. Open unlock.url to start a 7-day Pro trial.';
     const gate = { freshness: { delay_days: 30, served_through: '2026-10-11' }, unlock: pro };
-    const chunk = { video_id: VIDEO, video_title: 'A video', channel_name: 'A show', published_at: '2026-09-01T00:00:00Z', start_seconds: 10, watch_url: `https://arcmira.com/watch?v=${VIDEO}&t=10`, text: 'a line' };
+    const chunk = { video_id: VIDEO, video_title: 'A video', channel_name: 'A show', published_at: '2026-09-01T00:00:00Z', start_seconds: 10, watch_url: RESULT_LINK, text: 'a line' };
     const answer = (body: Record<string, unknown>) => replyFor(search.tool, search.args, () => Response.json(body));
 
     const matched = bodyOf(await answer({ chunks: [chunk], window: { after: '2026-08-12T00:00:00Z', before: null }, note: `${cut} ${hit}`, ...gate }));
     assert.equal(matched.note, `These results cover videos published from 2026-08-12 to 2026-10-11. ${hit}`);
     assert.deepEqual([matched.freshness, matched.unlock, matched.access], [undefined, undefined, undefined]);
 
-    const none = bodyOf(await answer({ chunks: [], window: { after: '2026-08-12T00:00:00Z', before: null }, note: 'No match before 2026-10-11. Results on this plan stop at 2026-10-11; media published after it requires Pro. Open unlock.url to start a 7-day Pro trial, or move after earlier.', ...gate }));
-    assert.equal(none.note, 'Nothing matched in videos published from 2026-08-12 to 2026-10-11.');
+    const none = bodyOf(await answer({ chunks: [], window: { after: '2026-08-12T00:00:00Z', before: null }, note: `No match before 2026-10-11. ${cut} ${hit} Or move after earlier.`, ...gate }));
+    assert.equal(none.note, `Nothing matched in videos published from 2026-08-12 to 2026-10-11. ${hit} Or move after earlier.`);
+    const noneThenHit = bodyOf(await answer({ chunks: [], window: { after: '2026-08-12T00:00:00Z', before: null }, note: `No match before 2026-10-11. ${hit}`, ...gate }));
+    assert.equal(noneThenHit.note, `Nothing matched in videos published from 2026-08-12 to 2026-10-11. ${hit}`, 'one space between sentences');
 
     const open = bodyOf(await answer({ chunks: [chunk], window: { after: null, before: null }, note: cut, ...gate }));
     assert.equal(open.note, 'These results cover videos published up to 2026-10-11.');
@@ -138,11 +168,62 @@ describe('/mcp/apps names no plan, price or offer', () => {
     for (const body of [matched, none, open]) assertPlanFree([String(body.note)], 'search note');
   });
 
-  it('while /mcp keeps the API words and the unlock', async () => {
+  it('keeps only the fields the tools know in an answer', async () => {
+    const search = ROUTES[0]!;
+    const chunk = { video_id: VIDEO, video_title: 'A video', channel_name: 'A show', start_seconds: 10, watch_url: RESULT_LINK, text: 'a line' };
+    const searched = await replyFor(search.tool, { query: 'stablecoins', about: ['Example Co'] }, (url) =>
+      url.pathname === '/v1/entities/resolve'
+        ? Response.json({ best: null, suggested: { id: 'ent_1', name: 'Example Co', evidence: `Most appearances. ${FUTURE_WORDING}` }, ask: null })
+        : Response.json({
+            chunks: [chunk],
+            window: { after: '2026-08-12T00:00:00Z', before: null, note: FUTURE_WORDING },
+            search_index: { state: 'catching_up', missing_before: '2026-03-01', note: FUTURE_WORDING, upgrade_url: PRICING },
+            note: FUTURE_WORDING,
+          }));
+    assertPlanFree(strings(searched).filter((text) => text !== RESULT_LINK), 'search answer');
+    const body = bodyOf(searched);
+    assert.deepEqual(body.window, { after: '2026-08-12T00:00:00Z' });
+    assert.deepEqual(body.search_index, { state: 'catching_up', missing_before: '2026-03-01' });
+    assert.deepEqual(body.resolved, [{ filter: 'about', name: 'Example Co', matched: 'Example Co', id: 'ent_1', assumed: 'Most appearances.' }]);
+    assert.equal(body.note, undefined);
+
+    const feedback = ROUTES[3]!;
+    const recorded = await replyFor(feedback.tool, feedback.args, () => Response.json({ feedback_id: 42, note: FUTURE_WORDING, unlock: pro }, { status: 201 }));
+    assert.deepEqual(recorded.result.structuredContent, { feedback_id: 42, recorded: true });
+  });
+
+  it('answers a retired /mcp tool name as an unknown tool', async () => {
+    const reply = await callTool('prepare_transcript', { video: VIDEO }, () => Response.json({ id: 'caller' }), {}, '/mcp/apps');
+    const text = JSON.stringify(reply);
+    assert.doesNotMatch(text, PLAN);
+    assert.doesNotMatch(text, /arcmira_execute_read|was retired/);
+  });
+
+  it('while /mcp keeps the API words, the unlock and the order of its fields', async () => {
     const search = ROUTES[0]!;
     const reply = await replyFor(search.tool, search.args, () => refusal(REFUSALS.filter_before!), '/mcp');
-    const error = (reply.result.structuredContent as { error: { message: string; unlock: unknown } }).error;
+    const error = (reply.result.structuredContent as { error: { code: string; message: string; unlock: unknown } }).error;
+    assert.equal(error.code, 'filter_requires_paid');
     assert.match(error.message, /requires Pro/);
     assert.deepEqual(error.unlock, pro);
+
+    const answer = bodyOf(
+      await replyFor(search.tool, search.args, () =>
+        Response.json({
+          access: { tier: 'free' },
+          unlock: pro,
+          freshness: { delay_days: 30, served_through: '2026-10-11' },
+          search_index: { state: 'catching_up' },
+          note: 'Results on this plan stop at 2026-10-11.',
+          as_of: '2026-11-10T00:00:00Z',
+          window: { after: null, before: null },
+          chunks: [],
+        }), '/mcp'),
+    );
+    assert.deepEqual(Object.keys(answer), ['results', 'window', 'as_of', 'note', 'search_index', 'freshness', 'unlock', 'access', 'call_id']);
+    assert.equal(answer.note, 'Results on this plan stop at 2026-10-11.');
+
+    const retired = await callTool('prepare_transcript', { video: VIDEO }, () => Response.json({ id: 'caller' }), {}, '/mcp');
+    assert.match(JSON.stringify(retired), /was retired/);
   });
 });

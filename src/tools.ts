@@ -166,7 +166,7 @@ const feedbackToolFor = (surface: Surface) => tool({
   async run(input, { api }) {
     const answer = await api.post('/v1/feedback', feedbackBody(input), { idempotencyKey: crypto.randomUUID() });
     if (!answer.ok) return surface.refusal(answer.error, answer.body);
-    return okResult({ ...answer.body, recorded: true });
+    return okResult({ ...surface.known(answer.body, ['feedback_id']), recorded: true });
   },
 });
 
