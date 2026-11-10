@@ -12,9 +12,11 @@
   - A transcript Arcmira is still preparing gets "Arcmira is still preparing this transcript. Read it again in a minute." Any other transcript that isn't ready gets "Arcmira can't return this here."
   - Other refusals keep only their sentences that name no plan, price, offer or link.
 - A refusal's code names no plan there: `filter_requires_paid` reads `filter_unavailable`, `freshness_requires_paid` reads `outside_date_range`, and any other code that names a plan reads `not_available`.
+- Asking for a credential there names no sign-up offer or link: "No credential was sent. Sign in through the host, or send Authorization: Bearer with an account key." A refused key gets "The key sent has been revoked." or "The key sent is not a live account key."
 - A video YouTube has no record of gets the API's own sentence, "YouTube has no video with this id. It may have been removed or the link may be mistyped.", with no caption note, on both paths.
 - A search whose results stop before today says which dates it covers: "These results cover videos published from 2026-08-12 to 2026-10-11."
 - Results there carry no `unlock`, `freshness`, `access`, gate or doc link. Answers keep only the fields the tools know: a search's `window` keeps `after` and `before`, its `search_index` keeps `state` and `missing_before`, and feedback keeps `feedback_id`.
+- A result's `watch_url` there is a YouTube or Arcmira watch link, or is left out. A refusal's other fields drop any value that names a plan, a price or another link. The feedback tool's description there leaves out "Costs nothing."
 - A tool name `/mcp` retired is an unknown tool on `/mcp/apps`, which never served it.
 - `/mcp` keeps the API's words, codes, unlocks and field order unchanged.
 - A test sends every refusal and note through each `/mcp/apps` route and fails on a plan name, also inside a snake_case code, on a gate field, or on a link other than a YouTube watch link. The transcript kind `arcmira_premium` passes only as a `source` filter value or a result's `source`.

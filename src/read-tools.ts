@@ -87,7 +87,7 @@ function searchAnswer(body: z.output<typeof SearchBody>, surface: Surface): Reco
         channel_name: chunk.channel_name,
         published_at: chunk.published_at,
         start_seconds: chunk.start_seconds,
-        watch_url: chunk.watch_url,
+        watch_url: surface.link(chunk.watch_url),
         video_id: chunk.video_id,
         channel_id: chunk.channel_id,
         source: chunk.source,
@@ -324,7 +324,11 @@ const transcriptTool = (surface: Surface): ToolSpec<typeof transcriptInput> => (
       if (state === 'ready') return surface.refusal(unreadable(), { call_id: call.id });
       return surface.refusal(localError('not_found', 'transcript_unavailable', `Arcmira has no caption lines to return for video ${id} (state ${state}).`), { state, note: surface.transcript.notReady, call_id: call.id });
     }
-    const window = transcriptWindow({ ...transcript.data, note: surface.note(captionNote(transcript.data.note, surface.transcript)) }, input.start ?? 0);
+    const { video, note } = transcript.data;
+    const window = transcriptWindow(
+      { ...transcript.data, video: { ...video, watch_url: surface.link(video.watch_url) }, note: surface.note(captionNote(note, surface.transcript)) },
+      input.start ?? 0,
+    );
     return transcriptResult(window.metadata, window.text);
   },
 });

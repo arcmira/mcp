@@ -23,9 +23,11 @@ const NOT_HERE = "Arcmira can't return this here.";
 
 /** A word that names a plan, a price or an offer, also inside a snake_case name like filter_requires_paid. */
 const OFFER =
-  /(?<![a-z])(?:pro|premium|free|paid|upgrad\w*|trials?|plans?|pricing|prices?|costs?|billing|subscri\w*|tiers?|buy\w*|purchas\w*|checkout|ultra|enterprise|on-demand|unlock\w*)(?![a-z])|\$\s?\d/i;
+  /(?<![a-z])(?:pro|premium|free|paid|upgrad\w*|trials?|plans?|pricing|prices?|costs?|billing|subscri\w*|tiers?|seats?|buy\w*|purchas\w*|checkout|top.?up|sign.?up|ultra|enterprise|on-demand|unlock\w*|usd|eur|gbp|per (?:month|year|seat)|monthly|annual\w*)(?![a-z])|[$€£]\s?\d/i;
 const LINK = /https?:\/\/\S+|(?:[a-z0-9-]+\.)+(?:com|net|org|io|ai|dev|app|co|gg|to|so|sh|me|tv)(?![a-z0-9-])\S*/gi;
 const YOUTUBE_WATCH = /^(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?/i;
+/** A link to the second a passage was said: YouTube's watch page or Arcmira's, which embeds YouTube's player. */
+const WATCH_LINK = /^https:\/\/(?:www\.)?(?:youtube|arcmira)\.com\/watch\?\S*$/;
 
 /** True when `text` names a plan or an offer, or carries a link that is not a YouTube watch link. */
 const offers = (text: string) => OFFER.test(text) || [...text.matchAll(LINK)].some(([link]) => !YOUTUBE_WATCH.test(link));
@@ -62,6 +64,10 @@ export interface Surface {
   };
   /** A note as this surface shows it. */
   note(text: string | null | undefined): string | undefined;
+  /** A result's watch link as this surface shows it. */
+  link(url: string | null | undefined): string | undefined;
+  /** An API error as this surface shows it, outside a tool result too. */
+  error(error: ApiErrorBody): ApiErrorBody;
   /** An API answer's fields as this surface shows them: all of them, or only `fields`. */
   known(body: unknown, fields: readonly string[]): Record<string, unknown> | undefined;
   /** A refusal, with the details the tool adds. */
@@ -94,6 +100,8 @@ export const PROGRAM_SURFACE: Surface = {
     noPremium: (rest) => joined(rest, NO_PREMIUM, START_PREMIUM),
   },
   note: (text) => text || undefined,
+  link: (url) => url || undefined,
+  error: (error) => error,
   known: (body) => record(body),
   refusal: errorResult,
   searchMeta: ({ window, as_of, note, search_index, freshness, unlock, access }) => ({
@@ -136,12 +144,23 @@ const APPS_ERROR_FIELDS = ['type', 'reason', 'param', 'retry_after_seconds', 're
 /** The tool details /mcp/apps keeps beside a refusal. */
 const APPS_DETAIL_FIELDS = ['call_id', 'reason', 'languages', 'state', 'resolved', 'options'] as const;
 
-function appsError(error: ApiErrorBody, details: Record<string, unknown>): ApiErrorBody {
+function appsError(error: ApiErrorBody, details: Record<string, unknown> = {}): ApiErrorBody {
   const kept = Object.fromEntries(
     Object.entries(pick(error as unknown as Record<string, unknown>, APPS_ERROR_FIELDS)).filter(([, value]) => typeof value !== 'string' || plain(value)),
   );
   const code = APPS_CODES[error.code] ?? plain(error.code) ?? 'not_available';
   return { ...kept, code, message: appsMessage(error, details) } as ApiErrorBody;
+}
+
+/** `value` with every string that names a plan, an offer or another link taken out, at any depth. */
+function withoutOffers(value: Record<string, unknown>): Record<string, unknown> {
+  const clean = (inner: unknown): unknown => {
+    if (typeof inner === 'string') return offers(inner) ? undefined : inner;
+    if (Array.isArray(inner)) return inner.map(clean).filter((item) => item !== undefined);
+    const from = record(inner);
+    return from ? Object.fromEntries(Object.entries(from).map(([key, item]) => [key, clean(item)]).filter(([, item]) => item !== undefined)) : inner;
+  };
+  return clean(value) as Record<string, unknown>;
 }
 
 /** The search answer's dates, said plainly when the account's results stop before today. */
@@ -150,7 +169,7 @@ function datesNote(freshness: unknown, window: unknown, matched: boolean): strin
   if (through === undefined) return undefined;
   const after = day(record(window)?.after);
   if (matched) return after ? `These results cover videos published from ${after} to ${through}.` : `These results cover videos published up to ${through}.`;
-  return after ? `Nothing matched in videos published from ${after} to ${through}.` : `Nothing matched in videos published up to ${through}.`;
+  return after ? `Nothing matched in videos published from ${after} to ${through}.` : undefined;
 }
 
 /** The API's own "No match before <date>." restates the dates note, so it goes when the dates note is there. */
@@ -164,10 +183,13 @@ export const APPS_SURFACE: Surface = {
     noPremium: (rest) => rest,
   },
   note: planFree,
+  link: (url) => (url && WATCH_LINK.test(url) ? url : undefined),
+  error: (error) => appsError(error),
   known: knownFields,
   refusal(error, details = {}) {
-    const note = planFree(typeof details.note === 'string' ? details.note : undefined);
-    return errorResult(appsError(error, details), { ...pick(details, APPS_DETAIL_FIELDS), ...(note ? { note } : {}) });
+    // A transcript Arcmira holds in some state has no caption track to explain.
+    const note = typeof details.state === 'string' ? undefined : planFree(typeof details.note === 'string' ? details.note : undefined);
+    return errorResult(appsError(error, details), { ...withoutOffers(pick(details, APPS_DETAIL_FIELDS)), ...(note ? { note } : {}) });
   },
   searchMeta({ window, as_of, note, search_index, freshness, matched }) {
     const dates = datesNote(freshness, window, matched);

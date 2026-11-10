@@ -156,10 +156,14 @@ export function feedbackBody(input: Omit<z.output<typeof feedbackInput>, 'intent
   };
 }
 
+const FEEDBACK_DESCRIPTION =
+  'Saves a feedback record for the Arcmira team. Send one when a result was wrong, slow, empty or confusing, or when the user wants a source or capability Arcmira lacks. Put what they were doing and any source links in note. Each call adds a record; repeated calls create separate records. Costs nothing.';
+
 const feedbackToolFor = (surface: Surface) => tool({
   name: 'arcmira_feedback',
   title: 'Tell Arcmira what went wrong',
-  description: 'Saves a feedback record for the Arcmira team. Send one when a result was wrong, slow, empty or confusing, or when the user wants a source or capability Arcmira lacks. Put what they were doing and any source links in note. Each call adds a record; repeated calls create separate records. Costs nothing.',
+  // On /mcp/apps the description keeps only its sentences that name no price.
+  description: surface.note(FEEDBACK_DESCRIPTION) ?? '',
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   _meta: { 'anthropic/alwaysLoad': true },
   inputSchema: feedbackInput,
