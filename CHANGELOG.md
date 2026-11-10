@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.15: six weekly-job prompts on /mcp
+
+`/mcp` now serves six MCP prompts: `weekly-brand-watch`, `weekly-competitor-reads`, `weekly-person-tracker`, `weekly-sponsor-scout`, `weekly-show-digest` and `weekly-monitor-roundup`. Picking one runs the job once now. Then it gives back the job with the names filled in, and the steps to run it every week as a scheduled task.
+
+- Each prompt takes one optional argument. With no names, or names that look cut off, the message asks for them first. Claude Code splits prompt arguments on whitespace, so a long list can arrive cut off.
+- When a plan can't read the newest dates, the job says so in one line and runs the same search over the newest 7 days it can read.
+- `/mcp/apps` serves no prompts. `tools/list` is unchanged on both paths.
+
 ## 0.10.14: Claude Code loads the reference, the program runner and feedback upfront
 
 The server instructions tell an agent to call `arcmira_describe` before writing a program, but in Claude Code's default view `arcmira_describe` waited behind tool search, and so did `arcmira_feedback`. This release loads both upfront beside `arcmira_execute_read`, and routes the instructions to programs.
