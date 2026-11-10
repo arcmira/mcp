@@ -9,7 +9,7 @@
   - Dates past the account's newest get "Results here cover videos published up to 2026-10-11. Set after to 2026-10-11 or earlier."
   - Used-up credits get "This account is out of Arcmira credits for now."
   - A video with no caption lines gets "This video has no caption track Arcmira can read, so there are no lines to return."
-  - A transcript Arcmira is still preparing, or whose last transcription failed, gets "Arcmira can't return this here."
+  - A transcript Arcmira is still preparing gets "Arcmira is still preparing this transcript. Read it again in a minute." Any other transcript that isn't ready gets "Arcmira can't return this here."
   - Other refusals keep only their sentences that name no plan, price, offer or link.
 - A refusal's code names no plan there: `filter_requires_paid` reads `filter_unavailable`, `freshness_requires_paid` reads `outside_date_range`, and any other code that names a plan reads `not_available`.
 - A video YouTube has no record of gets the API's own sentence, "YouTube has no video with this id. It may have been removed or the link may be mistyped.", with no caption note, on both paths.
@@ -17,7 +17,7 @@
 - Results there carry no `unlock`, `freshness`, `access`, gate or doc link. Answers keep only the fields the tools know: a search's `window` keeps `after` and `before`, its `search_index` keeps `state` and `missing_before`, and feedback keeps `feedback_id`.
 - A tool name `/mcp` retired is an unknown tool on `/mcp/apps`, which never served it.
 - `/mcp` keeps the API's words, codes, unlocks and field order unchanged.
-- A test sends every refusal and note through each `/mcp/apps` route and fails on a plan name, also inside a snake_case code, on a gate field, or on a link other than a YouTube watch link.
+- A test sends every refusal and note through each `/mcp/apps` route and fails on a plan name, also inside a snake_case code, on a gate field, or on a link other than a YouTube watch link. The transcript kind `arcmira_premium` passes only as a `source` filter value or a result's `source`.
 
 The program client gains `arcmira.monitors.alerts(monitorId, { limit? })`, a read of `GET /v1/monitors/{id}/alerts`: the alerts a monitor sent, newest first, each with the `video_id` that `transcript(video)` reads. An agent with the MCP server can now act on a monitor's alerts without an API key.
 

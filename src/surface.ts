@@ -16,6 +16,8 @@ export const VIDEO_NOT_FOUND = 'YouTube has no video with this id. It may have b
 /** A transcript with no caption lines, on /mcp/apps. */
 export const NO_CAPTION_TRACK = 'This video has no caption track Arcmira can read, so there are no lines to return.';
 
+/** A transcript in the API's `pending` state, on /mcp/apps. */
+const PREPARING = 'Arcmira is still preparing this transcript. Read it again in a minute.';
 const OUT_OF_CREDITS = 'This account is out of Arcmira credits for now.';
 const NOT_HERE = "Arcmira can't return this here.";
 
@@ -53,7 +55,7 @@ export interface Surface {
   readonly transcript: {
     /** A video with no caption lines. */
     readonly unavailable: string;
-    /** A transcript Arcmira holds in a state other than ready, such as a Premium transcription still running. */
+    /** The note on a transcript Arcmira holds in a state other than ready, such as a Premium transcription still running. */
     readonly notReady: string | undefined;
     /** The note on captions read for an account whose default quality is Premium, given the rest of the API's note. */
     readonly noPremium: (rest: string) => string;
@@ -117,7 +119,7 @@ const plain = (value: unknown) => (typeof value === 'string' && !offers(value) ?
 /** The refusal sentence /mcp/apps shows for an API error. */
 function appsMessage(error: ApiErrorBody & { details?: unknown }, details: Record<string, unknown>): string {
   if (error.code === 'transcript_unavailable') {
-    if (typeof details.state === 'string') return NOT_HERE;
+    if (typeof details.state === 'string') return details.state === 'pending' ? PREPARING : NOT_HERE;
     return error.message === VIDEO_NOT_FOUND ? VIDEO_NOT_FOUND : NO_CAPTION_TRACK;
   }
   if (error.type === 'quota_exceeded') return OUT_OF_CREDITS;

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { callTool, type ToolReply } from './handler.ts';
+import { callTool, listTools, type ToolReply } from './handler.ts';
 
 /**
  * /mcp/apps is the store surface, and store agreements forbid an upsell. Every refusal and note it can return goes
@@ -13,6 +13,11 @@ const VIDEO = 'dQw4w9WgXcQ';
 const PLAN = /(?<![a-z])(?:pro\+?|premium|free|paid|upgrad\w*|trials?)(?![a-z])/i;
 /** A link that is not a YouTube watch link, with or without its scheme. */
 const OTHER_LINK = /https?:\/\/(?!(?:www\.)?youtube\.com\/watch\?)\S+|(?<![\w.])(?!(?:www\.)?youtube\.com\/watch\?)(?:[a-z0-9-]+\.)+(?:com|net|org|io|ai|dev|app)(?![a-z0-9-])/i;
+/**
+ * The one plan word apps may carry: the transcript kind arcmira_premium, as a value of the search tool's source filter
+ * (its enum and the description that names its values) or of a result's source field, and nowhere else.
+ */
+const SOURCE_KIND = 'arcmira_premium';
 /** The fields that carry a gate or an offer. */
 const GATE_FIELDS = ['gate', 'details', 'unlock', 'freshness', 'access', 'doc_url'];
 const PRICING = 'https://arcmira.com/pricing?src=mcp-tool';
@@ -62,27 +67,39 @@ const ROUTES: Array<{ name: string; tool: string; args: Record<string, unknown>;
 const replyFor = (tool: string, args: Record<string, unknown>, answer: (url: URL) => Response, path = '/mcp/apps', asked: string[] = []) =>
   callTool(tool, args, (url) => (url.pathname === '/v1/me' ? Response.json({ id: 'caller' }) : (asked.push(url.pathname), answer(url))), {}, path) as Promise<ToolReply>;
 
-/** Every key and string a reply's text blocks carry. */
-function strings(reply: ToolReply): string[] {
-  const out: string[] = [];
-  const walk = (value: unknown): void => {
-    if (typeof value === 'string') out.push(value);
-    else if (Array.isArray(value)) value.forEach(walk);
-    else if (value !== null && typeof value === 'object') for (const [key, inner] of Object.entries(value)) (out.push(key), walk(inner));
-  };
-  for (const block of reply.result.content) {
-    try {
-      walk(JSON.parse(block.text));
-    } catch {
-      out.push(block.text);
-    }
-  }
-  return out;
+type Text = { path: string[]; text: string };
+
+/** Every key and string in `value`, with the keys that lead to it. */
+function texts(value: unknown, path: string[] = []): Text[] {
+  if (typeof value === 'string') return [{ path, text: value }];
+  if (Array.isArray(value)) return value.flatMap((inner) => texts(inner, [...path, '#']));
+  if (value !== null && typeof value === 'object')
+    return Object.entries(value).flatMap(([key, inner]) => [{ path, text: key }, ...texts(inner, [...path, key])]);
+  return [];
 }
 
-function assertPlanFree(texts: string[], where: string) {
-  for (const text of texts) {
-    assert.doesNotMatch(text, PLAN, `${where}: ${text}`);
+/** Every key and string a reply's text blocks carry. */
+function strings(reply: ToolReply): Text[] {
+  return reply.result.content.flatMap((block) => {
+    try {
+      return texts(JSON.parse(block.text));
+    } catch {
+      return [{ path: [], text: block.text }];
+    }
+  });
+}
+
+/** `text` with the transcript kind taken out where apps may name it. */
+function exempt({ path, text }: Text): string {
+  const at = path.join('.');
+  if (text === SOURCE_KIND && (/(?:^|\.)source$/.test(at) || at.endsWith('properties.source.enum.#'))) return '';
+  if (at.endsWith('properties.source.description')) return text.replaceAll(new RegExp(`(?<![a-z_])${SOURCE_KIND}(?![a-z_])`, 'g'), '');
+  return text;
+}
+
+function assertPlanFree(found: Text[], where: string) {
+  for (const { path, text } of found) {
+    assert.doesNotMatch(exempt({ path, text }), PLAN, `${where} at ${path.join('.')}: ${text}`);
     assert.doesNotMatch(text, OTHER_LINK, `${where}: ${text}`);
     assert.doesNotMatch(text, /\s{2}/, `${where} has a double space: ${text}`);
     assert.ok(!GATE_FIELDS.includes(text), `${where} carries ${text}`);
@@ -132,14 +149,16 @@ describe('/mcp/apps names no plan, price or offer', () => {
     assert.equal(errorOf(upstreamChanged).message, 'This video has no caption track Arcmira can read, so there are no lines to return.', 'only the exact sentence passes');
   });
 
-  it('never calls a transcript Arcmira is still preparing captionless', async () => {
+  it('says a transcript Arcmira is still preparing is not ready, never captionless', async () => {
     const transcript = ROUTES[2]!;
-    for (const [status, body] of [
-      [202, { state: 'pending', quality: 'premium', video_id: VIDEO, job: { status: 'running', next_poll_seconds: 30 } }],
-      [200, { state: 'failed', quality: 'premium', video_id: VIDEO, note: 'The last Premium transcript for this video failed. Read again with retry=true.' }],
+    for (const [status, body, message] of [
+      [202, { state: 'pending', quality: 'premium', video_id: VIDEO, job: { status: 'running', next_poll_seconds: 30 } }, 'Arcmira is still preparing this transcript. Read it again in a minute.'],
+      [202, { state: 'Pending', quality: 'premium', video_id: VIDEO }, "Arcmira can't return this here."],
+      [200, { state: 'failed', quality: 'premium', video_id: VIDEO, note: 'The last Premium transcript for this video failed. Read again with retry=true.' }, "Arcmira can't return this here."],
+      [200, { state: 'preparation_required', quality: 'premium', video_id: VIDEO, quote: { rows: 4 } }, "Arcmira can't return this here."],
     ] as const) {
       const reply = await replyFor(transcript.tool, transcript.args, () => Response.json(body, { status }));
-      assert.equal(errorOf(reply).message, "Arcmira can't return this here.", body.state);
+      assert.equal(errorOf(reply).message, message, body.state);
       assert.equal(bodyOf(reply).note, undefined, body.state);
       assertPlanFree(strings(reply), `transcript ${body.state}`);
     }
@@ -165,12 +184,12 @@ describe('/mcp/apps names no plan, price or offer', () => {
     const open = bodyOf(await answer({ chunks: [chunk], window: { after: null, before: null }, note: cut, ...gate }));
     assert.equal(open.note, 'These results cover videos published up to 2026-10-11.');
 
-    for (const body of [matched, none, open]) assertPlanFree([String(body.note)], 'search note');
+    for (const body of [matched, none, open]) assertPlanFree([{ path: ['note'], text: String(body.note) }], 'search note');
   });
 
   it('keeps only the fields the tools know in an answer', async () => {
     const search = ROUTES[0]!;
-    const chunk = { video_id: VIDEO, video_title: 'A video', channel_name: 'A show', start_seconds: 10, watch_url: RESULT_LINK, text: 'a line' };
+    const chunk = { video_id: VIDEO, video_title: 'A video', channel_name: 'A show', start_seconds: 10, watch_url: RESULT_LINK, source: SOURCE_KIND, text: 'a line' };
     const searched = await replyFor(search.tool, { query: 'stablecoins', about: ['Example Co'] }, (url) =>
       url.pathname === '/v1/entities/resolve'
         ? Response.json({ best: null, suggested: { id: 'ent_1', name: 'Example Co', evidence: `Most appearances. ${FUTURE_WORDING}` }, ask: null })
@@ -180,7 +199,7 @@ describe('/mcp/apps names no plan, price or offer', () => {
             search_index: { state: 'catching_up', missing_before: '2026-03-01', note: FUTURE_WORDING, upgrade_url: PRICING },
             note: FUTURE_WORDING,
           }));
-    assertPlanFree(strings(searched).filter((text) => text !== RESULT_LINK), 'search answer');
+    assertPlanFree(strings(searched).filter(({ text }) => text !== RESULT_LINK), 'search answer');
     const body = bodyOf(searched);
     assert.deepEqual(body.window, { after: '2026-08-12T00:00:00Z' });
     assert.deepEqual(body.search_index, { state: 'catching_up', missing_before: '2026-03-01' });
@@ -190,6 +209,25 @@ describe('/mcp/apps names no plan, price or offer', () => {
     const feedback = ROUTES[3]!;
     const recorded = await replyFor(feedback.tool, feedback.args, () => Response.json({ feedback_id: 42, note: FUTURE_WORDING, unlock: pro }, { status: 201 }));
     assert.deepEqual(recorded.result.structuredContent, { feedback_id: 42, recorded: true });
+  });
+
+  it('names the transcript kind arcmira_premium only as a source value', async () => {
+    const tools = await listTools('/mcp/apps');
+    const listed = texts(tools).filter(({ path }) => path.at(-1) !== '$schema');
+    assert.ok(listed.some(({ text }) => text === SOURCE_KIND), 'the source filter offers the kind');
+    // The tool list names youtube.com as where a video comes from, so only its plan words are checked.
+    for (const found of listed) assert.doesNotMatch(exempt(found), PLAN, `apps tool list at ${found.path.join('.')}: ${found.text}`);
+
+    const transcript = ROUTES[2]!;
+    const read = await replyFor(transcript.tool, transcript.args, () =>
+      Response.json({ state: 'ready', video: { id: VIDEO, title: 'A video', watch_url: `https://www.youtube.com/watch?v=${VIDEO}` }, source: SOURCE_KIND, lines: [{ start: 0, text: 'a line' }], note: 'Premium transcripts name who spoke. Speakers are labelled.' }));
+    const found = strings(read);
+    assert.ok(found.some(({ path, text }) => path.join('.') === 'source' && text === SOURCE_KIND));
+    assertPlanFree(found, 'transcript answer');
+
+    assert.throws(() => assertPlanFree([{ path: ['note'], text: SOURCE_KIND }], 'a note'), 'the kind is exempt only in source');
+    assert.throws(() => assertPlanFree([{ path: ['source'], text: 'Premium' }], 'a source'), 'a plan word in source still fails');
+    assert.throws(() => assertPlanFree([{ path: ['tools', '#', 'inputSchema', 'properties', 'source', 'description'], text: `${SOURCE_KIND} is Premium.` }], 'a description'), 'a sentence naming Premium still fails');
   });
 
   it('answers a retired /mcp tool name as an unknown tool', async () => {
