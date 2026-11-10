@@ -6,6 +6,7 @@ import { clientLabel, errorResult, withBuild, withRateLimit } from './result.ts'
 import type { Access, SandboxHost } from './sandbox.ts';
 import { callId, inputState, outline, type Recorder } from './telemetry.ts';
 import { APPS_TOOLS, RETIRED_TOOLS, SERVER_INSTRUCTIONS, TOOLS, retiredToolResult, type AnyToolSpec } from './tools.ts';
+import { registerWeeklyJobs } from './prompts.ts';
 
 export const MCP_PATH = '/mcp';
 export const APPS_PATH = '/mcp/apps';
@@ -103,6 +104,7 @@ export function createServer(caller: Caller, deploy: string | null = null, surfa
       },
     );
   }
+  if (surface.path === MCP_PATH) registerWeeklyJobs(server);
   return server;
 }
 
