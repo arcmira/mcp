@@ -2,9 +2,10 @@ import { z } from 'zod';
 import type { ApiClient, ApiErrorBody } from './api.ts';
 import { OUTPUT_BUDGET } from './output.ts';
 import { DOCS } from './reference.ts';
-import { errorResult, okResult, transcriptResult, type ToolResult } from './result.ts';
+import { okResult, transcriptResult, type ToolResult } from './result.ts';
 import { CHANNEL_ID, DATE_BOUND, ENTITY_ID, videoIdOf } from './sandbox/client.js';
 import { intentParam } from './telemetry.ts';
+import { APPS_SURFACE, PROGRAM_SURFACE, VIDEO_NOT_FOUND, type Surface } from './surface.ts';
 import type { ToolSpec } from './tools.ts';
 
 /**
@@ -76,7 +77,7 @@ function defined(row: Record<string, unknown>): Record<string, unknown> {
 const refs = (rows: z.output<typeof NamedRef>[] | undefined) => (rows?.length ? rows.map(({ id, name }) => ({ id, name })) : undefined);
 
 /** One passage per result: its lines with the speaker labels the API put on them, and where it plays. */
-function searchAnswer(body: z.output<typeof SearchBody>): Record<string, unknown> {
+function searchAnswer(body: z.output<typeof SearchBody>, surface: Surface): Record<string, unknown> {
   const { chunks, window, as_of, note, search_index, freshness, unlock, access } = body;
   return defined({
     results: chunks.map((chunk) =>
@@ -86,7 +87,7 @@ function searchAnswer(body: z.output<typeof SearchBody>): Record<string, unknown
         channel_name: chunk.channel_name,
         published_at: chunk.published_at,
         start_seconds: chunk.start_seconds,
-        watch_url: chunk.watch_url,
+        watch_url: surface.link(chunk.watch_url),
         video_id: chunk.video_id,
         channel_id: chunk.channel_id,
         source: chunk.source,
@@ -94,13 +95,16 @@ function searchAnswer(body: z.output<typeof SearchBody>): Record<string, unknown
         about: refs(chunk.about),
       }),
     ),
-    window,
-    as_of,
-    note: note || undefined,
-    search_index: search_index?.state === 'live' ? undefined : search_index,
-    freshness,
-    unlock,
-    access,
+    ...surface.searchMeta({
+      window,
+      as_of,
+      note,
+      search_index: search_index?.state === 'live' ? undefined : search_index,
+      freshness,
+      unlock,
+      access,
+      matched: chunks.length > 0,
+    }),
   });
 }
 
@@ -118,7 +122,7 @@ type Ids = { ok: true; ids: string[] | undefined } | { ok: false; result: ToolRe
  * The ids for one filter. An id passes through. A name is resolved once: the entity Arcmira is sure of, else the one
  * it suggests, recorded in `named` with the evidence. A name with no single match stops the search and lists the options.
  */
-async function idsFor(api: ApiClient, filter: Filter, values: string[] | undefined, named: Record<string, unknown>[], callId: string): Promise<Ids> {
+async function idsFor(api: ApiClient, surface: Surface, filter: Filter, values: string[] | undefined, named: Record<string, unknown>[], callId: string): Promise<Ids> {
   if (!values?.length) return { ok: true, ids: undefined };
   const channel = filter === 'channel';
   const ids: string[] = [];
@@ -128,18 +132,18 @@ async function idsFor(api: ApiClient, filter: Filter, values: string[] | undefin
       continue;
     }
     const answer = await api.get('/v1/entities/resolve', { q: value, type: channel ? 'channel' : undefined, limit: 5 });
-    if (!answer.ok) return { ok: false, result: errorResult(answer.error, { ...answer.body, call_id: callId }) };
+    if (!answer.ok) return { ok: false, result: surface.refusal(answer.error, { ...answer.body, call_id: callId }) };
     const body = ResolveBody.safeParse(answer.body);
-    if (!body.success) return { ok: false, result: errorResult(unreadable(), { call_id: callId }) };
+    if (!body.success) return { ok: false, result: surface.refusal(unreadable(), { call_id: callId }) };
     const pick = body.data.best ?? body.data.suggested;
     const id = channel ? pick?.youtube_channel_id : pick?.id;
     if (!pick || !id) {
       const what = channel ? 'YouTube channel' : 'person, brand or company';
       const error = localError('invalid_request_error', 'name_not_resolved', `${filter}: "${value}" matches no single ${what} in Arcmira. Pass one of the options' ids, or put the name in query.`);
-      return { ok: false, result: errorResult({ ...error, param: filter }, { call_id: callId, options: body.data.ask?.options.map(({ id, label }) => ({ id, label })) ?? [] }) };
+      return { ok: false, result: surface.refusal({ ...error, param: filter }, { call_id: callId, options: body.data.ask?.options.map(({ id, label }) => ({ id, label })) ?? [] }) };
     }
     ids.push(id);
-    named.push(defined({ filter, name: value, matched: pick.name, id, assumed: body.data.best ? undefined : body.data.suggested?.evidence || true }));
+    named.push(defined({ filter, name: value, matched: pick.name, id, assumed: body.data.best ? undefined : surface.note(body.data.suggested?.evidence) || true }));
   }
   return { ok: true, ids };
 }
@@ -148,7 +152,7 @@ function daysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 }
 
-export const youtubeSearchTool: ToolSpec<typeof searchInput> = {
+const searchTool = (surface: Surface): ToolSpec<typeof searchInput> => ({
   name: 'arcmira_youtube_search',
   title: "Search what's said on YouTube",
   description:
@@ -157,11 +161,11 @@ export const youtubeSearchTool: ToolSpec<typeof searchInput> = {
   inputSchema: searchInput,
   async run(input, { api, call }) {
     const named: Record<string, unknown>[] = [];
-    const channel = await idsFor(api, 'channel', input.channel, named, call.id);
+    const channel = await idsFor(api, surface, 'channel', input.channel, named, call.id);
     if (!channel.ok) return channel.result;
-    const about = await idsFor(api, 'about', input.about, named, call.id);
+    const about = await idsFor(api, surface, 'about', input.about, named, call.id);
     if (!about.ok) return about.result;
-    const by = await idsFor(api, 'by', input.by, named, call.id);
+    const by = await idsFor(api, surface, 'by', input.by, named, call.id);
     if (!by.ok) return by.result;
     const resolved = named.length ? named : undefined;
     const answer = await api.get('/v1/search', {
@@ -175,13 +179,16 @@ export const youtubeSearchTool: ToolSpec<typeof searchInput> = {
       source: input.source,
       limit: input.limit,
     });
-    if (!answer.ok) return errorResult(answer.error, defined({ ...answer.body, resolved, call_id: call.id }));
+    if (!answer.ok) return surface.refusal(answer.error, defined({ ...answer.body, resolved, call_id: call.id }));
     const body = SearchBody.safeParse(answer.body);
-    if (!body.success) return errorResult(unreadable(), { call_id: call.id });
-    const result = defined({ ...searchAnswer(body.data), resolved });
+    if (!body.success) return surface.refusal(unreadable(), { call_id: call.id });
+    const result = defined({ ...searchAnswer(body.data, surface), resolved });
     return okResult(body.data.chunks.length === 0 ? { ...result, call_id: call.id } : result);
   },
-};
+});
+
+export const youtubeSearchTool = searchTool(PROGRAM_SURFACE);
+export const appsSearchTool = searchTool(APPS_SURFACE);
 
 function isVideo(value: string): boolean {
   try {
@@ -278,37 +285,10 @@ function transcriptWindow(transcript: Transcript, start: number): { metadata: Re
   return { metadata: metadata(count, next), text: picked.join('\n') };
 }
 
-const START_PREMIUM = 'arcmira_execute_read starts one with arcmira.transcript(video, { quality: "premium" }), and that read uses credits.';
-const NO_PREMIUM = 'These are captions because this account has no Premium transcript of this video.';
-
-/** The API's caption note opens with this sentence. */
-const CAPTION_TRACK = "This transcript is the video's own caption track.";
-
-/** What a transcript result says where the API's own advice names a quality argument this tool does not take. */
-interface TranscriptNotes {
-  /** A video with no caption lines. */
-  readonly unavailable: string;
-  /** The note on captions read for an account whose default quality is Premium and that owns no Premium transcript of the video, given the rest of the API's note. */
-  readonly noPremium: (rest: string) => string;
-}
-
-const joined = (...parts: string[]) => parts.filter(Boolean).join(' ');
-
-const PROGRAM_NOTES: TranscriptNotes = {
-  unavailable: `When a video has no caption track, its transcript comes only from a Premium transcription, which this tool never starts: ${START_PREMIUM}`,
-  noPremium: (rest) => joined(rest, NO_PREMIUM, START_PREMIUM),
-};
-/** Where the program tools are not served (the /mcp/apps surface), the notes name no other tool, price or credits. */
-const APPS_NOTES: TranscriptNotes = {
-  unavailable: 'This video has no caption track Arcmira can read, so there are no lines to return.',
-  noPremium: (rest) =>
-    joined("This account has no Premium transcript of this video, so these are the video's own captions.", rest.startsWith(CAPTION_TRACK) ? rest.slice(CAPTION_TRACK.length).trim() : rest),
-};
-
 /** The API ends a default-Premium account's caption note with this sentence and its quality=premium advice. */
 const PREMIUM_DEFAULT = "These are captions because this account's default transcript quality is premium";
 
-function captionNote(note: string | null | undefined, notes: TranscriptNotes): string | undefined {
+function captionNote(note: string | null | undefined, notes: Surface['transcript']): string | undefined {
   if (!note) return undefined;
   const at = note.indexOf(PREMIUM_DEFAULT);
   return at < 0 ? note : notes.noPremium(note.slice(0, at).trim());
@@ -322,7 +302,7 @@ function unreadable(): ApiErrorBody {
   return localError('server_error', 'upstream_unreadable', 'The Arcmira API answered in a shape this tool does not read. Retry in a few seconds.');
 }
 
-const transcriptTool = (notes: TranscriptNotes): ToolSpec<typeof transcriptInput> => ({
+const transcriptTool = (surface: Surface): ToolSpec<typeof transcriptInput> => ({
   name: 'arcmira_youtube_transcript',
   title: 'Read a YouTube transcript',
   description:
@@ -334,19 +314,24 @@ const transcriptTool = (notes: TranscriptNotes): ToolSpec<typeof transcriptInput
     // No quality: the account default applies, and a Premium default only reads transcripts the account already owns.
     const answer = await api.get(`/v1/transcripts/${id}`, { language: input.language });
     if (!answer.ok) {
-      const route = answer.error.code === 'transcript_unavailable' ? { note: notes.unavailable } : {};
-      return errorResult(answer.error, { ...answer.body, ...route, call_id: call.id });
+      // A video YouTube has no record of has no caption track to explain.
+      const unavailable = answer.error.code === 'transcript_unavailable' && answer.error.message !== VIDEO_NOT_FOUND;
+      return surface.refusal(answer.error, { ...answer.body, ...(unavailable ? { note: surface.transcript.unavailable } : {}), call_id: call.id });
     }
     const transcript = TranscriptBody.safeParse(answer.body);
     if (!transcript.success) {
       const state = typeof answer.body.state === 'string' ? answer.body.state : null;
-      if (state === 'ready') return errorResult(unreadable(), { call_id: call.id });
-      return errorResult(localError('not_found', 'transcript_unavailable', `Arcmira has no caption lines to return for video ${id} (state ${state}).`), { state, note: notes.unavailable, call_id: call.id });
+      if (state === 'ready') return surface.refusal(unreadable(), { call_id: call.id });
+      return surface.refusal(localError('not_found', 'transcript_unavailable', `Arcmira has no caption lines to return for video ${id} (state ${state}).`), { state, note: surface.transcript.notReady, call_id: call.id });
     }
-    const window = transcriptWindow({ ...transcript.data, note: captionNote(transcript.data.note, notes) }, input.start ?? 0);
+    const { video, note } = transcript.data;
+    const window = transcriptWindow(
+      { ...transcript.data, video: { ...video, watch_url: surface.link(video.watch_url) }, note: surface.note(captionNote(note, surface.transcript)) },
+      input.start ?? 0,
+    );
     return transcriptResult(window.metadata, window.text);
   },
 });
 
-export const youtubeTranscriptTool = transcriptTool(PROGRAM_NOTES);
-export const appsTranscriptTool = transcriptTool(APPS_NOTES);
+export const youtubeTranscriptTool = transcriptTool(PROGRAM_SURFACE);
+export const appsTranscriptTool = transcriptTool(APPS_SURFACE);

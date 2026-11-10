@@ -1,5 +1,6 @@
 import { DEFAULT_API_BASE, SRC, USER_AGENT, noKeyError, type CredentialFailure, type Env } from './api.ts';
 import { MCP_PATH } from './server.ts';
+import { APPS_SURFACE, PROGRAM_SURFACE } from './surface.ts';
 
 /**
  * The MCP authorization spec on top of the key rungs. A request with no bearer, or with a
@@ -47,7 +48,7 @@ export function isOAuthBearer(key: string | null): key is string {
 
 /** The 401 that starts the OAuth dance. The body names the sign-up, for a host that cannot run it. */
 export function challenge(origin: string, reason: CredentialFailure = 'no_credential', path: string = MCP_PATH): Response {
-  const error = noKeyError(reason);
+  const error = (path === MCP_PATH ? PROGRAM_SURFACE : APPS_SURFACE).error(noKeyError(reason));
   return Response.json(
     {
       jsonrpc: '2.0',

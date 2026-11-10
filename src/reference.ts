@@ -42,7 +42,7 @@ export const RULE_PUSH = /call it before you browse|prompt\.md|\boffer\w*\b[^.\n
 const ALERT_PRICE = "each alert uses 25 credits from the account's plan, then its on-demand budget";
 
 /** The one monitor procedure. describe, the arcmira skill and company-watch carry it; the write tool points at it. */
-export const MONITOR_RULE = `MONITORS. A monitor sends alerts for the entities it follows, by email to the account address or by Slack, realtime, hourly or daily. arcmira.monitors.list() lists the user's monitors and monitors.trackers(id) what one follows. Changes run only in arcmira_execute_write; nothing is deleted, and update(id, { paused: true }) pauses. Confirm the monitor and its delivery with the user before a write. create needs name and notify_frequency. Slack needs notify_slack: true and a workspace from arcmira.integrations.slack(): its id as slack_integration_id and default_channel_id as slack_channel_id; with none, the user connects one at ${LINKS.integrations}. addEntities takes up to 90 ids in one call. addName follows an exact name that resolve does not find (a show by its UC id). Topic spellings ("data centers", "datacenters") can be separate ids; follow each. A name may already be followed: list() and trackers(id) show what is, so check them before creating a monitor. A result with attached: false names its reason: entity_not_found, entity_type_not_trackable, tracker_limit_reached, or tracked_in_another_monitor (current_monitor_id names it; attachTrackers moves it once the user agrees). Creating a monitor uses no credits; ${ALERT_PRICE}.`;
+export const MONITOR_RULE = `MONITORS. A monitor sends alerts for the entities it follows, by email to the account address or by Slack, realtime, hourly or daily. arcmira.monitors.list() lists the user's monitors, monitors.trackers(id) what one follows and monitors.alerts(id) the alerts it sent, each with the video_id to read. Changes run only in arcmira_execute_write; nothing is deleted, and update(id, { paused: true }) pauses. Confirm the monitor and its delivery with the user before a write. create needs name and notify_frequency. Slack needs notify_slack: true and a workspace from arcmira.integrations.slack(): its id as slack_integration_id and default_channel_id as slack_channel_id; with none, the user connects one at ${LINKS.integrations}. addEntities takes up to 90 ids in one call. addName follows an exact name that resolve does not find (a show by its UC id). Topic spellings ("data centers", "datacenters") can be separate ids; follow each. A name may already be followed: list() and trackers(id) show what is, so check them before creating a monitor. A result with attached: false names its reason: entity_not_found, entity_type_not_trackable, tracker_limit_reached, or tracked_in_another_monitor (current_monitor_id names it; attachTrackers moves it once the user agrees). Creating a monitor uses no credits; ${ALERT_PRICE}.`;
 
 /** Rule 5, the offer: one fact line in the server instructions and at the end of every skill. */
 export const MONITOR_OFFER = `Monitors can follow what a research turn found, and ${ALERT_PRICE}.`;
@@ -156,6 +156,12 @@ export const METHODS: readonly MethodDoc[] = [
     signature: 'arcmira.monitors.trackers(monitorId)',
     returns: '{ trackers[{id, entity_name, entity_type, display_name, paused}] }',
     notes: ['What one monitor already follows, so a suggestion never adds a duplicate.'],
+  },
+  {
+    name: 'monitors.alerts',
+    signature: 'arcmira.monitors.alerts(monitorId, { limit? })',
+    returns: '{ alerts[{mention_id, video_id, entity_id, tracker_id, channel, created_at, tracker{entity_name, display_name}}], has_more }',
+    notes: ['The alerts a monitor sent, newest first, up to limit (default 25, at most 100), one row per delivery channel; video_id is what transcript(video) reads.'],
   },
   {
     name: 'monitors.create',

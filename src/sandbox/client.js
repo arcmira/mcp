@@ -348,6 +348,11 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       async trackers(monitorId) {
         return get(`/v1/monitors/${needMonitorId(monitorId)}/trackers`);
       },
+      async alerts(monitorId, options) {
+        const { limit } = needOptions('monitors.alerts', options, 'arcmira.monitors.alerts(monitorId, { limit? })');
+        if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100)) throw new ArcmiraError('limit is a whole number from 1 to 100.', 'invalid_request');
+        return get(`/v1/monitors/${needMonitorId(monitorId)}/alerts`, { limit });
+      },
       async create(options) {
         const fields = monitorFields('monitors.create', options, MONITOR_FIELDS);
         if (typeof fields.name !== 'string' || fields.name.trim() === '') throw new ArcmiraError('arcmira.monitors.create needs name, 1 to 100 characters.', 'invalid_request');
