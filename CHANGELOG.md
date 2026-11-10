@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.16: /mcp/apps names no plan, and monitors.alerts
+
+`/mcp/apps` is the surface app stores list, so its results name no plan, price, offer or upgrade link.
+
+- A refusal there says what happened in a plan-free sentence.
+  - A search filter the account can't use gets "The before filter isn't available here. Search again without it."
+  - Dates past the account's newest get "Results here cover videos published up to 2026-10-11. Set after to 2026-10-11 or earlier."
+  - Used-up credits get "This account is out of Arcmira credits for now."
+  - A video with no caption lines gets "This video has no caption track Arcmira can read, so there are no lines to return."
+  - Other refusals keep only their sentences that name no plan or link.
+- A video YouTube has no record of gets the API's own sentence, "YouTube has no video with this id. It may have been removed or the link may be mistyped.", with no caption note, on both paths.
+- A search whose results stop before today says which dates it covers: "These results cover videos published from 2026-08-12 to 2026-10-11."
+- Results there carry no `unlock`, `freshness`, `access`, gate or doc link. `/mcp` keeps the API's words and unlocks unchanged.
+- A test sends every refusal and note through each `/mcp/apps` route and fails on a plan name or a link other than a YouTube watch link.
+
+The program client gains `arcmira.monitors.alerts(monitorId, { limit? })`, a read of `GET /v1/monitors/{id}/alerts`: the alerts a monitor sent, newest first, each with the `video_id` that `transcript(video)` reads. An agent with the MCP server can now act on a monitor's alerts without an API key.
+
 ## 0.10.15: six weekly-job prompts on /mcp
 
 `/mcp` now serves six MCP prompts: `weekly-brand-watch`, `weekly-competitor-reads`, `weekly-person-tracker`, `weekly-sponsor-scout`, `weekly-show-digest` and `weekly-monitor-roundup`. Picking one runs the job once now. Then it gives back the job with the names filled in, and the steps to run it every week as a scheduled task.

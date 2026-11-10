@@ -8,7 +8,8 @@ import { errorResult, okResult, textResult, type ToolResult } from './result.ts'
 import { renderExecution, runProgram, type Access, type Execution, type SandboxHost } from './sandbox.ts';
 import { OUTPUT_LIMITS } from './output.ts';
 import { intentParam } from './telemetry.ts';
-import { appsTranscriptTool, youtubeSearchTool, youtubeTranscriptTool } from './read-tools.ts';
+import { appsSearchTool, appsTranscriptTool, youtubeSearchTool, youtubeTranscriptTool } from './read-tools.ts';
+import { APPS_SURFACE, PROGRAM_SURFACE, type Surface } from './surface.ts';
 
 export const TOOL_NAMES = [
   'arcmira_describe',
@@ -155,7 +156,7 @@ export function feedbackBody(input: Omit<z.output<typeof feedbackInput>, 'intent
   };
 }
 
-export const feedbackTool = tool({
+const feedbackToolFor = (surface: Surface) => tool({
   name: 'arcmira_feedback',
   title: 'Tell Arcmira what went wrong',
   description: 'Saves a feedback record for the Arcmira team. Send one when a result was wrong, slow, empty or confusing, or when the user wants a source or capability Arcmira lacks. Put what they were doing and any source links in note. Each call adds a record; repeated calls create separate records. Costs nothing.',
@@ -164,14 +165,17 @@ export const feedbackTool = tool({
   inputSchema: feedbackInput,
   async run(input, { api }) {
     const answer = await api.post('/v1/feedback', feedbackBody(input), { idempotencyKey: crypto.randomUUID() });
-    if (!answer.ok) return errorResult(answer.error, answer.body);
+    if (!answer.ok) return surface.refusal(answer.error, answer.body);
     return okResult({ ...answer.body, recorded: true });
   },
 });
 
+export const feedbackTool = feedbackToolFor(PROGRAM_SURFACE);
+const appsFeedbackTool = feedbackToolFor(APPS_SURFACE);
+
 export const TOOLS: readonly AnyToolSpec[] = [describeTool, executeReadTool, executeWriteTool, youtubeSearchTool, youtubeTranscriptTool, feedbackTool];
 /** The /mcp/apps surface: named, typed tools only, for directories that refuse a program runner. */
-export const APPS_TOOLS: readonly AnyToolSpec[] = [youtubeSearchTool, appsTranscriptTool, feedbackTool];
+export const APPS_TOOLS: readonly AnyToolSpec[] = [appsSearchTool, appsTranscriptTool, appsFeedbackTool];
 
 async function execute(source: string, access: Access, { sandbox, call }: ToolContext): Promise<ToolResult> {
   if (sandbox === null) return errorResult(sandboxUnavailable());

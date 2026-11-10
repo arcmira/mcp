@@ -415,14 +415,13 @@ describe('/mcp/apps', () => {
     assert.match(JSON.stringify(program), /arcmira_execute_read/);
   });
 
-  it('opens a default-Premium account\'s caption note with the fact that it owns no Premium transcript: no quality argument, price, credits or other tool', async () => {
-    const NO_PREMIUM = "This account has no Premium transcript of this video, so these are the video's own captions.";
+  it("keeps a default-Premium account's caption note to the caption facts: no tier, quality argument, price, credits or other tool", async () => {
     const api = upstream(() => Response.json({ ...longTranscript(false), note: `${CAPTION_NOTE} ${DEFAULT_PREMIUM_NOTE}` }));
     const note = metadataOf(await callTool('arcmira_youtube_transcript', { video: VIDEO }, api.handler, {}, '/mcp/apps')).note as string;
-    assert.equal(note, `${NO_PREMIUM} \`language\` says which track you got.`);
-    assert.doesNotMatch(note, /quality|credit|price|plan|upgrade|arcmira_/i);
+    assert.equal(note, CAPTION_NOTE);
+    assert.doesNotMatch(note, /premium|quality|credit|price|plan|upgrade|arcmira_/i);
     const only = upstream(() => Response.json({ ...longTranscript(false), note: DEFAULT_PREMIUM_NOTE }));
-    assert.equal(metadataOf(await callTool('arcmira_youtube_transcript', { video: VIDEO }, only.handler, {}, '/mcp/apps')).note, NO_PREMIUM);
+    assert.equal(metadataOf(await callTool('arcmira_youtube_transcript', { video: VIDEO }, only.handler, {}, '/mcp/apps')).note, undefined);
     const plain = upstream(() => Response.json({ ...longTranscript(false), note: CAPTION_NOTE }));
     assert.equal(metadataOf(await callTool('arcmira_youtube_transcript', { video: VIDEO }, plain.handler, {}, '/mcp/apps')).note, CAPTION_NOTE);
   });

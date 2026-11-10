@@ -129,10 +129,13 @@ describe('the sandbox client', () => {
     const read = mod.createArcmira({ base: 'https://api.arcmira.com', fetch }).arcmira as unknown as { monitors: Record<string, (...a: unknown[]) => Promise<unknown>> };
     await read.monitors.list();
     await read.monitors.trackers('mon_1');
+    await read.monitors.alerts('mon_1', { limit: 100 });
+    for (const limit of [0, 101, 2.5]) await assert.rejects(read.monitors.alerts('mon_1', { limit }), (e: Error & { code: string }) => e.code === 'invalid_request');
+    await assert.rejects(read.monitors.alerts('mon_1', { since: '2026-11-01' }), (e: Error & { code: string }) => e.code === 'invalid_request');
     await (read as unknown as { integrations: { slack(): Promise<unknown> } }).integrations.slack();
     for (const call of [() => read.monitors.create({ name: 'A', notify_frequency: 'daily' }), () => read.monitors.update('mon_1', { paused: true }), () => read.monitors.addEntities('mon_1', ['ent_14']), () => read.monitors.addName('mon_1', [{ name: 'Acme', type: 'org' }]), () => read.monitors.attachTrackers('mon_1', ['trk_1'])])
       await assert.rejects(call(), (e: Error & { code: string }) => e.code === 'write_tool_required' && /arcmira_execute_write/.test(e.message));
-    assert.deepEqual(sent.map((c) => `${c.method} ${c.path}`), ['GET /v1/monitors', 'GET /v1/monitors/mon_1/trackers', 'GET /v1/integrations/slack']);
+    assert.deepEqual(sent.map((c) => `${c.method} ${c.path}`), ['GET /v1/monitors', 'GET /v1/monitors/mon_1/trackers', 'GET /v1/monitors/mon_1/alerts', 'GET /v1/integrations/slack']);
     const write = mod.createArcmira({ base: 'https://api.arcmira.com', fetch, access: 'write', idempotencyKey: () => `k${++n}` }).arcmira as unknown as typeof read;
     await write.monitors.create({ name: 'Competitors', notify_frequency: 'daily', notify_slack: undefined });
     await write.monitors.update('mon_9', { paused: true });
@@ -140,7 +143,7 @@ describe('the sandbox client', () => {
     await write.monitors.attachTrackers('mon_9', ['trk_1', 'trk_1']);
     await write.monitors.addName('mon_9', [{ name: ' Acme Robotics ', type: 'org' }, { name: 'Jensen Huang', type: 'person', personMatchMode: 'appearances' }, { name: TBPN, type: 'channel' }]);
     await write.monitors.addName('mon_9', { name: 'Ramp', type: 'organization' });
-    assert.deepEqual(sent.slice(3), [
+    assert.deepEqual(sent.slice(4), [
       { method: 'POST', path: '/v1/monitors', body: { name: 'Competitors', notify_frequency: 'daily' }, key: 'k1' },
       { method: 'PATCH', path: '/v1/monitors/mon_9', body: { paused: true }, key: 'k2' },
       { method: 'POST', path: '/v1/monitors/mon_9/entities', body: { entity_ids: ['ent_14', 'ent_99'], person_match_mode: 'both' }, key: 'k3' },
@@ -166,7 +169,7 @@ describe('the sandbox client', () => {
       [() => write.monitors.attachTrackers('mon_9', ['ent_14']), 'id_required'],
     ] as const)
       await assert.rejects(call(), (e: Error & { code: string }) => e.code === code);
-    assert.equal(sent.length, 9);
+    assert.equal(sent.length, 10);
   });
 
   it('resolve sends context and returns the server answer verbatim', async () => {
