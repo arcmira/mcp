@@ -29,7 +29,9 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 /**
  * The scopes each MCP path asks for at sign-in. Hosts request every scope a path lists, and the consent screen
  * shows each one. /mcp keeps the write scopes arcmira_execute_write needs. /mcp/apps serves search, transcript and
- * feedback, which need only read, and offline_access keeps the host connected.
+ * feedback, which need only read. It lists offline_access on purpose, in the header and the document alike: the
+ * newest MCP spec leaves that scope for clients to add themselves, but hosts that request only what a resource lists
+ * would otherwise get no refresh token and sign in again every hour.
  */
 const SERVER_SCOPES = ['openid', 'profile', 'email', 'offline_access', 'read', 'recommendations:read', 'monitors:write', 'trackers:write'];
 const APPS_SCOPES = ['read', 'offline_access'];
