@@ -388,16 +388,26 @@ describe('/mcp/apps', () => {
   it('points its 401 at its own protected-resource document, which names /mcp/apps as the resource', async () => {
     const apps = await post('/mcp/apps', { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
     assert.equal(apps.status, 401);
-    assert.equal(apps.headers.get('www-authenticate'), 'Bearer resource_metadata="https://mcp.arcmira.com/.well-known/oauth-protected-resource/mcp/apps"');
+    assert.equal(apps.headers.get('www-authenticate'), 'Bearer resource_metadata="https://mcp.arcmira.com/.well-known/oauth-protected-resource/mcp/apps", scope="read offline_access"');
     const root = await post('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
     assert.equal(root.headers.get('www-authenticate'), 'Bearer resource_metadata="https://mcp.arcmira.com/.well-known/oauth-protected-resource"', '/mcp is unchanged');
 
     const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
-    const doc = async (path: string) => (await (await worker.fetch(new Request(`https://mcp.arcmira.com${path}`), {}, ctx)).json()) as { resource: string; authorization_servers: string[] };
+    const doc = async (path: string) => (await (await worker.fetch(new Request(`https://mcp.arcmira.com${path}`), {}, ctx)).json()) as { resource: string; authorization_servers: string[]; scopes_supported: string[] };
     assert.equal((await doc('/.well-known/oauth-protected-resource/mcp/apps')).resource, 'https://mcp.arcmira.com/mcp/apps');
     assert.equal((await doc('/.well-known/oauth-protected-resource')).resource, 'https://mcp.arcmira.com/mcp');
     assert.equal((await doc('/.well-known/oauth-protected-resource/mcp')).resource, 'https://mcp.arcmira.com/mcp');
     assert.deepEqual((await doc('/.well-known/oauth-protected-resource/mcp/apps')).authorization_servers, (await doc('/.well-known/oauth-protected-resource')).authorization_servers);
+  });
+
+  it('asks for read and offline_access only, so the consent screen offers nothing its three read tools cannot do', async () => {
+    const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
+    const scopes = async (path: string) => ((await (await worker.fetch(new Request(`https://mcp.arcmira.com${path}`), {}, ctx)).json()) as { scopes_supported: string[] }).scopes_supported;
+    assert.deepEqual(await scopes('/.well-known/oauth-protected-resource/mcp/apps'), ['read', 'offline_access']);
+    for (const path of ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp']) {
+      const server = await scopes(path);
+      for (const scope of ['openid', 'profile', 'email', 'offline_access', 'read', 'recommendations:read', 'monitors:write', 'trackers:write']) assert.ok(server.includes(scope), `${path} keeps ${scope}`);
+    }
   });
 
   it('runs the plain tools there, and a video with no captions gets a note that names no missing tool', async () => {
