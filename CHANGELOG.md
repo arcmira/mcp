@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.18: OpenAI's domain check
+
+- `GET /.well-known/openai-apps-challenge` answers the token OpenAI's publisher portal issued for mcp.arcmira.com, as the whole plain-text body, with no credential. OpenAI's app directory reads it to confirm the domain before it reviews the `/mcp/apps` app.
+- Tools, results and `/mcp` are unchanged.
+
 ## 0.10.17: mentions name their id and link, and /mcp/apps keeps entity names
 
 - `arcmira_describe` lists each mention row's `id` and `media.url`, which `arcmira.mentions` already returned. A program can key a row on the mention id and link the video without building the URL.

@@ -165,6 +165,10 @@ function sandboxFor(env: Env, ctx: ExecutionContext, key: string, inboundClient:
   });
 }
 
+/** OpenAI's app directory checks that this domain is ours here, against the token its publisher portal issued for mcp.arcmira.com. */
+export const OPENAI_APPS_CHALLENGE_PATH = '/.well-known/openai-apps-challenge';
+export const OPENAI_APPS_CHALLENGE = 'y8wT9QBmMKOJz8MYWNTaOOrBraLHwLeGUrDan5jf8Bc';
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -215,6 +219,9 @@ export default {
     }
     if (url.pathname === AUTHORIZATION_SERVER_PATH) return authorizationServerMetadata(env);
     if (SERVER_CARD_PATHS.has(url.pathname)) return serverCardResponse(url.origin);
+    if (url.pathname === OPENAI_APPS_CHALLENGE_PATH) {
+      return new Response(OPENAI_APPS_CHALLENGE, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
+    }
     if (url.pathname === '/' || url.pathname === '/health') return landing();
     return Response.json(
       {
