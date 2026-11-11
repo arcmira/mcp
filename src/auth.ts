@@ -26,6 +26,16 @@ export class AuthUnavailable extends Error {
 }
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+/**
+ * The scopes each MCP path asks for at sign-in. Hosts request every scope a path lists, and the consent screen
+ * shows each one. /mcp keeps the write scopes arcmira_execute_write needs. /mcp/apps serves search, transcript and
+ * feedback, which need only read. It lists offline_access on purpose, in the header and the document alike: the
+ * newest MCP spec leaves that scope for clients to add themselves, but hosts that request only what a resource lists
+ * would otherwise get no refresh token and sign in again every hour.
+ */
+const SERVER_SCOPES = ['openid', 'profile', 'email', 'offline_access', 'read', 'recommendations:read', 'monitors:write', 'trackers:write'];
+const APPS_SCOPES = ['read', 'offline_access'];
+
 export function apiBase(env: Env): string {
   return (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
 }
@@ -36,7 +46,7 @@ export function protectedResourceMetadata(origin: string, env: Env, path: string
     resource: `${origin}${path}`,
     authorization_servers: [apiBase(env)],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['openid', 'profile', 'email', 'offline_access', 'read', 'recommendations:read', 'monitors:write', 'trackers:write'],
+    scopes_supported: path === MCP_PATH ? SERVER_SCOPES : APPS_SCOPES,
     resource_name: 'Arcmira MCP',
     resource_documentation: 'https://arcmira.com/docs/authentication#oauth-for-mcp-clients',
   };
@@ -58,7 +68,10 @@ export function challenge(origin: string, reason: CredentialFailure = 'no_creden
     {
       status: 401,
       headers: {
-        'WWW-Authenticate': `Bearer resource_metadata="${origin}${PROTECTED_RESOURCE_PATH}${path === MCP_PATH ? '' : path}"`,
+        'WWW-Authenticate':
+          path === MCP_PATH
+            ? `Bearer resource_metadata="${origin}${PROTECTED_RESOURCE_PATH}"`
+            : `Bearer resource_metadata="${origin}${PROTECTED_RESOURCE_PATH}${path}", scope="${APPS_SCOPES.join(' ')}"`,
         'Access-Control-Expose-Headers': 'WWW-Authenticate',
       },
     },

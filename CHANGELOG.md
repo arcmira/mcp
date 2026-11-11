@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.19: /mcp/apps asks for read access only
+
+- `/mcp/apps` asks for `read` and `offline_access` at sign-in. Its protected-resource document lists only those two, and its 401 names them in `scope`. Its search, transcript and feedback tools need nothing more. The consent screen no longer asks to manage monitors and trackers or to read the profile and email address.
+- `/mcp` keeps every scope, including the write scopes `arcmira_execute_write` needs.
+- Tools and results are unchanged.
+
 ## 0.10.18: OpenAI's domain check
 
 - `GET /.well-known/openai-apps-challenge` answers the token OpenAI's publisher portal issued for mcp.arcmira.com, as the whole plain-text body, with no credential. OpenAI's app directory reads it to confirm the domain before it reviews the `/mcp/apps` app.
