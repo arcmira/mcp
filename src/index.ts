@@ -14,6 +14,7 @@ import {
   tokenIsLive,
 } from './auth.ts';
 import { ICON_PATH, SERVER_CARD_PATHS, serverCardResponse } from './card.ts';
+import { OPENAI_APPS_CHALLENGE, OPENAI_APPS_CHALLENGE_PATH } from './openai-challenge.ts';
 import { APPS_PATH, MCP_PATH, SURFACES, createServer, isRetiredTool, retiredToolResult, type CallTag } from './server.ts';
 import { outboundAllowed, type Access, type SandboxHost } from './sandbox.ts';
 import { toolCallRecorder } from './telemetry.ts';
@@ -164,10 +165,6 @@ function sandboxFor(env: Env, ctx: ExecutionContext, key: string, inboundClient:
     access,
   });
 }
-
-/** OpenAI's app directory checks that this domain is ours here, against the token its publisher portal issued for mcp.arcmira.com. */
-export const OPENAI_APPS_CHALLENGE_PATH = '/.well-known/openai-apps-challenge';
-export const OPENAI_APPS_CHALLENGE = 'y8wT9QBmMKOJz8MYWNTaOOrBraLHwLeGUrDan5jf8Bc';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
