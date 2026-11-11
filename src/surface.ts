@@ -23,31 +23,49 @@ const NOT_HERE = "Arcmira can't return this here.";
 
 /** A word that names a plan, a price or an offer, also inside a snake_case name like filter_requires_paid. */
 const OFFER =
-  /(?<![a-z])(?:pro|premium|free|paid|upgrad\w*|trials?|plans?|pricing|prices?|costs?|billing|subscri\w*|tiers?|seats?|buy\w*|purchas\w*|checkout|top.?up|sign.?up|ultra|enterprise|on-demand|unlock\w*|discount\w*|coupon\w*|promo\w*|usd|eur|gbp|per (?:month|year|seat)|monthly|annual\w*)(?![a-z])|[$€£]\s?\d|\d\s?%\s?off(?![a-z])/i;
+  /(?<![a-z])(?:pro|premium|free|paid|upgrad\w*|trials?|plans?|pricing|prices?|costs?|billing|subscri\w*|tiers?|seats?|buy\w*|purchas\w*|checkout|top.?up|sign.?up|ultra|enterprise|on-demand|unlock\w*|discount\w*|coupon\w*|promo(?:s|\s?codes?)?|usd|eur|gbp|per (?:month|year|seat)|monthly|annual\w*)(?![a-z])|[$€£]\s?\d|\d\s?%\s?off(?![a-z])/i;
 const LINK = /https?:\/\/\S+|(?:[a-z0-9-]+\.)+(?:com|net|org|io|ai|dev|app|co|gg|to|so|sh|me|tv)(?![a-z0-9-])\S*/gi;
 const YOUTUBE_WATCH = /^(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?/i;
 /** A link to the second a passage was said: YouTube's watch page or Arcmira's, which embeds YouTube's player. */
 const WATCH_LINK = /^https:\/\/(?:www\.)?(?:youtube|arcmira)\.com\/watch\?(\S*)$/;
-/** A watch link's own parameters: the video and the second it opens at. */
-const WATCH_PARAM = /^(?:v=[\w-]{11}|t=\d+(?:\.\d+)?s?)$/;
+/** A watch link's own parameters, the video and the second it opens at, each passed unchecked once. */
+const WATCH_PARAM: ReadonlyMap<string, RegExp> = new Map([
+  ['v', /^[\w-]{11}$/],
+  ['t', /^\d+(?:\.\d+)?s?$/],
+]);
 
-/** True when `text` names a plan or an offer, or carries a link that is not a YouTube watch link. */
-const offers = (text: string) => OFFER.test(text) || [...text.matchAll(LINK)].some(([link]) => !YOUTUBE_WATCH.test(link));
+/** True when `text` names a plan or an offer, or carries a link other than a YouTube watch link with plain parameters. */
+const offers = (text: string): boolean =>
+  OFFER.test(text) || [...text.matchAll(LINK)].some(([link]) => !YOUTUBE_WATCH.test(link) || queryOffers(link.slice(link.indexOf('?') + 1)));
 
+/** `part` decoded; undefined when it does not decode, which no link the API builds does. */
 const decoded = (part: string) => {
   try {
     return decodeURIComponent(part.replaceAll('+', ' '));
   } catch {
-    return part;
+    return undefined;
   }
 };
+
+/** True when a watch link's query, besides its first v and t, names an offer, carries another link or does not decode. */
+function queryOffers(query: string): boolean {
+  const passed = new Set<string>();
+  return query.split('&').some((part) => {
+    if (part === '') return false;
+    const [key = '', value = ''] = part.split(/=(.*)/s);
+    if (!passed.has(key) && WATCH_PARAM.get(key)?.test(value)) {
+      passed.add(key);
+      return false;
+    }
+    const text = decoded(part);
+    return text === undefined || offers(text);
+  });
+}
 
 /** `url` when it is a watch link whose other parameters, decoded, name no plan, offer or other link. */
 function watchLink(url: string | null | undefined): string | undefined {
   const query = url?.match(WATCH_LINK)?.[1];
-  if (query === undefined) return undefined;
-  const rest = query.split('&').filter((part) => part !== '' && !WATCH_PARAM.test(part)).map(decoded);
-  return rest.some(offers) ? undefined : url!;
+  return query === undefined || queryOffers(query) ? undefined : url!;
 }
 
 /** The sentences of `text` that name no plan, offer or other link; undefined when none is left. */

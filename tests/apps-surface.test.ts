@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { callTool, listTools, type ToolReply } from './handler.ts';
 import worker from '../src/index.ts';
 import { challenge } from '../src/auth.ts';
+import { planFree } from '../src/surface.ts';
 
 /**
  * /mcp/apps is the store surface, and store agreements forbid an upsell. Every refusal and note it can return goes
@@ -28,7 +29,7 @@ const RESULT_LINK = `https://arcmira.com/watch?v=${VIDEO}&t=10`;
 const pro = { tier: 'pro', url: PRICING, offer: null };
 /** Sentences a later API wording could add, each naming an offer without a plan name. */
 const FUTURE_WORDING =
-  'Upgrading lifts this limit. Sponsor reads cost $20 a month. Subscribe to see more. A higher tier reads them. Buy more credits at arcmira.com/dashboard/billing. Top up your credits to read this. It is 19 EUR per month. This needs the Plus or Team seat. Sign up at arcmira dot com. Use code SAVE20 for a discount. A coupon lifts this limit. Promo codes work here. Get 20% off today.';
+  'Upgrading lifts this limit. Sponsor reads cost $20 a month. Subscribe to see more. A higher tier reads them. Buy more credits at arcmira.com/dashboard/billing. Top up your credits to read this. It is 19 EUR per month. This needs the Plus or Team seat. Sign up at arcmira dot com. Use code SAVE20 for a discount. A coupon lifts this limit. Promo codes work here. Get 20% off today. Watch https://www.youtube.com/watch?v=dQw4w9WgXcQ&r=https://shop.example.com/deal now.';
 
 /** The API's refusals as v1 words them today, gates and unlocks included. */
 type Refusal = { status: number; error: Record<string, unknown>; body?: Record<string, unknown> };
@@ -60,6 +61,7 @@ const REFUSALS: Record<string, Refusal> = {
     body: {
       options: [{ id: 'ent_1', label: 'The Free Press', url: PRICING, note: 'Start a Pro trial at https://arcmira.com/pricing' }],
       state: 'upgrade_pending',
+      reason: 'upgrade_required',
       languages: [{ code: 'en', name: 'English (Original)', generated: true }, { code: 'pt', name: 'Premium audio', generated: false, unlock: pro }, 'en'],
       upgrade_url: PRICING,
     },
@@ -243,7 +245,7 @@ describe('/mcp/apps names no plan, price or offer', () => {
       const reply = await replyFor(route.tool, route.args, (url) => (url.pathname === route.path ? refusal(REFUSALS.offer_fields!) : Response.json({})));
       const { error, call_id, ...details } = bodyOf(reply);
       assert.ok(error, route.name);
-      assert.ok(call_id === undefined || typeof call_id === 'string', route.name);
+      assert.equal(typeof call_id, route.name === 'feedback' ? 'undefined' : 'string', route.name);
       assert.deepEqual(details, OFFER_FIELDS_KEPT, route.name);
     }
   });
@@ -291,13 +293,21 @@ describe('/mcp/apps names no plan, price or offer', () => {
       `https://arcmira.com/watch?v=${VIDEO}&t=10&src=mcp-tool&ah=api_key&ac=mcpc_5525d340538049f69d927c10dc47d7d0`,
       `https://www.youtube.com/watch?v=${VIDEO}&t=10s`,
       `https://www.youtube.com/watch?v=${VIDEO}`,
+      'https://www.youtube.com/watch?v=a-pro-video&t=90.5',
     ])
       assert.equal(await linked(link), link, 'a watch link with no offer stays');
-    for (const offer of ['coupon=SAVE20', 'utm_campaign=pro_trial', 'next=https%3A%2F%2Farcmira.com%2Fpricing', 'ref=arcmira.com/pricing', 'promo=1', 'note=20%25%20off', 'v=free_trial']) {
+    for (const offer of ['coupon=SAVE20', 'utm_campaign=pro_trial', 'next=https%3A%2F%2Farcmira.com%2Fpricing', 'ref=arcmira.com/pricing', 'promo=1', 'note=20%25%20off', 'v=free_trial', 'v=free-trial-', 'next=%ZZ%68ttps%3A%2F%2Farcmira%2Ecom%2Fpricing', `next=${encodeURIComponent('https://www.youtube.com/watch?v=x&r=https://shop.example.com/deal')}`]) {
       const link = `https://arcmira.com/watch?v=${VIDEO}&t=10&${offer}`;
       assert.equal(await linked(link), undefined, offer);
       assert.equal(await linked(link, '/mcp'), link, `/mcp keeps ${offer}`);
     }
+  });
+
+  it('removes a sentence that names a promo code, and keeps one that only shares the stem', () => {
+    assert.equal(
+      planFree('The show promoted its own tour. Use promo code SAVE20. Promos end Friday. Self-promotion counts as sponsored.'),
+      'The show promoted its own tour. Self-promotion counts as sponsored.',
+    );
   });
 
   it('asks for a credential with no offer, and /mcp keeps its sign-up action', async () => {
