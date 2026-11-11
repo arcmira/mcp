@@ -14,6 +14,7 @@ import {
   tokenIsLive,
 } from './auth.ts';
 import { ICON_PATH, SERVER_CARD_PATHS, serverCardResponse } from './card.ts';
+import { OPENAI_APPS_CHALLENGE, OPENAI_APPS_CHALLENGE_PATH } from './openai-challenge.ts';
 import { APPS_PATH, MCP_PATH, SURFACES, createServer, isRetiredTool, retiredToolResult, type CallTag } from './server.ts';
 import { outboundAllowed, type Access, type SandboxHost } from './sandbox.ts';
 import { toolCallRecorder } from './telemetry.ts';
@@ -215,6 +216,9 @@ export default {
     }
     if (url.pathname === AUTHORIZATION_SERVER_PATH) return authorizationServerMetadata(env);
     if (SERVER_CARD_PATHS.has(url.pathname)) return serverCardResponse(url.origin);
+    if (url.pathname === OPENAI_APPS_CHALLENGE_PATH) {
+      return new Response(OPENAI_APPS_CHALLENGE, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
+    }
     if (url.pathname === '/' || url.pathname === '/health') return landing();
     return Response.json(
       {
