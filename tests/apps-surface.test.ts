@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { callTool, listTools, type ToolReply } from './handler.ts';
 import worker from '../src/index.ts';
 import { challenge } from '../src/auth.ts';
+import { planFree } from '../src/surface.ts';
 
 /**
  * /mcp/apps is the store surface, and store agreements forbid an upsell. Every refusal and note it can return goes
@@ -28,7 +29,7 @@ const RESULT_LINK = `https://arcmira.com/watch?v=${VIDEO}&t=10`;
 const pro = { tier: 'pro', url: PRICING, offer: null };
 /** Sentences a later API wording could add, each naming an offer without a plan name. */
 const FUTURE_WORDING =
-  'Upgrading lifts this limit. Sponsor reads cost $20 a month. Subscribe to see more. A higher tier reads them. Buy more credits at arcmira.com/dashboard/billing. Top up your credits to read this. It is 19 EUR per month. This needs the Plus or Team seat. Sign up at arcmira dot com.';
+  'Upgrading lifts this limit. Sponsor reads cost $20 a month. Subscribe to see more. A higher tier reads them. Buy more credits at arcmira.com/dashboard/billing. Top up your credits to read this. It is 19 EUR per month. This needs the Plus or Team seat. Sign up at arcmira dot com. Use code SAVE20 for a discount. A coupon lifts this limit. Promo codes work here. Get 20% off today. Watch https://www.youtube.com/watch?v=dQw4w9WgXcQ&r=https://shop.example.com/deal now.';
 
 /** The API's refusals as v1 words them today, gates and unlocks included. */
 type Refusal = { status: number; error: Record<string, unknown>; body?: Record<string, unknown> };
@@ -57,9 +58,17 @@ const REFUSALS: Record<string, Refusal> = {
   offer_fields: {
     status: 400,
     error: { type: 'invalid_request_error', code: 'invalid_request', reason: 'upgrade_required', message: 'This request is not valid here.' },
-    body: { options: [{ id: 'ent_1', label: 'Start a Pro trial at https://arcmira.com/pricing' }], state: 'upgrade_pending', languages: ['en', 'Premium audio'] },
+    body: {
+      options: [{ id: 'ent_1', label: 'The Free Press', url: PRICING, note: 'Start a Pro trial at https://arcmira.com/pricing' }],
+      state: 'upgrade_pending',
+      reason: 'upgrade_required',
+      languages: [{ code: 'en', name: 'English (Original)', generated: true }, { code: 'pt', name: 'Premium audio', generated: false, unlock: pro }, 'en'],
+      upgrade_url: PRICING,
+    },
   },
 };
+/** The offer_fields details as /mcp/apps keeps them: each field in its one shape, the entity name as written. */
+const OFFER_FIELDS_KEPT = { options: [{ id: 'ent_1', label: 'The Free Press' }], languages: [{ code: 'en', name: 'English (Original)', generated: true }, { code: 'pt', generated: false }] };
 
 const refusal = ({ status, error, body }: Refusal) =>
   Response.json({ ...body, error: { doc_url: `https://arcmira.com/docs/errors#${error.code}`, request_id: 'req_fixture', ...error } }, { status });
@@ -98,9 +107,16 @@ function strings(reply: ToolReply): Text[] {
   });
 }
 
-/** `text` with the transcript kind taken out where apps may name it. */
+/**
+ * The names in a refusal's or search's `resolved` and `options`: an entity's name, or the name the person searched
+ * for. They are data like a result title, so a name such as "The Free Press" stays as written.
+ */
+const ENTITY_NAME = /^(?:options\.#\.label|resolved\.#\.(?:name|matched))$/;
+
+/** `text` with what apps may name taken out: the transcript kind where it is a source, and entity names. */
 function exempt({ path, text }: Text): string {
   const at = path.join('.');
+  if (ENTITY_NAME.test(at)) return '';
   if (text === SOURCE_KIND && (/(?:^|\.)source$/.test(at) || at.endsWith('properties.source.enum.#'))) return '';
   if (at.endsWith('properties.source.description')) return text.replaceAll(new RegExp(`(?<![a-z_])${SOURCE_KIND}(?![a-z_])`, 'g'), '');
   return text;
@@ -109,7 +125,7 @@ function exempt({ path, text }: Text): string {
 function assertPlanFree(found: Text[], where: string) {
   for (const { path, text } of found) {
     assert.doesNotMatch(exempt({ path, text }), PLAN, `${where} at ${path.join('.')}: ${text}`);
-    assert.doesNotMatch(text, OTHER_LINK, `${where}: ${text}`);
+    assert.doesNotMatch(exempt({ path, text }), OTHER_LINK, `${where}: ${text}`);
     assert.doesNotMatch(text, /\s{2}/, `${where} has a double space: ${text}`);
     assert.ok(!GATE_FIELDS.includes(text), `${where} carries ${text}`);
   }
@@ -224,6 +240,39 @@ describe('/mcp/apps names no plan, price or offer', () => {
     assert.deepEqual(recorded.result.structuredContent, { feedback_id: 42, recorded: true });
   });
 
+  it("keeps a refusal's details in their one shape on every route", async () => {
+    for (const route of ROUTES) {
+      const reply = await replyFor(route.tool, route.args, (url) => (url.pathname === route.path ? refusal(REFUSALS.offer_fields!) : Response.json({})));
+      const { error, call_id, ...details } = bodyOf(reply);
+      assert.ok(error, route.name);
+      assert.equal(typeof call_id, route.name === 'feedback' ? 'undefined' : 'string', route.name);
+      assert.deepEqual(details, OFFER_FIELDS_KEPT, route.name);
+    }
+  });
+
+  it('keeps entity names in resolved and options as written, and nothing beside them', async () => {
+    const search = ROUTES[0]!;
+    const ask = await replyFor(search.tool, { query: 'stablecoins', about: ['Free Press'] }, () =>
+      Response.json({ best: null, suggested: null, ask: { options: [{ id: 'ent_1', label: 'The Free Press' }, { id: 'ent_2', label: 'Pro Football Focus', hint: 'Start a Pro trial' }] } }));
+    assert.deepEqual(bodyOf(ask).options, [{ id: 'ent_1', label: 'The Free Press' }, { id: 'ent_2', label: 'Pro Football Focus' }]);
+    assertPlanFree(strings(ask), 'name lookup options');
+
+    const named = (sent: Response) =>
+      replyFor(search.tool, { query: 'stablecoins', about: ['The Free Press'] }, (url) =>
+        url.pathname === '/v1/entities/resolve' ? Response.json({ best: { id: 'ent_1', name: 'The Free Press' }, suggested: null, ask: null }) : sent);
+    const resolved = [{ filter: 'about', name: 'The Free Press', matched: 'The Free Press', id: 'ent_1' }];
+    const refused = await named(refusal(REFUSALS.filter_before!));
+    assert.deepEqual(bodyOf(refused).resolved, resolved);
+    assertPlanFree(strings(refused), 'refusal resolved');
+    const answered = await named(Response.json({ chunks: [] }));
+    assert.deepEqual(bodyOf(answered).resolved, resolved);
+    assertPlanFree(strings(answered), 'answer resolved');
+
+    // The exemption covers those names alone: a sentence with a plan word beside them still fails the check.
+    for (const path of [['options', '#', 'hint'], ['resolved', '#', 'assumed'], ['note'], ['error', 'message']])
+      assert.throws(() => assertPlanFree([{ path, text: 'The Free Press needs a Pro trial.' }], 'beside a name'), assert.AssertionError, path.join('.'));
+  });
+
   it('links a result only to the second it was said', async () => {
     const search = ROUTES[0]!;
     const transcript = ROUTES[2]!;
@@ -237,6 +286,28 @@ describe('/mcp/apps names no plan, price or offer', () => {
     }
     const kept = bodyOf(await replyFor(search.tool, search.args, () => Response.json({ chunks: [{ ...hit, watch_url: RESULT_LINK }] }))) as { results: Array<Record<string, unknown>> };
     assert.equal(kept.results[0]!.watch_url, RESULT_LINK);
+
+    const linked = async (watch_url: string, path = '/mcp/apps') =>
+      ((bodyOf(await replyFor(search.tool, search.args, () => Response.json({ chunks: [{ ...hit, watch_url }] }), path)) as { results: Array<Record<string, unknown>> }).results[0]!.watch_url);
+    for (const link of [
+      `https://arcmira.com/watch?v=${VIDEO}&t=10&src=mcp-tool&ah=api_key&ac=mcpc_5525d340538049f69d927c10dc47d7d0`,
+      `https://www.youtube.com/watch?v=${VIDEO}&t=10s`,
+      `https://www.youtube.com/watch?v=${VIDEO}`,
+      'https://www.youtube.com/watch?v=a-pro-video&t=90.5',
+    ])
+      assert.equal(await linked(link), link, 'a watch link with no offer stays');
+    for (const offer of ['coupon=SAVE20', 'utm_campaign=pro_trial', 'next=https%3A%2F%2Farcmira.com%2Fpricing', 'ref=arcmira.com/pricing', 'promo=1', 'note=20%25%20off', 'v=free_trial', 'v=free-trial-', 'next=%ZZ%68ttps%3A%2F%2Farcmira%2Ecom%2Fpricing', `next=${encodeURIComponent('https://www.youtube.com/watch?v=x&r=https://shop.example.com/deal')}`]) {
+      const link = `https://arcmira.com/watch?v=${VIDEO}&t=10&${offer}`;
+      assert.equal(await linked(link), undefined, offer);
+      assert.equal(await linked(link, '/mcp'), link, `/mcp keeps ${offer}`);
+    }
+  });
+
+  it('removes a sentence that names a promo code, and keeps one that only shares the stem', () => {
+    assert.equal(
+      planFree('The show promoted its own tour. Use promo code SAVE20. Promos end Friday. Self-promotion counts as sponsored.'),
+      'The show promoted its own tour. Self-promotion counts as sponsored.',
+    );
   });
 
   it('asks for a credential with no offer, and /mcp keeps its sign-up action', async () => {

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.17: mentions name their id and link, and /mcp/apps keeps entity names
+
+- `arcmira_describe` lists each mention row's `id` and `media.url`, which `arcmira.mentions` already returned. A program can key a row on the mention id and link the video without building the URL.
+- On `/mcp/apps`, the names in `resolved` and `options` stay as written. They are data, like a result title, so a show or company such as "The Free Press" keeps its name. A sentence beside them that names a plan is still removed.
+- On `/mcp/apps`, each refusal detail keeps one shape: `options` as `{id, label}`, `languages` as `{code, name, generated}`, `resolved` as `{filter, name, matched, id, assumed}`, and `reason`, `state` and `call_id` as strings. A field the API adds later is left out.
+- On `/mcp/apps`, discounts, coupons, promo codes and a percent off count as offers, so a sentence that names one is removed.
+- On `/mcp/apps`, a watch link is left out when a parameter other than its first video and second names an offer, holds another link, or does not decode. A link whose other parameters name none, such as `src`, stays. A YouTube watch link inside a sentence or a parameter is checked the same way.
+- `/mcp` is unchanged.
+- The apps test exempts only those name fields, and keeps a case that proves a plan word beside them still fails.
+
 ## 0.10.16: /mcp/apps names no plan, and monitors.alerts
 
 `/mcp/apps` is the surface app stores list, so its results name no plan, price, offer or upgrade link.

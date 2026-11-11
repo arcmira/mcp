@@ -23,14 +23,50 @@ const NOT_HERE = "Arcmira can't return this here.";
 
 /** A word that names a plan, a price or an offer, also inside a snake_case name like filter_requires_paid. */
 const OFFER =
-  /(?<![a-z])(?:pro|premium|free|paid|upgrad\w*|trials?|plans?|pricing|prices?|costs?|billing|subscri\w*|tiers?|seats?|buy\w*|purchas\w*|checkout|top.?up|sign.?up|ultra|enterprise|on-demand|unlock\w*|usd|eur|gbp|per (?:month|year|seat)|monthly|annual\w*)(?![a-z])|[$€£]\s?\d/i;
+  /(?<![a-z])(?:pro|premium|free|paid|upgrad\w*|trials?|plans?|pricing|prices?|costs?|billing|subscri\w*|tiers?|seats?|buy\w*|purchas\w*|checkout|top.?up|sign.?up|ultra|enterprise|on-demand|unlock\w*|discount\w*|coupon\w*|promo(?:s|\s?codes?)?|usd|eur|gbp|per (?:month|year|seat)|monthly|annual\w*)(?![a-z])|[$€£]\s?\d|\d\s?%\s?off(?![a-z])/i;
 const LINK = /https?:\/\/\S+|(?:[a-z0-9-]+\.)+(?:com|net|org|io|ai|dev|app|co|gg|to|so|sh|me|tv)(?![a-z0-9-])\S*/gi;
 const YOUTUBE_WATCH = /^(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?/i;
 /** A link to the second a passage was said: YouTube's watch page or Arcmira's, which embeds YouTube's player. */
-const WATCH_LINK = /^https:\/\/(?:www\.)?(?:youtube|arcmira)\.com\/watch\?\S*$/;
+const WATCH_LINK = /^https:\/\/(?:www\.)?(?:youtube|arcmira)\.com\/watch\?(\S*)$/;
+/** A watch link's own parameters, the video and the second it opens at, each passed unchecked once. */
+const WATCH_PARAM: ReadonlyMap<string, RegExp> = new Map([
+  ['v', /^[\w-]{11}$/],
+  ['t', /^\d+(?:\.\d+)?s?$/],
+]);
 
-/** True when `text` names a plan or an offer, or carries a link that is not a YouTube watch link. */
-const offers = (text: string) => OFFER.test(text) || [...text.matchAll(LINK)].some(([link]) => !YOUTUBE_WATCH.test(link));
+/** True when `text` names a plan or an offer, or carries a link other than a YouTube watch link with plain parameters. */
+const offers = (text: string): boolean =>
+  OFFER.test(text) || [...text.matchAll(LINK)].some(([link]) => !YOUTUBE_WATCH.test(link) || queryOffers(link.slice(link.indexOf('?') + 1)));
+
+/** `part` decoded; undefined when it does not decode, which no link the API builds does. */
+const decoded = (part: string) => {
+  try {
+    return decodeURIComponent(part.replaceAll('+', ' '));
+  } catch {
+    return undefined;
+  }
+};
+
+/** True when a watch link's query, besides its first v and t, names an offer, carries another link or does not decode. */
+function queryOffers(query: string): boolean {
+  const passed = new Set<string>();
+  return query.split('&').some((part) => {
+    if (part === '') return false;
+    const [key = '', value = ''] = part.split(/=(.*)/s);
+    if (!passed.has(key) && WATCH_PARAM.get(key)?.test(value)) {
+      passed.add(key);
+      return false;
+    }
+    const text = decoded(part);
+    return text === undefined || offers(text);
+  });
+}
+
+/** `url` when it is a watch link whose other parameters, decoded, name no plan, offer or other link. */
+function watchLink(url: string | null | undefined): string | undefined {
+  const query = url?.match(WATCH_LINK)?.[1];
+  return query === undefined || queryOffers(query) ? undefined : url!;
+}
 
 /** The sentences of `text` that name no plan, offer or other link; undefined when none is left. */
 export function planFree(text: string | null | undefined): string | undefined {
@@ -141,8 +177,36 @@ function appsMessage(error: ApiErrorBody & { details?: unknown }, details: Recor
 
 /** The error fields /mcp/apps keeps: no gate, unlock, details or doc link. */
 const APPS_ERROR_FIELDS = ['type', 'reason', 'param', 'retry_after_seconds', 'retry_after', 'request_id'] as const;
-/** The tool details /mcp/apps keeps beside a refusal. */
-const APPS_DETAIL_FIELDS = ['call_id', 'reason', 'languages', 'state', 'resolved', 'options'] as const;
+/** How one detail field reads on /mcp/apps; undefined leaves it out. */
+type Shape = (value: unknown) => unknown;
+/** An entity's name, or the name a person searched for, is data like a result title and stays as written. */
+const name: Shape = (value) => (typeof value === 'string' ? value : undefined);
+const flag: Shape = (value) => (typeof value === 'boolean' ? value : undefined);
+
+/** `value` with only `fields`, each in its shape; undefined when none is left. */
+function shaped(value: unknown, fields: Readonly<Record<string, Shape>>): Record<string, unknown> | undefined {
+  const from = record(value);
+  if (!from) return undefined;
+  const kept = Object.entries(fields)
+    .map(([key, shape]) => [key, shape(from[key])] as const)
+    .filter(([, inner]) => inner !== undefined);
+  return kept.length > 0 ? Object.fromEntries(kept) : undefined;
+}
+
+const rows =
+  (fields: Readonly<Record<string, Shape>>): Shape =>
+  (value) =>
+    Array.isArray(value) ? value.map((row) => shaped(row, fields)).filter((row) => row !== undefined) : undefined;
+
+/** The tool details /mcp/apps keeps beside a refusal, each in the one shape it has. */
+const APPS_DETAILS: Readonly<Record<string, Shape>> = {
+  call_id: plain,
+  reason: plain,
+  state: plain,
+  languages: rows({ code: plain, name: plain, generated: flag }),
+  resolved: rows({ filter: plain, name, matched: name, id: plain, assumed: (value) => (value === true ? true : plain(value)) }),
+  options: rows({ id: plain, label: name }),
+};
 
 function appsError(error: ApiErrorBody, details: Record<string, unknown> = {}): ApiErrorBody {
   const kept = Object.fromEntries(
@@ -150,17 +214,6 @@ function appsError(error: ApiErrorBody, details: Record<string, unknown> = {}): 
   );
   const code = APPS_CODES[error.code] ?? plain(error.code) ?? 'not_available';
   return { ...kept, code, message: appsMessage(error, details) } as ApiErrorBody;
-}
-
-/** `value` with every string that names a plan, an offer or another link taken out, at any depth. */
-function withoutOffers(value: Record<string, unknown>): Record<string, unknown> {
-  const clean = (inner: unknown): unknown => {
-    if (typeof inner === 'string') return offers(inner) ? undefined : inner;
-    if (Array.isArray(inner)) return inner.map(clean).filter((item) => item !== undefined);
-    const from = record(inner);
-    return from ? Object.fromEntries(Object.entries(from).map(([key, item]) => [key, clean(item)]).filter(([, item]) => item !== undefined)) : inner;
-  };
-  return clean(value) as Record<string, unknown>;
 }
 
 /** The search answer's dates, said plainly when the account's results stop before today. */
@@ -183,13 +236,13 @@ export const APPS_SURFACE: Surface = {
     noPremium: (rest) => rest,
   },
   note: planFree,
-  link: (url) => (url && WATCH_LINK.test(url) ? url : undefined),
+  link: watchLink,
   error: (error) => appsError(error),
   known: knownFields,
   refusal(error, details = {}) {
     // A transcript Arcmira holds in some state has no caption track to explain.
     const note = typeof details.state === 'string' ? undefined : planFree(typeof details.note === 'string' ? details.note : undefined);
-    return errorResult(appsError(error, details), { ...withoutOffers(pick(details, APPS_DETAIL_FIELDS)), ...(note ? { note } : {}) });
+    return errorResult(appsError(error, details), { ...shaped(details, APPS_DETAILS), ...(note ? { note } : {}) });
   },
   searchMeta({ window, as_of, note, search_index, freshness, matched }) {
     const dates = datesNote(freshness, window, matched);
