@@ -287,9 +287,16 @@ function transcriptWindow(transcript: Transcript, start: number): { metadata: Re
 
 /** The API ends a default-Premium account's caption note with this sentence and its quality=premium advice. */
 const PREMIUM_DEFAULT = "These are captions because this account's default transcript quality is premium";
+/** The API ends the caption note of a read in a language the account's Premium transcript lacks with this sentence, then quality=premium advice and its cost. */
+const NOT_TRANSLATED = /These are captions because this read did not pass quality=premium, and the account's Premium transcript of this video has not been translated into ([^.]+)\./;
+/** The API answers 400 with this when YouTube offers no captions in the language asked for, then adds quality=premium advice this tool cannot pass. */
+const NO_CAPTION_LANGUAGE =
+  /^(YouTube does not offer [^.]+ captions for this video, so a captions read cannot return them; translation_languages lists the languages it can\.) A Premium transcript of this video can be read in [^.]+ with quality=premium&language=[^\s,]+, at the Premium rate\.$/;
 
 function captionNote(note: string | null | undefined, notes: Surface['transcript']): string | undefined {
   if (!note) return undefined;
+  const untranslated = NOT_TRANSLATED.exec(note);
+  if (untranslated) return notes.notTranslated(note.slice(0, untranslated.index).trim(), untranslated[1]!);
   const at = note.indexOf(PREMIUM_DEFAULT);
   return at < 0 ? note : notes.noPremium(note.slice(0, at).trim());
 }
@@ -316,7 +323,8 @@ const transcriptTool = (surface: Surface): ToolSpec<typeof transcriptInput> => (
     if (!answer.ok) {
       // A video YouTube has no record of has no caption track to explain.
       const unavailable = answer.error.code === 'transcript_unavailable' && answer.error.message !== VIDEO_NOT_FOUND;
-      return surface.refusal(answer.error, { ...answer.body, ...(unavailable ? { note: surface.transcript.unavailable } : {}), call_id: call.id });
+      const message = NO_CAPTION_LANGUAGE.exec(answer.error.message)?.[1] ?? answer.error.message;
+      return surface.refusal({ ...answer.error, message }, { ...answer.body, ...(unavailable ? { note: surface.transcript.unavailable } : {}), call_id: call.id });
     }
     const transcript = TranscriptBody.safeParse(answer.body);
     if (!transcript.success) {

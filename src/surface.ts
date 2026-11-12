@@ -97,6 +97,8 @@ export interface Surface {
     readonly notReady: string | undefined;
     /** The note on captions read for an account whose default quality is Premium, given the rest of the API's note. */
     readonly noPremium: (rest: string) => string;
+    /** The note on captions read in a language the account's Premium transcript has not been translated into, given the rest of the API's note. */
+    readonly notTranslated: (rest: string, language: string) => string;
   };
   /** A note as this surface shows it. */
   note(text: string | null | undefined): string | undefined;
@@ -134,6 +136,7 @@ export const PROGRAM_SURFACE: Surface = {
     unavailable: PROGRAM_UNAVAILABLE,
     notReady: PROGRAM_UNAVAILABLE,
     noPremium: (rest) => joined(rest, NO_PREMIUM, START_PREMIUM),
+    notTranslated: (rest, language) => joined(rest, `These are captions because the account's Premium transcript of this video has not been translated into ${language}.`),
   },
   note: (text) => text || undefined,
   link: (url) => url || undefined,
@@ -234,6 +237,7 @@ export const APPS_SURFACE: Surface = {
     unavailable: NO_CAPTION_TRACK,
     notReady: undefined,
     noPremium: (rest) => rest,
+    notTranslated: (rest) => rest,
   },
   note: planFree,
   link: watchLink,
