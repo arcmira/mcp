@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/server';
 import pkg from '../package.json' with { type: 'json' };
-import { noKeyError, type ApiClient } from './api.ts';
+import { noKeyError, type ApiCall, type ApiClient } from './api.ts';
 import { clientLabel, errorResult, withBuild, withRateLimit } from './result.ts';
 import type { Access, SandboxHost } from './sandbox.ts';
 import { callId, inputState, outline, type Recorder } from './telemetry.ts';
@@ -24,15 +24,16 @@ export const SURFACES: ReadonlyMap<string, Surface> = new Map([
 ]);
 
 export interface Caller {
-  /** The v1 client for this caller, used for the handshake key check and the rate-limit meta. Null with no credential. */
-  api: ApiClient | null;
+  /** A v1 client bound to one tool call, for the plain tools and the rate-limit meta. Null with no credential. */
+  api: ((call: ApiCall) => ApiClient) | null;
   /**
    * The sandbox one tool call's program runs in; its outbound tags every upstream request with the
-   * call and refuses every route outside the access allowlist. Null under a deployment without a
-   * Worker Loader binding.
+   * call and refuses every route outside the access allowlist. The access comes from the tool's
+   * annotation: read for a tool annotated read-only, write for any other. Null under a deployment
+   * without a Worker Loader binding.
    */
   sandbox: ((call: CallTag, access: Access) => SandboxHost) | null;
-  /** Takes each finished call's record. Never awaited, and a throw is ignored. */
+  /** Takes each finished call's record, with the call so its post carries the call's mark. Never awaited, and a throw is ignored. */
   record?: Recorder;
 }
 
@@ -49,12 +50,12 @@ export interface CallTag {
  */
 export function createServer(caller: Caller, deploy: string | null = null, surface: Surface = SURFACES.get(MCP_PATH)!): McpServer {
   const server = new McpServer({ name: 'arcmira', version: pkg.version }, surface.instructions ? { instructions: surface.instructions } : {});
-  const build = (result: Parameters<typeof withBuild>[0]) => {
+  const build = (result: Parameters<typeof withBuild>[0], api: ApiClient | null) => {
     const execution = z.object({ api_build: z.string().nullable() }).safeParse(result._meta?.['arcmira.com/execution']);
     return withBuild(result, {
       server: pkg.version,
       deploy,
-      api: execution.success ? execution.data.api_build : (caller.api?.upstreamBuild() ?? null),
+      api: execution.success ? execution.data.api_build : (api?.upstreamBuild() ?? null),
       client: clientLabel(server.server.getClientVersion()),
     });
   };
@@ -70,18 +71,15 @@ export function createServer(caller: Caller, deploy: string | null = null, surfa
       },
       async ({ intent, ...input }) => {
         const started = Date.now();
-        const call: CallTag = { id: callId(), tool: tool.name, client: clientLabel(server.server.getClientVersion()) };
         // The handshake has completed by the time a tool runs, so the host's name is known here.
-        caller.api?.setClient(server.server.getClientVersion());
-        caller.api?.setCall(call);
+        const call: ApiCall = { id: callId(), tool: tool.name, client: clientLabel(server.server.getClientVersion()), readOnly: tool.annotations.readOnlyHint };
+        const api = caller.api?.(call) ?? null;
         const sandbox = caller.sandbox;
         const result = build(
-          caller.api === null
+          api === null
             ? errorResult(noKeyError())
-            : withRateLimit(
-                await tool.run(input, { call, api: caller.api, sandbox: sandbox ? (access) => sandbox(call, access) : null }),
-                caller.api.rateLimit(),
-              ),
+            : withRateLimit(await tool.run(input, { call, api, sandbox: sandbox ? () => sandbox(call, call.readOnly ? 'read' : 'write') : null }), api.rateLimit()),
+          api,
         );
         try {
           const execution = result._meta?.['arcmira.com/execution'] as { routes?: string[] } | undefined;
@@ -91,12 +89,12 @@ export function createServer(caller: Caller, deploy: string | null = null, surfa
             intent: typeof intent === 'string' && intent.trim() ? intent.trim() : null,
             input: inputState(input),
             outline: outline(result),
-            api_calls: [...(caller.api?.routes() ?? []), ...(execution?.routes ?? [])],
+            api_calls: [...(api?.routes() ?? []), ...(execution?.routes ?? [])],
             latency_ms: Date.now() - started,
             client: call.client,
             server_version: pkg.version,
             deploy,
-          });
+          }, call);
         } catch {
           // Telemetry never changes what the host gets.
         }

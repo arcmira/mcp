@@ -6,7 +6,9 @@
  * Arcmira API, through the parent's outbound proxy, which adds the caller's credential and refuses
  * every route outside the tool's allowlist. `access` is "read" (arcmira_execute_read) or "write"
  * (arcmira_execute_write); a write method in a read program throws write_tool_required before any
- * network call, and the outbound would refuse it anyway.
+ * network call, and the outbound would refuse it anyway. The outbound marks every read program's
+ * request read-only, and answers the API's refusal of a Premium transcript or translation as
+ * write_tool_required.
  */
 
 export const ENTITY_ID = /^ent_\d+$/;
@@ -88,8 +90,8 @@ const MAX_WAIT_SECONDS = 22;
 /** With less left than this, a pending Premium read returns instead of sleeping for one more read. */
 const MIN_LAST_WAIT_MS = 5_000;
 const TERMINAL = new Set(['failed', 'refunded']);
-const FAILED_NOTE = 'The Premium transcript was not produced; job.error or last_attempt.error says why. arcmira.transcript(video, { quality: "premium", retry: true }) starts a new transcription and uses credits again; send it only when the user asks for another attempt.';
-const RETIRED_PREMIUM = 'arcmira.prepare and arcmira.wait are gone: arcmira.transcript(video, { quality: "premium" }) returns the lines. When the video is not transcribed yet, that read uses credits from the account\'s plan, then its on-demand budget.';
+const FAILED_NOTE = 'The Premium transcript was not produced; job.error or last_attempt.error says why. arcmira.transcript(video, { quality: "premium", retry: true }) in arcmira_execute_write starts a new transcription and uses credits again; send it only when the user asks for another attempt.';
+const RETIRED_PREMIUM = 'arcmira.prepare and arcmira.wait are gone: arcmira.transcript(video, { quality: "premium" }) returns the lines. When the video is not transcribed yet, that read runs in arcmira_execute_write and uses credits from the account\'s plan, then its on-demand budget.';
 
 /** recommendations kind to /v1 class; all sends no class. */
 const KINDS = { sponsored: 'sponsored', organic: 'organic', all: undefined };
@@ -271,8 +273,8 @@ export function createArcmira({ base, fetch: doFetch = globalThis.fetch, maxCall
       });
     },
     /**
-     * One video's transcript. A Premium read of a video not yet transcribed starts a transcription (credits
-     * from the plan, then on-demand within the account's budget) and answers 202 with the job; the read
+     * One video's transcript. In arcmira_execute_write, a Premium read of a video not yet transcribed starts a
+     * transcription (credits from the plan, then on-demand within the account's budget) and answers 202 with the job; the read
      * repeats at Retry-After until MAX_WAIT_SECONDS into the program. Repeated reads never use credits twice.
      * A failed transcription is terminal (state failed or refunded, or that job.state on a 202) until a read sends retry.
      */

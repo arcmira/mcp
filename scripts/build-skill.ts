@@ -113,7 +113,7 @@ description: ${JSON.stringify(DESCRIPTION)}
 
 # Arcmira
 
-Arcmira indexes YouTube transcripts, podcasts on YouTube included, and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes six tools. \`arcmira_describe\` returns the client reference: every method with its arguments and return fields, worked programs, quirks and error codes. \`arcmira_execute_read\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns; Premium transcripts included. \`arcmira_execute_write\` runs the same client plus the monitor writes. \`arcmira_youtube_search\` and \`arcmira_youtube_transcript\` search and read transcripts in one call each, with no program. \`arcmira_feedback\` tells Arcmira what went wrong. The arcmira CLI has commands with the same names; \`arcmira <command> --help\`, \`arcmira schema <command>\` and \`arcmira examples\` are its reference.
+Arcmira indexes YouTube transcripts, podcasts on YouTube included, and keeps a catalog of who is mentioned on which show, who sponsors whom, and who recommends what on air. The arcmira MCP server exposes six tools. \`arcmira_describe\` returns the client reference: every method with its arguments and return fields, worked programs, quirks and error codes. \`arcmira_execute_read\` runs a JavaScript program against the \`arcmira\` client and returns what the program returns, and only reads. \`arcmira_execute_write\` runs the same client plus the monitor writes, and starts Premium transcripts and translations. \`arcmira_youtube_search\` and \`arcmira_youtube_transcript\` search and read transcripts in one call each, with no program. \`arcmira_feedback\` tells Arcmira what went wrong. The arcmira CLI has commands with the same names; \`arcmira <command> --help\`, \`arcmira schema <command>\` and \`arcmira examples\` are its reference.
 
 ## When to use
 
@@ -148,7 +148,7 @@ Anything else (one video's transcript, a topic across shows, who recommends a pr
 5. Return only the fields the answer needs, not whole responses.
 6. ${COVERAGE_GUIDANCE} Build date windows from \`arcmira.today()\` and \`arcmira.daysAgo(n)\`. When the user names no window, use the last 90 days, and narrow it when a name returns more than the answer needs.
 7. Link each name in the answer to the \`page\` field the result carries. Do not build arcmira.com URLs by hand.
-8. Premium: \`arcmira.transcript(video, { quality: "premium" })\` returns the lines. When the video is not transcribed yet, that read starts a transcription. Still pending: \`eta_seconds\` says about how long; read again once it has passed.
+8. Premium: \`arcmira.transcript(video, { quality: "premium" })\` returns the lines. When the video is not transcribed yet, that read in \`arcmira_execute_write\` starts a transcription. In \`arcmira_execute_read\` it throws \`write_tool_required\`, and nothing is charged. Still pending: \`eta_seconds\` says about how long; read again once it has passed.
 9. ${BUDGET_RULE}
 
 ## References

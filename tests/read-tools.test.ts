@@ -3,21 +3,22 @@ import assert from 'node:assert/strict';
 import worker from '../src/index.ts';
 import { OUTPUT_BUDGET } from '../src/output.ts';
 import { youtubeSearchTool } from '../src/read-tools.ts';
-import { callTool, listTools, textOf, withFetch, type ToolReply } from './handler.ts';
+import { fakeLoader } from './fake-loader.ts';
+import { callTool, listTools, textOf, withFetch, withoutRecords, type ToolReply } from './handler.ts';
 
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
 const VIDEO = 'dQw4w9WgXcQ';
 
-/** The upstream for one test: /v1/me passes the key check, and every other request is recorded and answered by `answer`. */
+/** The upstream for one test: /v1/me passes the key check, each call's record is answered, and every other request is recorded and answered by `answer`. */
 function upstream(answer: (url: URL) => Response) {
   const requests: URL[] = [];
   return {
     requests,
-    handler(url: URL) {
+    handler: withoutRecords((url: URL) => {
       if (url.pathname === '/v1/me') return Response.json({ id: 'caller' });
       requests.push(url);
       return answer(url);
-    },
+    }),
   };
 }
 
@@ -280,14 +281,14 @@ describe('arcmira_youtube_transcript', () => {
     assert.deepEqual(linesOf(reply), []);
   });
 
-  it('never starts or waits on a Premium transcription: a pending answer ends the call and names arcmira_execute_read', async () => {
+  it('never starts or waits on a Premium transcription: a pending answer ends the call and names arcmira_execute_write', async () => {
     const api = upstream(() => Response.json({ state: 'pending', video_id: VIDEO, job: { id: 'job_1', state: 'pending', eta_seconds: 300 } }, { status: 202, headers: { 'retry-after': '10' } }));
     const reply = await callTool('arcmira_youtube_transcript', { video: VIDEO }, api.handler);
     assert.equal(reply.result.isError, true);
     const body = reply.result.structuredContent as { error: { code: string }; state: string; note: string };
     assert.equal(body.error.code, 'transcript_unavailable');
     assert.equal(body.state, 'pending');
-    assert.match(body.note, /arcmira_execute_read/);
+    assert.match(body.note, /arcmira_execute_write/);
     assert.equal(api.requests.length, 1, 'no second read');
     assert.equal(api.requests[0]!.searchParams.get('quality'), null);
   });
@@ -299,7 +300,7 @@ describe('arcmira_youtube_transcript', () => {
     const body = JSON.parse(textOf(reply));
     assert.equal(body.error.code, 'transcript_unavailable');
     assert.equal(body.error.message, 'This video has no captions in en.');
-    assert.match(body.note, /arcmira_execute_read/);
+    assert.match(body.note, /arcmira_execute_write/);
     assert.match(body.call_id, /^mcpc_/);
     assert.deepEqual(api.requests.map((url) => url.pathname), [`/v1/transcripts/${VIDEO}`]);
   });
@@ -310,10 +311,36 @@ describe('arcmira_youtube_transcript', () => {
     const note = metadataOf(reply).note as string;
     assert.ok(note.startsWith(CAPTION_NOTE), note);
     assert.doesNotMatch(note, /quality=/);
-    assert.match(note, /no Premium transcript of this video\. arcmira_execute_read starts one/);
+    assert.match(note, /no Premium transcript of this video\. arcmira_execute_write starts one/);
 
     const plain = upstream(() => Response.json({ ...longTranscript(false), note: CAPTION_NOTE }));
     assert.equal(metadataOf(await callTool('arcmira_youtube_transcript', { video: VIDEO }, plain.handler)).note, CAPTION_NOTE);
+  });
+
+  it('says in one sentence why a read in another language is captions, with no quality argument or cost, and on /mcp/apps leaves the sentence out', async () => {
+    // The API's note when a default-Premium account reads its own Premium transcript with language=ja and no quality, from the API change of 2026-11-12.
+    const untranslated =
+      "These are captions because this read did not pass quality=premium, and the account's Premium transcript of this video has not been translated into Japanese. To read it in Japanese, pass quality=premium&language=ja. The translation uses credits from the plan, then the on-demand budget the account set.";
+    const api = upstream(() => Response.json({ ...longTranscript(false), language: 'ja', note: `${CAPTION_NOTE} ${untranslated}` }));
+    const read = (path: string) => callTool('arcmira_youtube_transcript', { video: VIDEO, language: 'ja' }, api.handler, {}, path);
+    assert.equal(metadataOf(await read('/mcp')).note, `${CAPTION_NOTE} These are captions because the account's Premium transcript of this video has not been translated into Japanese.`);
+    assert.equal(metadataOf(await read('/mcp/apps')).note, CAPTION_NOTE);
+  });
+
+  it('keeps the first sentence of the 400 for a missing caption language, with no quality argument, and a program reads the whole message', async () => {
+    // The API's 400 when YouTube offers no Japanese captions for the video.
+    const first = 'YouTube does not offer Japanese captions for this video, so a captions read cannot return them; translation_languages lists the languages it can.';
+    const message = `${first} A Premium transcript of this video can be read in Japanese with quality=premium&language=ja, at the Premium rate.`;
+    const body = { error: { type: 'invalid_request_error', code: 'invalid_query', message, doc_url: 'https://arcmira.com/docs/errors#invalid_query', request_id: 'req_fixture' }, translation_languages: ['en', 'es'] };
+    const api = upstream(() => Response.json(body, { status: 400 }));
+    for (const path of ['/mcp', '/mcp/apps']) {
+      const reply = await callTool('arcmira_youtube_transcript', { video: VIDEO, language: 'ja' }, api.handler, {}, path);
+      assert.equal(reply.result.isError, true);
+      assert.equal((reply.result.structuredContent as { error: { message: string } }).error.message, first, path);
+    }
+    const program = `try { await arcmira.transcript("${VIDEO}", { language: "ja" }); } catch (e) { return [e.code, e.message]; }`;
+    const read = await callTool('arcmira_execute_read', { code: program }, api.handler, { LOADER: fakeLoader() });
+    assert.deepEqual(JSON.parse(textOf(read)).value, ['invalid_query', message]);
   });
 
   it('refuses a value that names no YouTube video before any read', async () => {

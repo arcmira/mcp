@@ -118,7 +118,7 @@ function checkBody(label: string, operation: Operation, body: Record<string, unk
 /** Each tool's effect hints, readOnly, destructive, idempotent and openWorld, and why. */
 const HINTS: Record<ToolName, { hints: readonly [boolean, boolean, boolean, boolean]; why: string }> = {
   arcmira_describe: { hints: [true, false, true, false], why: 'reference lookup reads no indexed content and starts nothing' },
-  arcmira_execute_read: { hints: [false, false, false, true], why: 'a Premium read can start a transcription that uses credits; it only adds' },
+  arcmira_execute_read: { hints: [true, false, false, true], why: 'every request carries the read-only mark, so the API refuses a Premium transcript or translation' },
   arcmira_execute_write: { hints: [false, true, false, true], why: 'it changes existing monitors' },
   arcmira_youtube_search: { hints: [true, false, true, true], why: 'one search read over public videos' },
   arcmira_youtube_transcript: { hints: [true, false, true, true], why: 'it reads captions or a transcript the account owns and never starts a transcription' },

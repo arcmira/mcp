@@ -1,6 +1,6 @@
 {
   "name": "@arcmira/mcp",
-  "version": "0.10.19",
+  "version": "0.10.20",
   "description": "YouTube transcript search and monitoring for your AI: exact quotes, full transcripts and speakers.",
   "keywords": [
     "mcp",
@@ -31,11 +31,12 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --port 8790",
-    "deploy": "pnpm manifest:check && wrangler deploy",
+    "deploy": "pnpm release:check && pnpm manifest:check && wrangler deploy",
     "types": "wrangler types",
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-strip-types --import ./tests/register.mjs tests/*.test.ts",
     "manifest:check": "node --experimental-strip-types scripts/check-manifest.ts",
+    "release:check": "node --experimental-strip-types scripts/check-release.ts",
     "examples:check": "node --experimental-strip-types scripts/check-examples.ts",
     "examples:spec": "node --experimental-strip-types scripts/check-examples.ts --spec tests/fixtures/openapi.json",
     "identity:check": "bash scripts/check-commit-identity.sh",

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { ApiOutbound } from "../src/index.ts";
 import { outboundAllowed, type Access } from "../src/sandbox.ts";
+import { READ_ONLY_MESSAGES, readOnlyRefusal } from "./read-only-refusal.ts";
 
 interface Sent {
   url: URL;
@@ -32,7 +33,7 @@ const post = (path: string, body = "{}", method = "POST") =>
   new Request(`https://api.arcmira.com${path}`, { method, body, headers: { "content-type": "application/json", "idempotency-key": "key-1" } });
 
 describe("the sandbox outbound allowlists", () => {
-  it("read allows any GET under /v1, nothing else: a Premium read buys inside the GET", () => {
+  it("read allows any GET under /v1, nothing else", () => {
     for (const [method, path, allowed] of [
       ["GET", "/v1/monitors", true],
       ["GET", "/v1/transcripts/dQw4w9WgXcQ", true],
@@ -103,6 +104,48 @@ describe("the sandbox outbound allowlists", () => {
     const read = await through("read", post("/v1/transcriptions", '{"video_id":"dQw4w9WgXcQ"}'));
     assert.equal(read.response.status, 403);
     assert.equal(read.sent.length, 0);
+  });
+
+  it("marks every request outside the write tool read-only, never a write tool request, and a program cannot unmark one", async () => {
+    const premium = "https://api.arcmira.com/v1/transcripts/dQw4w9WgXcQ?quality=premium";
+    for (const access of [undefined, "read"] as const) {
+      const { sent } = await through(access, new Request(premium, { headers: { "x-arcmira-read-only": "0" } }));
+      assert.equal(sent[0].headers.get("x-arcmira-read-only"), "1", `access ${access}`);
+    }
+    for (const request of [new Request(premium), post("/v1/monitors")]) {
+      const { sent } = await through("write", request);
+      assert.equal(sent[0].headers.get("x-arcmira-read-only"), null, request.method + " " + request.url);
+    }
+  });
+
+  it("answers the API's Premium read_only_request as write_tool_required in the approved words, and any other refusal as the API sent it", async () => {
+    const request = () => new Request("https://api.arcmira.com/v1/transcripts/dQw4w9WgXcQ?quality=premium&language=ja");
+    const refused = await through("read", request(), () => Response.json(readOnlyRefusal(READ_ONLY_MESSAGES.premium, "req_1"), { status: 403, headers: { "ratelimit-remaining": "3" } }));
+    assert.equal(refused.response.status, 403);
+    assert.equal(refused.response.headers.get("ratelimit-remaining"), "3");
+    assert.deepEqual(refused.body.error, {
+      type: "permission_error",
+      code: "write_tool_required",
+      message:
+        "This read would start a Premium transcript or translation, and arcmira_execute_read only reads, so nothing was charged. Run it in arcmira_execute_write. It uses credits from your plan, then your on-demand budget.",
+      doc_url: "https://arcmira.com/docs/errors#read_only_request",
+      request_id: "req_1",
+    });
+    const gated = await through("read", request(), () =>
+      Response.json({ error: { type: "permission_error", code: "paid_plan_required", message: "paid_plan_required fixture", doc_url: "x", request_id: "req_1" } }, { status: 403 }),
+    );
+    assert.equal(gated.body.error?.code, "paid_plan_required");
+    assert.equal(gated.body.error?.message, "paid_plan_required fixture");
+  });
+
+  it("passes any other read_only_request through as the API sent it, code and message, with nothing added", async () => {
+    const request = () => new Request("https://api.arcmira.com/v1/channels/UC-DRzaGnL_vtBUpCFH5M0tg/sponsors");
+    const reworded = "This request is marked read-only and would have started a Premium transcript, so nothing was charged.";
+    for (const message of [READ_ONLY_MESSAGES.sponsors, READ_ONLY_MESSAGES.receipts, READ_ONLY_MESSAGES.owned("dQw4w9WgXcQ"), reworded, undefined]) {
+      const sent = readOnlyRefusal(message as string);
+      const { body } = await through("read", request(), () => Response.json(sent, { status: 403 }));
+      assert.deepEqual(body, JSON.parse(JSON.stringify(sent)), String(message));
+    }
   });
 
   it("refuses a body over the cap, and an authenticated redirect", async () => {

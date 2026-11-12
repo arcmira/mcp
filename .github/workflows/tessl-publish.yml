@@ -48,6 +48,16 @@ jobs:
         with:
           ref: ${{ steps.release.outputs.sha }}
           persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+      - name: The CHANGELOG holds no unfilled date marker
+        run: |
+          if [ -f scripts/check-release.ts ]; then
+            node --experimental-strip-types scripts/check-release.ts
+          else
+            echo "This release predates the release check, so its CHANGELOG holds no marker."
+          fi
       - name: Add Tessl metadata to the released plugin
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}

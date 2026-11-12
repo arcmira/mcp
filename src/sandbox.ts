@@ -135,8 +135,8 @@ export type Access = 'read' | 'write';
 const under = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
 
 /**
- * The routes a sandbox program may call, by tool. Read: any GET under /v1 (a Premium read starts its transcription inside
- * GET /v1/transcripts/{video_id}). Write adds POST and PATCH under /v1/monitors and PATCH under
+ * The routes a sandbox program may call, by tool. Read: any GET under /v1, marked read-only, so the API refuses the
+ * Premium transcription a GET /v1/transcripts/{video_id} would start. Write adds POST and PATCH under /v1/monitors and PATCH under
  * /v1/trackers, never DELETE, and never the webhook secret rotation, which breaks the user's existing
  * webhook verification. A tracker is created inside a monitor, so nothing POSTs under /v1/trackers.
  */
@@ -210,6 +210,13 @@ function unknownOutcome(name: string, code: string, message: string): Execution 
   };
 }
 
+/** What a program that ran past 30 seconds reads. A read program cannot have started a Premium transcription or changed a monitor. */
+const TIMEOUT_MESSAGES: Readonly<Record<Access, string>> = {
+  read: 'The program exceeded 30 seconds. Its call count and final outcome are unknown. Requests may still finish and count toward usage. Retry with a smaller program.',
+  write:
+    'The program exceeded 30 seconds. Its call count and final outcome are unknown. Requests may still finish and count toward usage; a Premium transcription or monitor change it started may have gone through. Retry with a smaller program: a repeated Premium read never uses credits twice. Check arcmira.monitors.list() before repeating a monitor change.',
+};
+
 export async function runProgram(host: SandboxHost, code: string): Promise<Execution> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -230,11 +237,7 @@ export async function runProgram(host: SandboxHost, code: string): Promise<Execu
       timer = setTimeout(
         () =>
           resolve(
-            unknownOutcome(
-              'TimeoutError',
-              'timeout',
-              'The program exceeded 30 seconds. Its call count and final outcome are unknown. Requests may still finish and count toward usage; a Premium transcription or monitor change it started may have gone through. Retry with a smaller program: a repeated Premium read never uses credits twice. Check arcmira.monitors.list() before repeating a monitor change.',
-            ),
+            unknownOutcome('TimeoutError', 'timeout', TIMEOUT_MESSAGES[host.access === 'write' ? 'write' : 'read']),
           ),
         TIME_LIMIT_MS,
       );

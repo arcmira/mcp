@@ -22,6 +22,11 @@ export const CLIENT_HEADER = 'x-arcmira-client';
 /** Sent on every upstream v1 request a tool call makes, so the API's request events join the call's span. */
 export const CALL_HEADER = 'x-arcmira-mcp-call';
 export const TOOL_HEADER = 'x-arcmira-mcp-tool';
+/**
+ * Sent as `1` on every upstream request a call of a tool annotated read-only makes, its record included. The API then
+ * refuses, with read_only_request, anything that would use credits beyond the read itself or record a new job.
+ */
+export const READ_ONLY_HEADER = 'x-arcmira-read-only';
 /** The header v1 answers with: the deploy id of the API build that served the call. */
 export const BUILD_HEADER = 'x-arcmira-build';
 
@@ -67,14 +72,21 @@ export interface RateLimit {
   reset: number;
 }
 
+/**
+ * The one tool call a client sends for. Every request carries x-arcmira-mcp-call, x-arcmira-mcp-tool and the host as
+ * x-arcmira-client, and the read-only mark when the tool is annotated read-only.
+ */
+export interface ApiCall {
+  id: string;
+  tool: string;
+  client: string | null;
+  readOnly: boolean;
+}
+
 export interface ApiClient {
   /** One JSON POST the server itself makes (arcmira_feedback), with an Idempotency-Key when given. */
   post<T = Record<string, unknown>>(path: string, body: Record<string, unknown>, options?: { idempotencyKey?: string }): Promise<ApiResult<T>>;
   get<T = Record<string, unknown>>(path: string, query?: Query): Promise<ApiResult<T>>;
-  /** Name the host every later call is made for. Sent upstream as x-arcmira-client. */
-  setClient(client: ClientInfo | undefined): void;
-  /** Name the tool call every later request belongs to. Sent upstream as x-arcmira-mcp-call and x-arcmira-mcp-tool. */
-  setCall(call: { id: string; tool: string } | null): void;
   /** `METHOD /v1/path` for each upstream request this client made, in order. */
   routes(): string[];
   /** The deploy id of the API build behind the latest answer, or null before any answer. */
@@ -158,24 +170,17 @@ function legacyErrorMessage(value: unknown): string | null {
 /**
  * Every credential goes upstream as Authorization: Bearer. v1 reads an arc_sk_ account key from
  * either header, but an OAuth access token only from Authorization, so the bearer form is the one
- * that admits both.
+ * that admits both. Each tool call gets its own client, so another call in the same HTTP request cannot change
+ * what this one sends.
  */
-export function createApiClient(env: Env, apiKey: string): ApiClient {
+export function createApiClient(env: Env, apiKey: string, call: ApiCall | null = null): ApiClient {
   const base = (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
   let latest: RateLimit | null = null;
   let build: string | null = null;
-  let client: string | null = null;
-  let call: { id: string; tool: string } | null = null;
   const routes: string[] = [];
   return {
     rateLimit: () => latest,
     upstreamBuild: () => build,
-    setClient(info) {
-      client = info?.name ? `${info.name}${info.version ? `/${info.version}` : ''}`.slice(0, 120) : null;
-    },
-    setCall(next) {
-      call = next;
-    },
     routes: () => [...routes],
     get: (path, query = {}) => request(path, query),
     post: (path, body, options = {}) => request(path, {}, { body, idempotency_key: options.idempotencyKey }),
@@ -207,8 +212,9 @@ export function createApiClient(env: Env, apiKey: string): ApiClient {
         ...(send?.idempotency_key ? { 'idempotency-key': send.idempotency_key } : {}),
         accept: 'application/json',
         'user-agent': USER_AGENT,
-        ...(client ? { [CLIENT_HEADER]: client } : {}),
+        ...(call?.client ? { [CLIENT_HEADER]: call.client.slice(0, 120) } : {}),
         ...(call ? { [CALL_HEADER]: call.id, [TOOL_HEADER]: call.tool } : {}),
+        ...(call?.readOnly ? { [READ_ONLY_HEADER]: '1' } : {}),
       },
     }).catch(() =>
       Response.json(

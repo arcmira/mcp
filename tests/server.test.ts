@@ -6,7 +6,7 @@ import pkg from '../package.json' with { type: 'json' };
 import { BUILD_META, RATE_LIMIT_META, okResult, withRateLimit } from '../src/result.ts';
 import { METHODS } from '../src/reference.ts';
 import { fakeLoader } from './fake-loader.ts';
-import { callTool, listTools, textOf } from './handler.ts';
+import { callTool, listTools, textOf, withoutRecords } from './handler.ts';
 
 const RATE_LIMIT = { limit: 20, remaining: 17, reset: 1788819360 };
 
@@ -44,7 +44,7 @@ describe('the six tools through the handler', () => {
       Object.fromEntries(tools.map((t) => [t.name, [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.idempotentHint, t.annotations.openWorldHint]])),
       {
         arcmira_describe: [true, false, true, false],
-        arcmira_execute_read: [false, false, false, true],
+        arcmira_execute_read: [true, false, false, true],
         arcmira_execute_write: [false, true, false, true],
         arcmira_youtube_search: [true, false, true, true],
         arcmira_youtube_transcript: [true, false, true, true],
@@ -110,8 +110,8 @@ describe('the six tools through the handler', () => {
     for (const [name, replacement] of [
       ['resolve_entities', 'arcmira_describe'],
       ['describe', 'arcmira_describe'],
-      ['execute', 'arcmira_execute_read'],
-      ['prepare_transcript', 'arcmira.transcript(video'],
+      ['execute', 'arcmira_execute_read (arcmira_execute_write for monitor changes and Premium transcripts)'],
+      ['prepare_transcript', 'arcmira.transcript(video, { quality: \\"premium\\" }) inside arcmira_execute_write'],
     ]) {
       const reply = await callTool(name, {}, () => Response.json({}));
       assert.equal(reply.result.isError, true, name);
@@ -196,13 +196,13 @@ describe('bounded outcomes and Premium reads over MCP', () => {
     const seen: string[] = [];
     let reads = 0;
     const reply = await callTool(
-      'arcmira_execute_read',
+      'arcmira_execute_write',
       { code: 'const t = await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" }); return { state: t.state, lines: t.lines.length, speaker: t.speakers[0].entity_id };' },
-      (url, init) => {
+      withoutRecords((url, init) => {
         seen.push(`${init?.method ?? 'GET'} ${url.pathname}?quality=${url.searchParams.get('quality')}`);
         const answer = reads++ === 0 ? responses.get_transcript_pending : responses.get_transcript_premium_ready;
         return Response.json(answer.body, { status: answer.status, headers: { 'retry-after': '0' } });
-      },
+      }),
       { LOADER: fakeLoader() },
     );
     assert.equal(reply.result.isError, undefined, textOf(reply));
@@ -214,7 +214,7 @@ describe('bounded outcomes and Premium reads over MCP', () => {
   it('a budget refusal reaches the program as an ArcmiraError with its unlock, and the result names its call_id', async () => {
     const refusal = responses.get_transcript_spend_limit_exceeded;
     const reply = await callTool(
-      'arcmira_execute_read',
+      'arcmira_execute_write',
       { code: 'return await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" });' },
       () => Response.json(refusal.body, { status: refusal.status }),
       { LOADER: fakeLoader() },
@@ -245,10 +245,10 @@ describe('bounded outcomes and Premium reads over MCP', () => {
 
   it('a monitor write from the read tool is refused in the Worker even through raw fetch, and runs from the write tool', async () => {
     const upstreamCalls: string[] = [];
-    const upstream = (url: URL, init?: RequestInit) => {
+    const upstream = withoutRecords((url, init) => {
       upstreamCalls.push(`${init?.method ?? 'GET'} ${url.pathname}`);
       return Response.json({ monitor_id: 'mon_1', results: [{ entity_id: 'ent_14', tracker_id: 'trk_1', created: true, attached: true }] });
-    };
+    });
     const raw = 'const r = await fetch("https://api.arcmira.com/v1/monitors/mon_1/entities", { method: "POST", body: JSON.stringify({ entity_ids: ["ent_14"] }) }); return { status: r.status, body: await r.json() };';
     const refused = JSON.parse(textOf(await callTool('arcmira_execute_read', { code: raw }, upstream, { LOADER: fakeLoader() })));
     assert.equal(refused.value.status, 403);
@@ -268,10 +268,10 @@ describe('bounded outcomes and Premium reads over MCP', () => {
   it('arcmira_feedback posts one experience row with the category, note and call id, and answers what the API answered', async () => {
     const sent: Array<{ path: string; body: unknown; key: string | null }> = [];
     const callId = `mcpc_${'a'.repeat(32)}`;
-    const reply = await callTool('arcmira_feedback', { category: 'wrong_entity', note: 'Mercury resolved to the planet.', call_id: callId, request_id: 'req_9' }, (url, init) => {
+    const reply = await callTool('arcmira_feedback', { category: 'wrong_entity', note: 'Mercury resolved to the planet.', call_id: callId, request_id: 'req_9' }, withoutRecords((url, init) => {
       sent.push({ path: url.pathname, body: JSON.parse(String(init?.body)), key: new Headers(init?.headers).get('idempotency-key') });
       return Response.json({ feedback_id: 42 }, { status: 201 });
-    });
+    }));
     assert.equal(reply.result.isError, undefined);
     assert.deepEqual(reply.result.structuredContent, { feedback_id: 42, recorded: true });
     assert.equal(sent.length, 1);
