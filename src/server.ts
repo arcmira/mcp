@@ -28,8 +28,9 @@ export interface Caller {
   api: ((call: ApiCall) => ApiClient) | null;
   /**
    * The sandbox one tool call's program runs in; its outbound tags every upstream request with the
-   * call and refuses every route outside the access allowlist. Null under a deployment without a
-   * Worker Loader binding.
+   * call and refuses every route outside the access allowlist. The access comes from the tool's
+   * annotation: read for a tool annotated read-only, write for any other. Null under a deployment
+   * without a Worker Loader binding.
    */
   sandbox: ((call: CallTag, access: Access) => SandboxHost) | null;
   /** Takes each finished call's record, with the call so its post carries the call's mark. Never awaited, and a throw is ignored. */
@@ -77,7 +78,7 @@ export function createServer(caller: Caller, deploy: string | null = null, surfa
         const result = build(
           api === null
             ? errorResult(noKeyError())
-            : withRateLimit(await tool.run(input, { call, api, sandbox: sandbox ? (access) => sandbox(call, access) : null }), api.rateLimit()),
+            : withRateLimit(await tool.run(input, { call, api, sandbox: sandbox ? () => sandbox(call, call.readOnly ? 'read' : 'write') : null }), api.rateLimit()),
           api,
         );
         try {

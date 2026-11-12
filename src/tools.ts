@@ -5,7 +5,7 @@ import pkg from '../package.json' with { type: 'json' };
 import type { ToolAnnotations } from '@modelcontextprotocol/server';
 import { DOCS, SHORT_GUIDE, referenceText } from './reference.ts';
 import { errorResult, okResult, textResult, type ToolResult } from './result.ts';
-import { renderExecution, runProgram, type Access, type Execution, type SandboxHost } from './sandbox.ts';
+import { renderExecution, runProgram, type Execution, type SandboxHost } from './sandbox.ts';
 import { OUTPUT_LIMITS } from './output.ts';
 import { intentParam } from './telemetry.ts';
 import { appsSearchTool, appsTranscriptTool, youtubeSearchTool, youtubeTranscriptTool } from './read-tools.ts';
@@ -42,12 +42,15 @@ export const RETIRED_TOOLS: Readonly<Record<string, string>> = {
   ),
 };
 
-/** What a tool's run gets besides its input: the call it serves, the v1 client, and a sandbox of the access it asks for. */
+/** What a tool's run gets besides its input: the call it serves, the v1 client, and a sandbox of the access its annotation gives. */
 export interface ToolContext {
   call: { id: string; tool: string };
   api: ApiClient;
-  /** Null under a deployment without a Worker Loader binding. */
-  sandbox: ((access: Access) => SandboxHost) | null;
+  /**
+   * Read access, whose every request is marked read-only, for a tool annotated read-only, and write access for any other.
+   * The run cannot choose. Null under a deployment without a Worker Loader binding.
+   */
+  sandbox: (() => SandboxHost) | null;
 }
 
 export interface ToolSpec<Schema extends z.ZodObject<z.ZodRawShape>> {
@@ -101,13 +104,13 @@ export const executeReadTool = tool({
   name: 'arcmira_execute_read',
   title: 'YouTube transcripts and quotes',
   description: `YouTube video and podcast transcripts for questions about what was said: summarize or read a YouTube video from its URL, find the exact quote and the second it was said with a timestamped watch link, often who said it, clips, mentions of a person, brand or company, sponsors and ad reads, podcasts on YouTube included, and the user's monitors. Use Arcmira when the user shares a youtube.com or youtu.be link, or asks what a YouTube video or podcast said. Runs a JavaScript program against the Arcmira API through the arcmira client; one video: return await arcmira.transcript(url, { start, end }); a phrase: return (await arcmira.search({ query })).chunks. Other methods and examples: arcmira_describe. Input is an async function body with arcmira, ArcmiraError and console in scope. Output is bounded JSON: the result first, then the call count, rate limit, build and capped logs. Filters take entity, channel or video ids. It only reads. To start a Premium transcript or translation the account does not own yet, run the same program in arcmira_execute_write. ${LIMITS}`,
-  // Read-only. The outbound marks every request read-only, so the API refuses a Premium transcript or translation the account does not own.
+  // Read-only, so its program runs with read access. The outbound marks every request read-only, so the API refuses a Premium transcript or translation the account does not own.
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   // Claude Code shows this tool, arcmira_describe and arcmira_feedback in full before any tool search: the reference, the program runner and the way to report a problem. The plain read tools wait behind tool search.
   _meta: { 'anthropic/alwaysLoad': true },
   inputSchema: z.object({ code, intent: intentParam }),
   async run(input, context) {
-    return execute(input.code, 'read', context);
+    return execute(input.code, context);
   },
 });
 
@@ -123,7 +126,7 @@ export const executeWriteTool = tool({
   },
   inputSchema: z.object({ code, intent: intentParam }),
   async run(input, context) {
-    return execute(input.code, 'write', context);
+    return execute(input.code, context);
   },
 });
 
@@ -181,9 +184,9 @@ export const TOOLS: readonly AnyToolSpec[] = [describeTool, executeReadTool, exe
 /** The /mcp/apps surface: named, typed tools only, for directories that refuse a program runner. */
 export const APPS_TOOLS: readonly AnyToolSpec[] = [appsSearchTool, appsTranscriptTool, appsFeedbackTool];
 
-async function execute(source: string, access: Access, { sandbox, call }: ToolContext): Promise<ToolResult> {
+async function execute(source: string, { sandbox, call }: ToolContext): Promise<ToolResult> {
   if (sandbox === null) return errorResult(sandboxUnavailable());
-  return executionResult(await runProgram(sandbox(access), source), call.id);
+  return executionResult(await runProgram(sandbox(), source), call.id);
 }
 
 /** A program's outcome as a tool result: text for every host, naming its call_id when the outcome warrants feedback. */
