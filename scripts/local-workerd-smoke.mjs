@@ -18,7 +18,7 @@ try {
  const discoveryText=await discovery.text();
  const discoveryEvent=discoveryText.split('\n').find(line=>line.startsWith('data: '));
  const listed=JSON.parse(discoveryEvent?discoveryEvent.slice(6):discoveryText).result.tools;
- const hints={arcmira_describe:[true,false,true,false],arcmira_execute_read:[false,false,false,true],arcmira_execute_write:[false,true,false,true],arcmira_youtube_search:[true,false,true,true],arcmira_youtube_transcript:[true,false,true,true],arcmira_feedback:[false,false,false,false]};
+ const hints={arcmira_describe:[true,false,true,false],arcmira_execute_read:[true,false,false,true],arcmira_execute_write:[false,true,false,true],arcmira_youtube_search:[true,false,true,true],arcmira_youtube_transcript:[true,false,true,true],arcmira_feedback:[false,false,false,false]};
  assert.deepEqual(listed.map(tool=>tool.name).sort(),Object.keys(hints).sort());
  for(const tool of listed){const a=tool.annotations;assert.deepEqual([a.readOnlyHint,a.destructiveHint,a.idempotentHint,a.openWorldHint],hints[tool.name],tool.name);}
  console.log('six-tool discovery and annotations passed');
