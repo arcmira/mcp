@@ -138,15 +138,14 @@ describe("the sandbox outbound allowlists", () => {
     assert.equal(gated.body.error?.message, "paid_plan_required fixture");
   });
 
-  it("answers any other read_only_request as write_tool_required with the API's own message, then where to run it, with no Premium words of ours", async () => {
+  it("passes any other read_only_request through as the API sent it, code and message, with nothing added", async () => {
     const request = () => new Request("https://api.arcmira.com/v1/channels/UC-DRzaGnL_vtBUpCFH5M0tg/sponsors");
     const reworded = "This request is marked read-only and would have started a Premium transcript, so nothing was charged.";
-    for (const message of [READ_ONLY_MESSAGES.sponsors, READ_ONLY_MESSAGES.receipts, READ_ONLY_MESSAGES.owned("dQw4w9WgXcQ"), reworded]) {
-      const { body } = await through("read", request(), () => Response.json(readOnlyRefusal(message), { status: 403 }));
-      assert.deepEqual([body.error?.code, body.error?.message], ["write_tool_required", `${message} Run it in arcmira_execute_write.`]);
+    for (const message of [READ_ONLY_MESSAGES.sponsors, READ_ONLY_MESSAGES.receipts, READ_ONLY_MESSAGES.owned("dQw4w9WgXcQ"), reworded, undefined]) {
+      const sent = readOnlyRefusal(message as string);
+      const { body } = await through("read", request(), () => Response.json(sent, { status: 403 }));
+      assert.deepEqual(body, JSON.parse(JSON.stringify(sent)), String(message));
     }
-    const bare = await through("read", request(), () => Response.json({ error: { ...readOnlyRefusal("").error, message: undefined } }, { status: 403 }));
-    assert.equal(bare.body.error?.message, "Run it in arcmira_execute_write.");
   });
 
   it("refuses a body over the cap, and an authenticated redirect", async () => {

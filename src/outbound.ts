@@ -20,8 +20,6 @@ export const WRITE_TOOL_REQUIRED =
   'This read would start a Premium transcript or translation, and arcmira_execute_read only reads, so nothing was charged. Run it in arcmira_execute_write. It uses credits from your plan, then your on-demand budget.';
 /** The API's read_only_request message for a Premium transcript or translation, exactly. Any other message is another refusal. */
 const PREMIUM_REFUSAL = 'This request is marked read-only and would have started a Premium transcript or translation, so nothing was charged.';
-/** What follows the API's own message when it refuses a marked request for another reason. */
-const RUN_IN_WRITE = 'Run it in arcmira_execute_write.';
 
 function refused(base: URL, access: Access, method: string, path: string, message?: string): Response {
   const writable = access === 'read' && outboundAllowed('write', method, path);
@@ -46,8 +44,8 @@ function refused(base: URL, access: Access, method: string, path: string, messag
 }
 
 /**
- * The API's read_only_request refusal as write_tool_required, for a client method and a raw fetch() alike; any other answer
- * as sent. The Premium refusal reads WRITE_TOOL_REQUIRED. Any other reads the API's own message, then where to run it.
+ * The API's Premium read_only_request refusal as write_tool_required in WRITE_TOOL_REQUIRED's words, for a client method and a
+ * raw fetch() alike. Any other answer, another read_only_request included, reaches the program as the API sent it.
  */
 async function asWriteToolRequired(response: Response): Promise<Response> {
   if (response.status !== 403) return response;
@@ -55,15 +53,11 @@ async function asWriteToolRequired(response: Response): Promise<Response> {
     .clone()
     .json()
     .catch(() => null)) as { error?: Record<string, unknown> } | null;
-  if (body?.error?.code !== 'read_only_request') return response;
+  if (body?.error?.code !== 'read_only_request' || body.error.message !== PREMIUM_REFUSAL) return response;
   const headers = new Headers(response.headers);
   headers.delete('content-length');
   headers.delete('content-encoding');
-  const message = typeof body.error.message === 'string' ? body.error.message : '';
-  return Response.json(
-    { error: { ...body.error, code: 'write_tool_required', message: message === PREMIUM_REFUSAL ? WRITE_TOOL_REQUIRED : [message, RUN_IN_WRITE].filter(Boolean).join(' ') } },
-    { status: response.status, headers },
-  );
+  return Response.json({ error: { ...body.error, code: 'write_tool_required', message: WRITE_TOOL_REQUIRED } }, { status: response.status, headers });
 }
 
 /**

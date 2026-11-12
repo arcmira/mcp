@@ -258,31 +258,36 @@ return { thrown, raw: { status: r.status, body: await r.json(), limit: r.headers
     });
   });
 
-  it("reads any other refusal of a marked request as the API's own message, then where to run it, from a client method and from a raw fetch", async () => {
+  it('reads any other refusal of a marked request exactly as the API sent it, code and message, from a client method and from a raw fetch', async () => {
+    const reworded = 'This request is marked read-only and would have started a Premium transcript, so nothing was charged.';
     const refusals: Record<string, string> = {
       [`/v1/channels/${TBPN}/sponsors`]: READ_ONLY_MESSAGES.sponsors,
+      '/v1/mentions': READ_ONLY_MESSAGES.receipts,
       [`/v1/transcripts/${OWNED}`]: READ_ONLY_MESSAGES.owned(OWNED),
+      [`/v1/transcripts/${NOT_OWNED}`]: reworded,
     };
-    const upstream = (url: URL) => Response.json(readOnlyRefusal(refusals[url.pathname]!), { status: 403 });
+    const upstream = (url: URL) => (url.pathname in refusals ? Response.json(readOnlyRefusal(refusals[url.pathname]!), { status: 403 }) : Response.json({}));
     const program = `
 const out = [];
-for (const read of [() => arcmira.sponsors("${TBPN}"), () => arcmira.transcript("${OWNED}", { quality: "premium" })]) {
+for (const read of [
+  () => arcmira.sponsors("${TBPN}"),
+  () => arcmira.mentions({ entityId: "ent_14" }),
+  () => arcmira.transcript("${OWNED}", { quality: "premium" }),
+  () => arcmira.transcript("${NOT_OWNED}", { quality: "premium" }),
+]) {
   try { await read(); out.push("served"); } catch (e) { out.push([e.code, e.message]); }
 }
-for (const path of ["/v1/channels/${TBPN}/sponsors", "/v1/transcripts/${OWNED}?quality=premium"]) {
+for (const path of ["/v1/channels/${TBPN}/sponsors", "/v1/mentions?entity_id=ent_14", "/v1/transcripts/${OWNED}?quality=premium", "/v1/transcripts/${NOT_OWNED}?quality=premium"]) {
   const r = await fetch("https://api.arcmira.com" + path);
   const { error } = await r.json();
   out.push([r.status, error.code, error.message]);
 }
 return out;`;
     const reply = await callTool('arcmira_execute_read', { code: program }, upstream, { LOADER: fakeLoader() });
-    const sponsors = `${READ_ONLY_MESSAGES.sponsors} Run it in arcmira_execute_write.`;
-    const owned = `${READ_ONLY_MESSAGES.owned(OWNED)} Run it in arcmira_execute_write.`;
+    const messages = [READ_ONLY_MESSAGES.sponsors, READ_ONLY_MESSAGES.receipts, READ_ONLY_MESSAGES.owned(OWNED), reworded];
     assert.deepEqual(JSON.parse(textOf(reply)).value, [
-      ['write_tool_required', sponsors],
-      ['write_tool_required', owned],
-      [403, 'write_tool_required', sponsors],
-      [403, 'write_tool_required', owned],
+      ...messages.map((message) => ['read_only_request', message]),
+      ...messages.map((message) => [403, 'read_only_request', message]),
     ]);
   });
 
