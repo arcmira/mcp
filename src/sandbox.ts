@@ -210,6 +210,13 @@ function unknownOutcome(name: string, code: string, message: string): Execution 
   };
 }
 
+/** What a program that ran past 30 seconds reads. A read program cannot have started a Premium transcription or changed a monitor. */
+const TIMEOUT_MESSAGES: Readonly<Record<Access, string>> = {
+  read: 'The program exceeded 30 seconds. Its call count and final outcome are unknown. Requests may still finish and count toward usage. Retry with a smaller program.',
+  write:
+    'The program exceeded 30 seconds. Its call count and final outcome are unknown. Requests may still finish and count toward usage; a Premium transcription or monitor change it started may have gone through. Retry with a smaller program: a repeated Premium read never uses credits twice. Check arcmira.monitors.list() before repeating a monitor change.',
+};
+
 export async function runProgram(host: SandboxHost, code: string): Promise<Execution> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -230,11 +237,7 @@ export async function runProgram(host: SandboxHost, code: string): Promise<Execu
       timer = setTimeout(
         () =>
           resolve(
-            unknownOutcome(
-              'TimeoutError',
-              'timeout',
-              'The program exceeded 30 seconds. Its call count and final outcome are unknown. Requests may still finish and count toward usage; a Premium transcription or monitor change it started may have gone through. Retry with a smaller program: a repeated Premium read never uses credits twice. Check arcmira.monitors.list() before repeating a monitor change.',
-            ),
+            unknownOutcome('TimeoutError', 'timeout', TIMEOUT_MESSAGES[host.access === 'write' ? 'write' : 'read']),
           ),
         TIME_LIMIT_MS,
       );

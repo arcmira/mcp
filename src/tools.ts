@@ -24,7 +24,7 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 /** Every retired tool name and what replaced it. A call to one answers tool_retired naming the replacement. */
 export const RETIRED_TOOLS: Readonly<Record<string, string>> = {
   describe: 'arcmira_describe',
-  execute: 'arcmira_execute_read (arcmira_execute_write for monitor changes)',
+  execute: 'arcmira_execute_read (arcmira_execute_write for monitor changes and Premium transcripts)',
   prepare_transcript: 'arcmira.transcript(video, { quality: "premium" }) inside arcmira_execute_write',
   ...Object.fromEntries(
     [

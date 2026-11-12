@@ -114,28 +114,34 @@ describe('the sandbox program', () => {
   });
 });
 
-it('a timeout reports unknown calls after an in-flight read and clears its timer', async (t) => {
+it('a timeout reports unknown calls after an in-flight read and clears its timer, and only a write program may have started a Premium transcription or monitor change', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  let readStarted = false;
-  const loader = {
-    load: () => ({
-      getEntrypoint: () => ({
-        fetch: async () => {
-          readStarted = true;
-          return new Promise<Response>(() => {});
-        },
+  const messages: Record<string, string> = {};
+  for (const access of ['read', 'write'] as const) {
+    let readStarted = false;
+    const loader = {
+      load: () => ({
+        getEntrypoint: () => ({
+          fetch: async () => {
+            readStarted = true;
+            return new Promise<Response>(() => {});
+          },
+        }),
       }),
-    }),
-  } as unknown as WorkerLoader;
-  const { host: h } = host({});
-  const pending = runProgram({ ...h, loader }, 'return await arcmira.status({});');
-  assert.equal(readStarted, true);
-  t.mock.timers.tick(30001);
-  const outcome = await pending;
-  assert.equal(outcome.ok, false);
-  assert.equal(outcome.calls, null);
-  assert.equal(outcome.outcome_uncertain, true);
-  assert.match(JSON.parse(renderExecution(outcome)).error.message, /may still finish/);
+    } as unknown as WorkerLoader;
+    const { host: h } = host({});
+    const pending = runProgram({ ...h, loader, access }, 'return await arcmira.status({});');
+    assert.equal(readStarted, true);
+    t.mock.timers.tick(30001);
+    const outcome = await pending;
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.calls, null);
+    assert.equal(outcome.outcome_uncertain, true);
+    messages[access] = JSON.parse(renderExecution(outcome)).error.message;
+    assert.match(messages[access]!, /may still finish/);
+  }
+  assert.doesNotMatch(messages.read!, /Premium|monitor/);
+  assert.match(messages.write!, /a Premium transcription or monitor change it started may have gone through/);
 });
 
 it('module-level injected code cannot capture unmetered fetch', async () => {

@@ -110,8 +110,8 @@ describe('the six tools through the handler', () => {
     for (const [name, replacement] of [
       ['resolve_entities', 'arcmira_describe'],
       ['describe', 'arcmira_describe'],
-      ['execute', 'arcmira_execute_read'],
-      ['prepare_transcript', 'arcmira.transcript(video'],
+      ['execute', 'arcmira_execute_read (arcmira_execute_write for monitor changes and Premium transcripts)'],
+      ['prepare_transcript', 'arcmira.transcript(video, { quality: \\"premium\\" }) inside arcmira_execute_write'],
     ]) {
       const reply = await callTool(name, {}, () => Response.json({}));
       assert.equal(reply.result.isError, true, name);
