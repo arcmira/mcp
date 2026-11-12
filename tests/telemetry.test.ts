@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { ApiOutbound } from '../src/index.ts';
 import pkg from '../package.json' with { type: 'json' };
-import { CALL_HEADER, TOOL_HEADER } from '../src/api.ts';
+import { CALL_HEADER, READ_ONLY_HEADER, TOOL_HEADER } from '../src/api.ts';
 import { TOOL_CALLS_PATH, agentToken, intentParam, outline, traceId } from '../src/telemetry.ts';
 import { TOOLS } from '../src/tools.ts';
 import { errorResult } from '../src/result.ts';
@@ -97,6 +97,8 @@ describe('tool-call telemetry', () => {
     const [{ headers, body }] = posts;
     assert.equal(headers.get('authorization'), 'Bearer arc_sk_fixture');
     assert.match(headers.get('user-agent') ?? '', /^arcmira-mcp\//);
+    // arcmira_execute_read is annotated read-only, so its call's record carries the mark like its program's requests.
+    assert.equal(headers.get(READ_ONLY_HEADER), '1');
     assert.match(String(body.call_id), /^mcpc_[0-9a-f]{32}$/);
     assert.match(String(body.trace_id), /^mcpt_[0-9a-f]{24}$/);
     assert.equal(body.tool, 'arcmira_execute_read');
@@ -126,6 +128,7 @@ describe('tool-call telemetry', () => {
     assert.equal(posts[0]?.body.intent, null);
     assert.deepEqual(posts[0]?.body.input, { topic: 'sponsors' });
     assert.deepEqual(posts[0]?.body.api_calls, []);
+    assert.equal(posts[0]?.headers.get(READ_ONLY_HEADER), '1', "arcmira_describe is read-only, so its record carries the mark");
 
     const sent = await run(
       'arcmira_feedback',
@@ -138,6 +141,7 @@ describe('tool-call telemetry', () => {
     assert.equal(submit?.headers.get(TOOL_HEADER), 'arcmira_feedback');
     assert.deepEqual(sent.posts[0]?.body.api_calls, ['POST /v1/feedback']);
     assert.equal(sent.posts[0]?.body.intent, 'full transcript of the keynote');
+    assert.equal(sent.posts[0]?.headers.get(READ_ONLY_HEADER), null, 'arcmira_feedback is not read-only, so its record carries no mark');
   });
 
   it('a failed, hanging or throwing post never changes or delays the result', async () => {

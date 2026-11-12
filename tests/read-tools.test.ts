@@ -4,21 +4,21 @@ import worker from '../src/index.ts';
 import { OUTPUT_BUDGET } from '../src/output.ts';
 import { youtubeSearchTool } from '../src/read-tools.ts';
 import { fakeLoader } from './fake-loader.ts';
-import { callTool, listTools, textOf, withFetch, type ToolReply } from './handler.ts';
+import { callTool, listTools, textOf, withFetch, withoutRecords, type ToolReply } from './handler.ts';
 
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
 const VIDEO = 'dQw4w9WgXcQ';
 
-/** The upstream for one test: /v1/me passes the key check, and every other request is recorded and answered by `answer`. */
+/** The upstream for one test: /v1/me passes the key check, each call's record is answered, and every other request is recorded and answered by `answer`. */
 function upstream(answer: (url: URL) => Response) {
   const requests: URL[] = [];
   return {
     requests,
-    handler(url: URL) {
+    handler: withoutRecords((url: URL) => {
       if (url.pathname === '/v1/me') return Response.json({ id: 'caller' });
       requests.push(url);
       return answer(url);
-    },
+    }),
   };
 }
 

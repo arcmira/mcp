@@ -12,11 +12,21 @@ export function withFetch<T>(handler: (url: URL, init?: RequestInit) => Response
   });
 }
 
+type Upstream = (url: URL, init?: RequestInit) => Response | Promise<Response>;
+
+/**
+ * `upstream` behind an answer to each call's tool-call record, for a test about a tool's API reads alone. The mark tests in
+ * tests/read-only-mark.test.ts never use it, so they see every record.
+ */
+export function withoutRecords(upstream: Upstream): Upstream {
+  return (url, init) => (url.pathname === TOOL_CALLS_PATH ? new Response(null, { status: 202 }) : upstream(url, init));
+}
+
 export interface ToolReply {
   result: { content: Array<{ type: string; text: string }>; structuredContent?: unknown; isError?: boolean; _meta?: Record<string, unknown> };
 }
 
-/** One tools/call through the Worker's fetch, the way a host sends it. The reply is one SSE message. */
+/** One tools/call through the Worker's fetch, the way a host sends it. The reply is one SSE message. `upstream` sees every request, the call's record included. */
 export async function callTool(
   name: string,
   args: Record<string, unknown>,
@@ -59,9 +69,8 @@ export async function callTools(
     props: {},
     exports: { ApiOutbound: outboundFor },
   } as unknown as ExecutionContext;
-  // Tool-call telemetry posts land here, never on the network or the test's upstream.
-  const handler = (url: URL, init?: RequestInit) => (url.pathname === TOOL_CALLS_PATH ? new Response(null, { status: 202 }) : upstream(url, init));
-  const text = await withFetch(handler, async () => {
+  // Every request the Worker sends reaches the test's upstream, each call's tool-call record included.
+  const text = await withFetch(upstream, async () => {
     const response = await worker.fetch(request, env, ctx);
     const body = await response.text();
     await Promise.all(deferred);

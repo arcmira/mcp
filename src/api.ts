@@ -23,8 +23,8 @@ export const CLIENT_HEADER = 'x-arcmira-client';
 export const CALL_HEADER = 'x-arcmira-mcp-call';
 export const TOOL_HEADER = 'x-arcmira-mcp-tool';
 /**
- * Sent as `1` on every upstream request a tool annotated read-only makes. The API then refuses, with
- * read_only_request, anything that would use credits beyond the read itself or record a new job.
+ * Sent as `1` on every upstream request a call of a tool annotated read-only makes, its record included. The API then
+ * refuses, with read_only_request, anything that would use credits beyond the read itself or record a new job.
  */
 export const READ_ONLY_HEADER = 'x-arcmira-read-only';
 /** The header v1 answers with: the deploy id of the API build that served the call. */

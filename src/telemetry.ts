@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DEFAULT_API_BASE, USER_AGENT, type Env } from './api.ts';
+import { DEFAULT_API_BASE, READ_ONLY_HEADER, USER_AGENT, type Env } from './api.ts';
 import type { ToolResult } from './result.ts';
 
 /**
@@ -45,7 +45,8 @@ export interface ToolCallRecord {
   deploy: string | null;
 }
 
-export type Recorder = (record: ToolCallRecord) => void;
+/** Takes one finished call's record, and whether the call is a read-only tool's, so the post carries the call's mark. */
+export type Recorder = (record: ToolCallRecord, call: { readOnly: boolean }) => void;
 
 export function callId(): string {
   return `mcpc_${crypto.randomUUID().replaceAll('-', '')}`;
@@ -105,13 +106,14 @@ export function agentToken(userAgent: string | null): string | null {
 /**
  * The recorder for one request. Each record is posted after the result is built, inside waitUntil,
  * with the caller's own credential. Nothing here can delay, change or fail a tool result: the post
- * is not awaited by the tool, every error is swallowed, and a failed post is dropped.
+ * is not awaited by the tool, every error is swallowed, and a failed post is dropped. The post of a read-only tool's
+ * call carries x-arcmira-read-only: 1, like every other request that call sends.
  */
 export function toolCallRecorder(env: Env, ctx: ExecutionContext, request: Request, key: string): Recorder {
   const base = (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
   const session = request.headers.get('mcp-session-id');
   const agent = agentToken(request.headers.get('user-agent'));
-  return (record) => {
+  return (record, { readOnly }) => {
     const send = async () => {
       const client = record.client ?? agent;
       const trace_id = await traceId(session, key, client);
@@ -119,7 +121,7 @@ export function toolCallRecorder(env: Env, ctx: ExecutionContext, request: Reque
         method: 'POST',
         redirect: 'manual',
         signal: AbortSignal.timeout(5_000),
-        headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', 'user-agent': USER_AGENT },
+        headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', 'user-agent': USER_AGENT, ...(readOnly ? { [READ_ONLY_HEADER]: '1' } : {}) },
         body: JSON.stringify({ ...record, client, trace_id }),
       });
       await response.body?.cancel();

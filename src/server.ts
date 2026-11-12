@@ -32,7 +32,7 @@ export interface Caller {
    * Worker Loader binding.
    */
   sandbox: ((call: CallTag, access: Access) => SandboxHost) | null;
-  /** Takes each finished call's record. Never awaited, and a throw is ignored. */
+  /** Takes each finished call's record, with the call so its post carries the call's mark. Never awaited, and a throw is ignored. */
   record?: Recorder;
 }
 
@@ -70,9 +70,9 @@ export function createServer(caller: Caller, deploy: string | null = null, surfa
       },
       async ({ intent, ...input }) => {
         const started = Date.now();
-        const call: CallTag = { id: callId(), tool: tool.name, client: clientLabel(server.server.getClientVersion()) };
         // The handshake has completed by the time a tool runs, so the host's name is known here.
-        const api = caller.api?.({ ...call, readOnly: tool.annotations.readOnlyHint }) ?? null;
+        const call: ApiCall = { id: callId(), tool: tool.name, client: clientLabel(server.server.getClientVersion()), readOnly: tool.annotations.readOnlyHint };
+        const api = caller.api?.(call) ?? null;
         const sandbox = caller.sandbox;
         const result = build(
           api === null
@@ -93,7 +93,7 @@ export function createServer(caller: Caller, deploy: string | null = null, surfa
             client: call.client,
             server_version: pkg.version,
             deploy,
-          });
+          }, call);
         } catch {
           // Telemetry never changes what the host gets.
         }

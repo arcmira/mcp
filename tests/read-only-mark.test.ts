@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import { fakeLoader } from './fake-loader.ts';
 import { callTool, callTools, listTools, textOf } from './handler.ts';
 import { READ_ONLY_MESSAGES, READ_ONLY_REQUEST, readOnlyRefusal } from './read-only-refusal.ts';
+import { TOOL_CALLS_PATH } from '../src/telemetry.ts';
 
 const MARK = 'x-arcmira-read-only';
+/** The route of the record the Worker posts after each tool call. */
+const RECORD = `POST ${TOOL_CALLS_PATH}`;
 const OWNED = 'cdLeJU_1UH8';
 const NOT_OWNED = 'dQw4w9WgXcQ';
 const TBPN = 'UC-DRzaGnL_vtBUpCFH5M0tg';
@@ -20,7 +23,7 @@ interface Sent {
 /**
  * The API as its change of 2026-11-12 describes it, where any value but 0 marks a request. A marked Premium read of a transcript the account does not own,
  * with or without retry, and a marked Premium read in a language it has not paid for, answer 403 read_only_request.
- * The same reads unmarked are served, and so is everything else.
+ * The same reads unmarked are served, and so is everything else, each call's record included.
  */
 function api(sent: Sent[]) {
   return (url: URL, init?: RequestInit): Response => {
@@ -69,7 +72,7 @@ const SAMPLE_CALLS: Readonly<Record<string, Record<string, unknown>>> = {
 
 describe('the read-only mark follows the read-only annotation', () => {
   for (const path of ['/mcp', '/mcp/apps']) {
-    it(`on ${path}, every request a tool annotated read-only sends carries x-arcmira-read-only: 1, and no other tool sends the header`, async () => {
+    it(`on ${path}, every request a call of a tool annotated read-only sends carries x-arcmira-read-only: 1, its record included, and no other tool's call sends the header`, async () => {
       const tools = await listTools(path);
       assert.ok(tools.length > 0);
       for (const tool of tools) {
@@ -79,20 +82,28 @@ describe('the read-only mark follows the read-only annotation', () => {
         const reply = await callTool(tool.name, args, api(sent), { LOADER: fakeLoader() }, path);
         assert.equal(reply.result.isError, undefined, `${tool.name}: ${textOf(reply)}`);
         const readOnly = tool.annotations.readOnlyHint === true;
-        if (tool.name === 'arcmira_describe') assert.deepEqual(sent, [], 'describe makes no upstream call');
-        else assert.ok(sent.length > 0, `${tool.name} made no upstream request`);
+        assert.equal(sent.at(-1)?.route, RECORD, `${tool.name}: the call's record is its last request`);
+        assert.equal(sent.filter((request) => request.route === RECORD).length, 1, `${tool.name} posts one record`);
+        if (tool.name === 'arcmira_describe') assert.deepEqual(sent.map((request) => request.route), [RECORD], 'describe reads nothing from the API');
+        else assert.ok(sent.length > 1, `${tool.name} made no API request besides its record`);
         for (const request of sent) assert.equal(request.mark, readOnly ? '1' : null, `${path} ${tool.name} (readOnlyHint ${readOnly}) sent ${request.route} with ${MARK}: ${request.mark}`);
       }
     });
   }
 
   for (const path of ['/mcp', '/mcp/apps']) {
-    it(`on ${path}, a read tool call and a feedback call in one HTTP request each send their own mark, call and tool`, async () => {
+    it(`on ${path}, a read tool call and a feedback call in one HTTP request each send their own mark, call and tool, records included`, async () => {
       const sent: Array<{ route: string; mark: string | null; call: string | null; tool: string | null }> = [];
+      const records: Array<{ mark: string | null; call: string; tool: string }> = [];
       let feedbackSent!: () => void;
       const feedback = new Promise<void>((resolve) => (feedbackSent = resolve));
       const upstream = async (url: URL, init?: RequestInit) => {
         const headers = new Headers(init?.headers);
+        if (url.pathname === TOOL_CALLS_PATH) {
+          const { call_id, tool } = JSON.parse(String(init?.body)) as { call_id: string; tool: string };
+          records.push({ mark: headers.get(MARK), call: call_id, tool });
+          return new Response(null, { status: 202 });
+        }
         sent.push({ route: `${init?.method ?? 'GET'} ${url.pathname}`, mark: headers.get(MARK), call: headers.get('x-arcmira-mcp-call'), tool: headers.get('x-arcmira-mcp-tool') });
         if (url.pathname === '/v1/feedback') feedbackSent();
         // The read call's channel lookup answers only after the feedback call has started and sent its request.
@@ -118,6 +129,14 @@ describe('the read-only mark follows the read-only annotation', () => {
       for (const request of [resolve!, search!]) assert.deepEqual([request.mark, request.tool, request.call], ['1', 'arcmira_youtube_search', resolve!.call], `${path} read call sent ${request.route}`);
       assert.deepEqual([posted!.mark, posted!.tool], [null, 'arcmira_feedback'], `${path} feedback call sent ${posted!.route}`);
       assert.notEqual(posted!.call, resolve!.call);
+      assert.deepEqual(
+        [...records].sort((a, b) => a.tool.localeCompare(b.tool)),
+        [
+          { mark: null, call: posted!.call, tool: 'arcmira_feedback' },
+          { mark: '1', call: resolve!.call, tool: 'arcmira_youtube_search' },
+        ],
+        `${path}: each call's record carries that call's mark`,
+      );
     });
   }
 
@@ -164,6 +183,7 @@ return {
     await raw("/v1/transcripts/${OWNED}?quality=premium&language=ja"),
     await raw("/v1/transcriptions/5a1c0b9e-2f8d-4c47-9e2b-1d3f6a7b8c90"),
     await raw("/v1/transcriptions?video_id=${NOT_OWNED}"),
+    await raw("/v1/transcripts/${NOT_OWNED}?refresh=true"),
   ],
 };`;
 
@@ -172,13 +192,13 @@ describe('an arcmira_execute_read program under the mark', () => {
     assert.deepEqual(READ_ONLY_REQUEST && { code: READ_ONLY_REQUEST.code, type: READ_ONLY_REQUEST.type, gate: READ_ONLY_REQUEST.gate }, { code: 'read_only_request', type: 'permission_error', gate: undefined });
   });
 
-  it('sends every request marked, by client method or raw fetch, and the reads the API refuses come back as write_tool_required', async () => {
+  it('sends every request marked, by client method or raw fetch, its record included, and the reads the API refuses come back as write_tool_required', async () => {
     const sent: Sent[] = [];
     const reply = await callTool('arcmira_execute_read', { code: READ_PROGRAM }, api(sent), { LOADER: fakeLoader() });
     assert.equal(reply.result.isError, undefined, textOf(reply));
     const value = JSON.parse(textOf(reply)).value;
     assert.deepEqual(value.refused, ['write_tool_required', 'write_tool_required', 'write_tool_required', 'write_tool_required']);
-    assert.deepEqual(value.raw, [403, 403, 403, 200, 200]);
+    assert.deepEqual(value.raw, [403, 403, 403, 200, 200, 200]);
     assert.deepEqual(
       sent.map((request) => request.route),
       [
@@ -209,6 +229,8 @@ describe('an arcmira_execute_read program under the mark', () => {
         `GET /v1/transcripts/${OWNED}?quality=premium&language=ja`,
         'GET /v1/transcriptions/5a1c0b9e-2f8d-4c47-9e2b-1d3f6a7b8c90',
         `GET /v1/transcriptions?video_id=${NOT_OWNED}`,
+        `GET /v1/transcripts/${NOT_OWNED}?refresh=true`,
+        RECORD,
       ],
     );
     assert.deepEqual(
@@ -264,7 +286,7 @@ return out;`;
     ]);
   });
 
-  it('cannot send a write: POST /v1/transcriptions and every monitor write stop before any request', async () => {
+  it('cannot send a write: POST /v1/transcriptions and every monitor write stop before any request, and only the marked record goes out', async () => {
     const sent: Sent[] = [];
     const program = `
 const r = await fetch("https://api.arcmira.com/v1/transcriptions", { method: "POST", body: JSON.stringify({ video_id: "${NOT_OWNED}" }) });
@@ -279,12 +301,12 @@ for (const write of [
 return codes;`;
     const reply = await callTool('arcmira_execute_read', { code: program }, api(sent), { LOADER: fakeLoader() });
     assert.deepEqual(JSON.parse(textOf(reply)).value, [403, 'outbound_refused', 'write_tool_required', 'write_tool_required', 'write_tool_required', 'write_tool_required', 'write_tool_required']);
-    assert.deepEqual(sent, []);
+    assert.deepEqual(sent, [{ route: RECORD, mark: '1' }], 'only the marked record goes out');
   });
 });
 
 describe('the same Premium reads in arcmira_execute_write', () => {
-  it('go out unmarked and start the transcript or translation', async () => {
+  it('go out unmarked and start the transcript or translation, and so does the call\'s record', async () => {
     const sent: Sent[] = [];
     const program = `
 const out = [];
@@ -296,10 +318,9 @@ return out;`;
     const reply = await callTool('arcmira_execute_write', { code: program }, api(sent), { LOADER: fakeLoader() });
     assert.equal(reply.result.isError, undefined, textOf(reply));
     assert.deepEqual(JSON.parse(textOf(reply)).value, [['ready', 300], ['ready', 300], ['ready', 300]]);
-    assert.equal(sent.length, 3);
     assert.deepEqual(
-      sent.map((request) => request.mark),
-      [null, null, null],
+      sent.map((request) => [request.route.split('?')[0], request.mark]),
+      [[`GET /v1/transcripts/${NOT_OWNED}`, null], [`GET /v1/transcripts/${NOT_OWNED}`, null], [`GET /v1/transcripts/${NOT_OWNED}`, null], [RECORD, null]],
     );
   });
 });
