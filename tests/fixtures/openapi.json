@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Arcmira API",
-    "description": "Search YouTube transcripts for timestamped passages. Find mentions of people, organizations, products and topics; research channel sponsors and recommendations; retrieve creator captions or Premium transcripts with speaker identification; and monitor entities for new mentions. Official API guides: https://arcmira.com/docs. An explicit Premium read uses credits from the account's plan, then its on-demand budget.",
+    "description": "YouTube transcript search and monitoring. Search transcripts for timestamped passages. Find mentions of people, organizations, products and topics; research channel sponsors and recommendations; retrieve creator captions or Premium transcripts with speaker identification; and monitor entities for new mentions. Official API guides: https://arcmira.com/docs. An explicit Premium read uses credits from the account's plan, then its on-demand budget.",
     "version": "1.0.0",
     "contact": {
       "name": "Arcmira",
@@ -42,7 +42,7 @@
         }
       },
       "RateLimit-Remaining": {
-        "description": "Requests left in the current window.",
+        "description": "An estimate of the requests left in the current window. Limits are counted at each Cloudflare location, so it can read high; a 429 is the final word.",
         "schema": {
           "type": "integer"
         }
@@ -332,6 +332,10 @@
                   },
                   "limit": {
                     "$ref": "#/components/schemas/Limit"
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "On terms_acceptance_required: the page where the person accepts the updated Terms of Service. On terms_updated: the Terms of Service page."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -390,7 +394,7 @@
           {
             "code": "fair_use_cap",
             "type": "quota_exceeded",
-            "description": "Ultra plan credits cover 80 Premium transcript hours a month, and this month's are used. Past them a Premium transcript uses granted or on-demand credits, and the account has none. Nothing was charged. details.limit carries the hours and what is used. An admin turns on on-demand usage or raises its budget, or the hours reset with the month."
+            "description": "A fair-use cap on the plan's credits is reached for this use this month, and the account has no granted or on-demand credits to use instead. Nothing was charged. details.limit carries the cap and what is used. An admin turns on on-demand usage or raises its budget, or the cap resets with the month."
           },
           {
             "code": "feature_not_available",
@@ -565,6 +569,11 @@
             "description": "Too many requests in the window. Retry-After carries the wait."
           },
           {
+            "code": "read_only_request",
+            "type": "permission_error",
+            "description": "The request carried the `x-arcmira-read-only` header and would have used credits beyond the read itself, for a Premium transcript, a translation, or more sponsors or receipts. Nothing was charged. Any value other than `0` marks the request; `1` is the form to send. Send the request without the header to do it. From the MCP server, run the same read in `arcmira_execute_write`. A submit for a Premium transcript the account already owns is refused the same way: read the transcript with GET instead."
+          },
+          {
             "code": "recipient_upgrade_required",
             "type": "permission_error",
             "description": "The requested email recipient count exceeds the plan allowance."
@@ -596,6 +605,11 @@
             "description": "Unexpected failure. Retry with backoff and quote request_id if it persists."
           },
           {
+            "code": "service_unavailable",
+            "type": "server_error",
+            "description": "The database was briefly overloaded or restarting (HTTP 503). Retry-After carries the wait; send the same request again."
+          },
+          {
             "code": "signup_code_invalid",
             "type": "invalid_request_error",
             "description": "The signup code is wrong, expired, or spent; message names the attempts left."
@@ -616,6 +630,16 @@
             "description": "team_id is retired: a monitor belongs to the account the key acts in. Omit team_id or send null."
           },
           {
+            "code": "terms_acceptance_required",
+            "type": "permission_error",
+            "description": "The person the key or token acts for has not accepted the updated Terms of Service. details.url is the page where they accept; the key or token works again as soon as they do."
+          },
+          {
+            "code": "terms_updated",
+            "type": "permission_error",
+            "description": "The Terms of Service changed since the person the key or token acts for last accepted them. This call was not run. Continuing to use the API accepts the updated terms, so the same call succeeds when sent again. details.url is the terms page. Sent once per person."
+          },
+          {
             "code": "tracker_create_retired",
             "type": "invalid_request_error",
             "description": "POST /v1/trackers is retired (HTTP 410): a tracker lives inside a monitor. Follow an entity id or an exact name with POST /v1/monitors/{id}/entities, which creates the tracker in that monitor."
@@ -633,7 +657,7 @@
           {
             "code": "transcript_fetching",
             "type": "server_error",
-            "description": "The caption track is being fetched now (HTTP 503). Retry-After carries the wait; nothing was charged."
+            "description": "The caption track is being fetched, or the transcript translated, now (HTTP 503). Retry-After carries the wait; nothing was charged."
           },
           {
             "code": "transcript_requires_account",
@@ -2422,7 +2446,7 @@
               "string",
               "null"
             ],
-            "description": "One-sentence description of the mention context. Null when not generated."
+            "description": "One sentence on why the entity comes up in this video, written to sit under the quoted line. Some mentions read in October 2026 hold the quoted transcript line instead. Null when not generated."
           },
           "confidence": {
             "type": [
@@ -2638,7 +2662,14 @@
             "items": {
               "$ref": "#/components/schemas/Recommendation"
             },
-            "description": "Newest first."
+            "description": "Newest first. Empty below Pro+, where shows carries the free slice."
+          },
+          "shows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrandShow"
+            },
+            "description": "Present below Pro+: up to 3 of the entity's top shows by ad-read count, most first (a tie goes to the show name, then the channel id), each with one receipt."
           },
           "has_more": {
             "type": "boolean",
@@ -2663,6 +2694,165 @@
           },
           "window": {
             "$ref": "#/components/schemas/PublicationWindow"
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer",
+                "description": "Shows returned."
+              },
+              "total": {
+                "type": "integer",
+                "description": "Shows that carry an ad read for the entity."
+              },
+              "ad_reads": {
+                "type": "integer",
+                "description": "Ad reads for the entity across every show."
+              }
+            },
+            "required": [
+              "count",
+              "total",
+              "ad_reads"
+            ],
+            "description": "Present with shows: the full counts behind the free slice."
+          },
+          "access": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "invalid_request_error",
+                  "authentication_error",
+                  "permission_error",
+                  "quota_exceeded",
+                  "rate_limit_error",
+                  "not_found",
+                  "conflict_error",
+                  "server_error"
+                ],
+                "description": "The error class. It fixes the HTTP status: invalid_request_error 400, authentication_error 401, quota_exceeded 402, permission_error 403, not_found 404, conflict_error 409, rate_limit_error 429, server_error 500. Switch on it for retry and gate handling."
+              },
+              "code": {
+                "type": "string",
+                "description": "The specific condition, stable and snake_case; doc_url anchors on it. x-arcmira-codes on this schema lists every code with its type, gate and meaning. The list is open: new codes may appear inside an existing type, so switch on type and gate first."
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "no_credential",
+                  "invalid",
+                  "revoked"
+                ],
+                "description": "Only on invalid_api_key. no_credential: nothing was sent. invalid: a credential was sent and is unknown or malformed. revoked: the key exists and is no longer usable."
+              },
+              "message": {
+                "type": "string",
+                "description": "One plain line. Names the fix or the unlock."
+              },
+              "param": {
+                "type": "string",
+                "description": "The query or body parameter the gate refused, when one did."
+              },
+              "gate": {
+                "type": "string",
+                "enum": [
+                  "rows",
+                  "key",
+                  "plan",
+                  "freshness",
+                  "exposure_law",
+                  "rate",
+                  "pagination"
+                ],
+                "description": "Which boundary refused. Present on every gate error; switch on it without parsing the message."
+              },
+              "resource": {
+                "$ref": "#/components/schemas/ErrorResource"
+              },
+              "unlock": {
+                "type": "object",
+                "properties": {
+                  "tier": {
+                    "type": "string",
+                    "description": "The plan that lifts the gate."
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "Absolute upgrade or sign-up URL carrying its ?src= attribution. Use it verbatim."
+                  },
+                  "offer": {
+                    "type": "null",
+                    "description": "Reserved for the agent-discount offer. Always null today."
+                  },
+                  "action": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "description": "What the call does. send_signup_code sends a verification code to an address for an account key."
+                      },
+                      "method": {
+                        "type": "string",
+                        "description": "HTTP method to use."
+                      },
+                      "url": {
+                        "type": "string",
+                        "description": "Absolute endpoint carrying its ?src= attribution. Call it verbatim."
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "method",
+                      "url"
+                    ],
+                    "description": "The request that lifts the gate with no human, present when the caller can fix this itself. A key gate carries the signup send here; a plan or quota gate has no action and its url is a page a person opens."
+                  }
+                },
+                "required": [
+                  "tier",
+                  "url",
+                  "offer"
+                ],
+                "description": "How to lift the gate. Present when the gate has an unlock."
+              },
+              "retry_after_seconds": {
+                "type": "integer",
+                "description": "Present on rate gates. Mirrors the Retry-After header."
+              },
+              "details": {
+                "type": "object",
+                "properties": {
+                  "quote": {
+                    "$ref": "#/components/schemas/RefusedQuote"
+                  },
+                  "limit": {
+                    "$ref": "#/components/schemas/Limit"
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "On terms_acceptance_required: the page where the person accepts the updated Terms of Service. On terms_updated: the Terms of Service page."
+                  }
+                },
+                "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
+              },
+              "doc_url": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "code",
+              "message",
+              "doc_url",
+              "request_id"
+            ],
+            "description": "The gate that reduced this response. Present only when something was withheld; carries the same code, gate, and unlock an outright refusal would."
           }
         },
         "required": [
@@ -2843,6 +3033,112 @@
           "conflict_status",
           "resolution"
         ]
+      },
+      "BrandShow": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Public entity id (\"ent_{n}\") of the show. Null when the show has no entity record yet."
+              },
+              "youtube_channel_id": {
+                "type": "string",
+                "description": "YouTube channel id of the show."
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Show name. Null when the show has no entity record yet."
+              },
+              "page": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The channel's page on arcmira.com, absolute. Null when no channel is known."
+              }
+            },
+            "required": [
+              "id",
+              "youtube_channel_id",
+              "name",
+              "page"
+            ]
+          },
+          "ad_reads": {
+            "type": "integer",
+            "description": "Ad reads for the entity on this show, every date counted."
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/SponsorReceipt"
+          }
+        },
+        "required": [
+          "channel",
+          "ad_reads",
+          "receipt"
+        ]
+      },
+      "SponsorReceipt": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "video_id": {
+            "type": "string",
+            "description": "YouTube video id (11 characters)."
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Video title."
+          },
+          "published_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Video publish timestamp."
+          },
+          "start_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Where the ad read starts, in integer seconds. 0 means \"full episode / no specific moment\". Null when the analyzer could not place it in time."
+          },
+          "verbatim_quote": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The ad read as said. Null when no quote was extracted."
+          },
+          "watch_url": {
+            "type": "string",
+            "description": "The video on arcmira.com, opened at start_seconds."
+          }
+        },
+        "required": [
+          "video_id",
+          "title",
+          "published_at",
+          "start_seconds",
+          "verbatim_quote",
+          "watch_url"
+        ],
+        "description": "One of those ad reads, the newest your plan lists. Null when every read on this show is newer than your plan's freshness window."
       },
       "FeedbackResponse": {
         "type": "object",
@@ -3297,7 +3593,7 @@
             "items": {
               "$ref": "#/components/schemas/ChannelSponsor"
             },
-            "description": "Recurring sponsors ordered by ad read count (descending)."
+            "description": "Recurring sponsors, most ad reads first, a tie going to the name. Below Pro+, the three the channel's sponsors page on arcmira.com names."
           },
           "meta": {
             "type": "object",
@@ -3313,6 +3609,10 @@
               "total": {
                 "type": "integer",
                 "description": "Sponsors in the rollup at the applied threshold. Greater than count only when the plan gate cut the list to the free slice."
+              },
+              "ad_reads": {
+                "type": "integer",
+                "description": "Present below Pro+: ad reads across every sponsor in the rollup."
               }
             },
             "required": [
@@ -3433,6 +3733,10 @@
                   },
                   "limit": {
                     "$ref": "#/components/schemas/Limit"
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "On terms_acceptance_required: the page where the person accepts the updated Terms of Service. On terms_updated: the Terms of Service page."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -3534,6 +3838,59 @@
               "last_ad_date"
             ],
             "description": "Curated known-advertiser record for this sponsor/channel pair. Null unless the pair exists in the curated dataset."
+          },
+          "receipt": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "video_id": {
+                "type": "string",
+                "description": "YouTube video id (11 characters)."
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Video title."
+              },
+              "published_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Video publish timestamp."
+              },
+              "start_seconds": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Where the ad read starts, in integer seconds. 0 means \"full episode / no specific moment\". Null when the analyzer could not place it in time."
+              },
+              "verbatim_quote": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The ad read as said. Null when no quote was extracted."
+              },
+              "watch_url": {
+                "type": "string",
+                "description": "The video on arcmira.com, opened at start_seconds."
+              }
+            },
+            "required": [
+              "video_id",
+              "title",
+              "published_at",
+              "start_seconds",
+              "verbatim_quote",
+              "watch_url"
+            ],
+            "description": "Present below Pro+: one of this sponsor's ad reads on the channel, the newest your plan lists. Null when every read is newer than your plan's freshness window."
           }
         },
         "required": [
@@ -3767,6 +4124,10 @@
                   },
                   "limit": {
                     "$ref": "#/components/schemas/Limit"
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "On terms_acceptance_required: the page where the person accepts the updated Terms of Service. On terms_updated: the Terms of Service page."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -3867,13 +4228,15 @@
                 "John Coogan"
               ],
               "source": "creator_captions",
-              "source_label": "Creator captions",
+              "source_label": "3rd Party (Video Creator)",
               "published_at": "2026-08-04T17:00:00.000Z",
-              "text": "Ramp has been on the show for a while now and the pitch is still the same, spend less time on expenses.",
+              "text": "Ramp corporate cards have been on the show for a while now, and the pitch is still the same: spend less time on expenses.",
               "start_seconds": 4787,
+              "line_start_seconds": 4787,
               "watch_url": "/watch?v=dQw4w9WgXcQ&t=4787",
               "cite_line": "[TBPN | Tuesday, August 4](/watch?v=dQw4w9WgXcQ&t=4787) · @1:19:47 · TBPN · Aug 4, 2026",
               "score": 0.71,
+              "match": "phrase",
               "about": [
                 {
                   "id": "ent_14",
@@ -4002,22 +4365,38 @@
               "integer",
               "null"
             ],
-            "description": "Offset of the slice in the video, in seconds."
+            "description": "Where the slice starts in the video, in seconds. The line that matched q can be up to a minute later; line_start_seconds says when it is said."
+          },
+          "line_start_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "When the line that best matches q starts, in whole seconds from the start of the video: the line where q starts as a phrase, otherwise the first of the fewest consecutive lines holding the most words of q. With by, the person's own line. watch_url and cite_line open here. Null when no line can be placed, for example on a passage indexed before line times were stored; watch_url and cite_line then open at start_seconds."
           },
           "watch_url": {
             "type": "string",
-            "description": "Absolute watch URL on arcmira.com with the timestamp, e.g. https://arcmira.com/watch?v=...&t=4787."
+            "description": "Absolute watch URL on arcmira.com at line_start_seconds (start_seconds when it is null), e.g. https://arcmira.com/watch?v=...&t=4787."
           },
           "cite_line": {
             "type": [
               "string",
               "null"
             ],
-            "description": "A ready citation line: title, clock, channel, date."
+            "description": "A ready citation line: title, clock, channel, date. The clock is the second watch_url opens at."
           },
           "score": {
             "type": "number",
             "description": "Retrieval score. Higher is a closer match. Not comparable across calls."
+          },
+          "match": {
+            "type": "string",
+            "enum": [
+              "phrase",
+              "all_words",
+              "partial"
+            ],
+            "description": "How the passage holds q, ignoring case and punctuation: phrase holds every word of q in order, all_words holds each content word somewhere, partial holds only some. Passages holding the phrase or every word rank first. When no chunk is a phrase match, note says so."
           },
           "about": {
             "type": "array",
@@ -4042,8 +4421,10 @@
           "published_at",
           "text",
           "start_seconds",
+          "line_start_seconds",
           "watch_url",
-          "score"
+          "score",
+          "match"
         ]
       },
       "EntityMomentumResponse": {
@@ -4179,22 +4560,35 @@
           "paid_vs_organic": {
             "type": "object",
             "properties": {
-              "ad_reads": {
-                "type": "integer"
-              },
-              "endorsements": {
-                "type": "integer"
+              "sponsored": {
+                "type": "integer",
+                "description": "Sponsored recommendations in window: GET /v1/recommendations?class=sponsored with after and before set to window serves this many."
               },
               "organic": {
-                "type": "integer"
+                "type": "integer",
+                "description": "Organic recommendations in window, unpaid personal recommendations: GET /v1/recommendations?class=organic with the same window serves this many."
+              },
+              "mention": {
+                "type": "integer",
+                "description": "Neutral commercial mentions in window: GET /v1/recommendations?class=mention with the same window serves this many."
+              },
+              "ad_reads": {
+                "type": "integer",
+                "description": "Equals sponsored. The older name, kept for callers that read it."
+              },
+              "endorsements": {
+                "type": "integer",
+                "description": "Equals organic. The older name, kept for callers that read it."
               }
             },
             "required": [
+              "sponsored",
+              "organic",
+              "mention",
               "ad_reads",
-              "endorsements",
-              "organic"
+              "endorsements"
             ],
-            "description": "Commercial split in window. Present only on a Pro+ plan; otherwise access names the gate."
+            "description": "Commercial split in window, by the classes GET /v1/recommendations uses: sponsored (an ad-style promotion heard at that moment: a paid sponsor read, promo code, affiliate plug, thanks for supplied goods or venue, or a show promoting its own product as an ad), organic (an unpaid personal recommendation), mention (a neutral commercial mention). Present only on a Pro+ plan; otherwise access names the gate."
           },
           "access": {
             "type": "object",
@@ -4308,6 +4702,10 @@
                   },
                   "limit": {
                     "$ref": "#/components/schemas/Limit"
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "On terms_acceptance_required: the page where the person accepts the updated Terms of Service. On terms_updated: the Terms of Service page."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -5359,6 +5757,13 @@
             ],
             "description": "Slack channel to deliver to. Null when Slack is not configured."
           },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The Arcmira user id of the person who created the monitor, the same id email_recipients[].user_id names. In a team account this is the teammate who created it, not the account owner. A restored monitor keeps its creator. Null for monitors created before this field existed."
+          },
           "created_at": {
             "type": "string",
             "description": "When the monitor was created."
@@ -5387,6 +5792,7 @@
           "notify_slack",
           "slack_integration_id",
           "slack_channel_id",
+          "created_by",
           "created_at",
           "updated_at",
           "access"
@@ -5420,7 +5826,27 @@
           },
           "message": {
             "type": "string",
-            "description": "Human-readable confirmation."
+            "description": "Human-readable confirmation. On a create that names no destination it also says where alerts will go, or that the monitor delivers nowhere."
+          },
+          "default_destination": {
+            "type": "object",
+            "properties": {
+              "channel": {
+                "type": "string",
+                "enum": [
+                  "email"
+                ]
+              },
+              "email": {
+                "type": "string",
+                "description": "The verified address of the person whose key or connection made the request. It needs no confirmation."
+              }
+            },
+            "required": [
+              "channel",
+              "email"
+            ],
+            "description": "Present on a create that named no destination field, so alerts go to the caller's own verified address. Tell the user. To change it, set notify_emails, notify_slack or notify_webhook with webhook_url. To stop alerts, pause the monitor. An update never sets it."
           }
         },
         "required": [
@@ -5641,7 +6067,7 @@
           },
           "status": {
             "type": "string",
-            "description": "Delivery status. Values: pending (queued for delivery), sent (delivered), failed (delivery failed; see error_message), skipped (delivery intentionally skipped)."
+            "description": "Delivery status. Values: pending (queued for delivery), sending (handed to the destination, answer not yet recorded), sent (delivered), unconfirmed (handed to the destination with no answer recorded; counted as delivered), failed (delivery failed; see error_message), skipped (delivery intentionally skipped)."
           },
           "final_status": {
             "type": [
@@ -6096,7 +6522,11 @@
           },
           "language": {
             "type": "string",
-            "description": "The resolved track code, asr-en style when the track is automatic."
+            "description": "The language of the lines: the resolved track code (asr-en style when the track is automatic) or, when the transcript was translated, the code it was translated into."
+          },
+          "base_language": {
+            "type": "string",
+            "description": "The transcript's own language, as a code (en, es): the original caption track's, or the language a Premium transcript was spoken and transcribed in. language= returns the transcript in it; a language other than base_language means the lines were translated."
           },
           "languages": {
             "type": "array",
@@ -6104,6 +6534,13 @@
               "$ref": "#/components/schemas/CaptionTrack"
             },
             "description": "Every caption track the video offers. Empty when we did not list them on this call."
+          },
+          "translation_languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The codes language can name on this read. On captions, only the languages YouTube makes available for the video (its own tracks, and its auto-translate languages); on Premium, every language Arcmira translates into, at the Premium rate."
           },
           "lines": {
             "type": "array",
@@ -6221,7 +6658,7 @@
           },
           "rows_billed": {
             "type": "integer",
-            "description": "Credits this captions read used, in rows (a row is 4 credits): 4 credits per started 15 minutes. 0 on a repeat of the same video, quality, language, and range inside the 7 day dedupe window. Premium reads report 0, because the Premium transcript job carries their charge."
+            "description": "Credits this captions read used, in rows (a row is 4 credits): 4 credits per started 15 minutes. 0 on a repeat of the same video, quality, language, translation, and range inside the 7 day dedupe window. Premium reads report 0, because the Premium transcript job carries their charge, except the read that pays for a Premium transcript in another language, which reports its rows."
           },
           "as_of": {
             "type": [
@@ -6352,6 +6789,10 @@
                   },
                   "limit": {
                     "$ref": "#/components/schemas/Limit"
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "On terms_acceptance_required: the page where the person accepts the updated Terms of Service. On terms_updated: the Terms of Service page."
                   }
                 },
                 "description": "Machine data the refusal carries for you to act on. Present only on the codes that name a field here."
@@ -6383,7 +6824,9 @@
           "quality",
           "source",
           "language",
+          "base_language",
           "languages",
+          "translation_languages",
           "rows_billed",
           "as_of",
           "note"
@@ -6402,12 +6845,24 @@
             "quality": "captions",
             "source": "creator_captions",
             "language": "en",
+            "base_language": "en",
             "languages": [
               {
                 "code": "en",
                 "name": "English",
                 "generated": false
               }
+            ],
+            "translation_languages": [
+              "ar",
+              "de",
+              "es",
+              "fr",
+              "hi",
+              "ja",
+              "ko",
+              "pt",
+              "zh-Hans"
             ],
             "lines": [
               {
@@ -6438,12 +6893,24 @@
             "quality": "premium",
             "source": "arcmira_premium",
             "language": "en",
+            "base_language": "en",
             "languages": [
               {
                 "code": "en",
                 "name": "English",
                 "generated": false
               }
+            ],
+            "translation_languages": [
+              "ar",
+              "de",
+              "es",
+              "fr",
+              "hi",
+              "ja",
+              "ko",
+              "pt",
+              "zh-Hans"
             ],
             "lines": [
               {
@@ -7488,7 +7955,7 @@
         ],
         "operationId": "list_mentions",
         "summary": "Search mentions across media",
-        "description": "Cursor-paginated mentions filtered by entity (entity_id is required; resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter), channel (channel_id), text query, sentiment, appearance flag, and publication window [after, before). The signed continuation binds the route, filters, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing mentions remain live. Positions are start_seconds and end_seconds (integer seconds; 0 means full episode). is_appearance filtering applies to person entities only; passing is_appearance=true for any other type returns a 400 (appearances_person_only). details=full attaches per-mention commercial recommendations and requires a Pro+ plan.",
+        "description": "Find where a person, company, product, or topic is mentioned in indexed videos and podcasts. For a person, set `is_appearance` to true to find media appearances, false for mentions by others, or omit it for both. Results include a description, source video, and available timestamps. Cursor-paginated, filtered by entity (`entity_id` is required; resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter), channel (`channel_id`), text query, sentiment, appearance flag, and publication window [after, before). The signed continuation binds the route, filters, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing mentions remain live. Positions are start_seconds and end_seconds (integer seconds; 0 means full episode). is_appearance filtering applies to person entities only; passing is_appearance=true for any other type returns a 400 (appearances_person_only). details=full attaches per-mention commercial recommendations and requires a Pro+ plan.",
         "security": [
           {
             "bearerAuth": []
@@ -7669,8 +8136,8 @@
           "Recommendations"
         ],
         "operationId": "list_recommendations",
-        "summary": "Search recommendations across media",
-        "description": "Cursor-paginated commercial mentions (sponsored, organic and neutral mentions) filtered by entity (entity_id is required; resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter), channel (channel_id), class, confidence, and publication window [after, before). The signed continuation binds the route, filters, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing recommendations remain live. Requires a Pro+ plan. Positions are start_seconds and end_seconds (integer seconds).",
+        "summary": "Find which shows a brand sponsors",
+        "description": "Which shows a brand sponsors, and which recommend or mention it. entity_id is required; resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter. On a plan below Pro+, it returns the brand's total shows and ad reads and up to 3 of its top shows by ad-read count in shows, each with one receipt: the newest ad read the plan can open, with start_seconds and a timestamped watch_url. Over MCP this is arcmira.recommendations(entityId) through arcmira_execute_read. On Pro+, cursor-paginated commercial mentions (sponsored, organic and neutral mentions) filtered by entity, channel (channel_id), class, confidence, and publication window [after, before). The signed continuation binds the route, filters, caller and visibility; invalid or old cursors return invalid_cursor. A first-page ID fence excludes later insertions, including old-date backfills. Edits and deletions to existing recommendations remain live. Positions are start_seconds and end_seconds (integer seconds). Below Pro+, recommendations is empty, meta.total and meta.ad_reads are the full counts, ties order by show name in code order, then channel id, and access says how many shows and ad reads the slice left out. Below Pro+, a brand can also return its totals with fewer than three shows, or none: shows is shorter or empty, and access says how many shows and ad reads Pro+ lists. On such a plan cursor, after, before, channel_id, class other than sponsored, min_confidence and include_disputed are refused, and the unlock names Pro+.",
         "security": [
           {
             "bearerAuth": []
@@ -7849,7 +8316,7 @@
         ],
         "operationId": "submit_feedback",
         "summary": "Submit feedback and corrections for a prior API query",
-        "description": "Attach corrections to the exact query you ran: pass the feedback type, the query object you sent, and optional per-item corrections. Public submissions are recorded for human review (status \"logged\"); nothing is auto-applied. Read the review status back later via GET /v1/feedback/{feedback_id}. recommendations and channel_sponsors feedback types require a Pro+ plan; every other type needs read. monitor_alert feedback targets fired alerts: query carries monitor_id and/or tracker_id and/or alert_id, corrections target the alert id, and every referenced alert must belong to the caller (otherwise 404 alert_not_found). missed_alert corrections are expectations with nothing to target: omit the correction id and put { source_url, approximate_timestamp_seconds?, entity_id? } in suggested_change. delivery_issue corrections may carry { channel } in suggested_change. experience feedback says how a task went as a whole rather than correcting a result: it requires category and notes, refuses corrections (400 invalid_feedback_request), and needs no query. category and mcp_call_id, when sent, are recorded in the stored query.",
+        "description": "Help shape Arcmira. Report a wrong result, request sources or capabilities, or tell us what would make your workflow more useful. To correct a result, attach corrections to the exact query you ran: pass the feedback type, the query object you sent, and optional per-item corrections. Public submissions are recorded for human review (status \"logged\"); nothing is auto-applied. Read the review status back later via GET /v1/feedback/{feedback_id}. recommendations and channel_sponsors feedback types require a Pro+ plan; every other type needs read. monitor_alert feedback targets fired alerts: query carries monitor_id and/or tracker_id and/or alert_id, corrections target the alert id, and every referenced alert must belong to the caller (otherwise 404 alert_not_found). missed_alert corrections are expectations with nothing to target: omit the correction id and put { source_url, approximate_timestamp_seconds?, entity_id? } in suggested_change. delivery_issue corrections may carry { channel } in suggested_change. experience feedback says how a task went as a whole rather than correcting a result: it requires category and notes, refuses corrections (400 invalid_feedback_request), and needs no query. category and mcp_call_id, when sent, are recorded in the stored query.",
         "security": [
           {
             "bearerAuth": []
@@ -8229,8 +8696,8 @@
           "Recommendations"
         ],
         "operationId": "list_channel_sponsors",
-        "summary": "List recurring channel sponsors",
-        "description": "Rollup of recurring sponsors for a YouTube channel, ordered by ad read count. On a Pro+ plan the full list is served and min_ad_reads (default 3), status, and limit apply. Every other plan receives the free slice an anonymous visitor sees on arcmira.com, with meta.total naming the true count and access naming the gate; passing min_ad_reads, status, or limit on such a plan is refused with filter_requires_paid. Pass src=mcp-tool only from the Arcmira MCP server.",
+        "summary": "Find who sponsors a show",
+        "description": "Who sponsors a YouTube show: its recurring sponsors, ordered by ad-read count. On a plan below Pro+, it returns the show's total sponsors and ad reads and its top 3 sponsors by ad-read count, each with one receipt: the newest ad read the plan can open, with start_seconds and a timestamped watch_url. Over MCP this is arcmira.sponsors(channelId) through arcmira_execute_read. The top 3 are the three the channel's sponsors page on arcmira.com names; ties order by name in code order, then entity id. meta.total and meta.ad_reads are the full counts, and access says how many sponsors and ad reads the slice left out. Below Pro+, a show can also return its totals with no rows: sponsors is empty, and access says how many sponsors and ad reads Pro+ lists. On Pro+ the full list is served and min_ad_reads (default 3), status, and limit apply. Passing min_ad_reads, status, or limit below Pro+ is refused with filter_requires_paid. Pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -8360,7 +8827,7 @@
         ],
         "operationId": "search",
         "summary": "Retrieve spoken transcript slices for one topic",
-        "description": "Search indexed YouTube and podcast transcripts for short spoken slices. Each result includes spoken text, a watch URL, and a publish date. Scope with channel_ids (or channel) and entity_ids (a person id filters to that person's appearances); narrow to passages about entities with about, to a speaker with by, and to sponsored, organic or mention passages with kind. Every filter takes ids, never names: resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter. Results carry names beside ids (filters.about, filters.by, chunk about and speakers_by). Use one topic per call. Search results include text on every plan within the plan's publication-date window. Explicitly requesting source=arcmira_premium on a plan without Premium transcripts is refused with filter_requires_paid. An after later than the plan's freshness gate is refused with freshness_requires_paid rather than widened. A window the gate cut carries freshness (delay_days, served_through), unlock, and a note that says where results on this plan stop. Uses 4 credits per chunk returned past the first 5. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "Search indexed YouTube and podcast transcripts for passages matching a word or phrase. Returns passage text, source metadata, publication dates, and timestamped watch links. Narrow to passages about an entity with `about`, or passages where a person speaks with `by`. Scope with `channel_ids` (or `channel`) and `entity_ids` (a person id filters to that person's appearances). Filter to sponsored, organic or mention passages with `kind`. Every filter takes ids, never names: resolve a name first with GET /v1/entities/resolve, or the call answers 400 id_required naming the parameter. Results carry names beside ids (filters.about, filters.by, chunk about and speakers_by). Use one topic per call. Search results include text on every plan within the plan's publication-date window. Explicitly requesting source=arcmira_premium on a plan without Premium transcripts is refused with filter_requires_paid. An after later than the plan's freshness gate is refused with freshness_requires_paid rather than widened. A window the gate cut carries freshness (delay_days, served_through), unlock, and a note that says where results on this plan stop. Uses 4 credits per chunk returned past the first 5. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -8421,20 +8888,20 @@
           {
             "schema": {
               "type": "string",
-              "description": "Comma-separated person ids (ent_{n}), at most 8. Only passages where one of these people says the query words (each line of a chunk is labeled with its speaker); a non-person id is refused with invalid_query naming its type. Speaker labels cover a minority of shows; an empty result carries a note saying whether the person is labeled anywhere. Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve."
+              "description": "Comma-separated person ids (ent_{n}), at most 8. Only passages where one of these people speaks the query words. A passage can include other speakers' lines; each line with a known speaker starts with that speaker's name. A non-person id is refused with invalid_query naming its type. Speaker labels cover a minority of shows; an empty result carries a note saying whether the person is labeled anywhere. Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve."
             },
             "required": false,
-            "description": "Comma-separated person ids (ent_{n}), at most 8. Only passages where one of these people says the query words (each line of a chunk is labeled with its speaker); a non-person id is refused with invalid_query naming its type. Speaker labels cover a minority of shows; an empty result carries a note saying whether the person is labeled anywhere. Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve.",
+            "description": "Comma-separated person ids (ent_{n}), at most 8. Only passages where one of these people speaks the query words. A passage can include other speakers' lines; each line with a known speaker starts with that speaker's name. A non-person id is refused with invalid_query naming its type. Speaker labels cover a minority of shows; an empty result carries a note saying whether the person is labeled anywhere. Ids only: a name answers 400 id_required. Resolve names first with GET /v1/entities/resolve.",
             "name": "by",
             "in": "query"
           },
           {
             "schema": {
               "type": "string",
-              "description": "Comma-separated passage classes: sponsored, organic, mention. Combine with about to read what was said about a brand in ad reads or in organic talk."
+              "description": "Comma-separated passage classes: sponsored, organic, mention. Combine with about to read what was said about a brand in ad reads or in organic talk. organic and mention leave out every passage tagged as an ad read, including one that also names other brands; add sponsored to include them."
             },
             "required": false,
-            "description": "Comma-separated passage classes: sponsored, organic, mention. Combine with about to read what was said about a brand in ad reads or in organic talk.",
+            "description": "Comma-separated passage classes: sponsored, organic, mention. Combine with about to read what was said about a brand in ad reads or in organic talk. organic and mention leave out every passage tagged as an ad read, including one that also names other brands; add sponsored to include them.",
             "name": "kind",
             "in": "query"
           },
@@ -8580,7 +9047,7 @@
         ],
         "operationId": "get_entity_momentum",
         "summary": "Spoken-web heat for one entity",
-        "description": "Mentions in a lookback window of days (7 to 365, default 30) against the same number of days before it, an absolute-delta verdict on that window (accelerating, flat, fading, none), the newest media date, and the top shows in the window. Pass the window the rest of your answer uses: days=90 for a 90-day answer. The fixed 7, 30 and 90 day counts stay on every card. It counts the shows we index, not the whole internet, and it is a count, not a score. On a Pro+ plan the card also carries paid_vs_organic for the window; otherwise that field is absent and access names the gate. On a plan with a freshness gate, the window ends at the cutoff and the card carries freshness, unlock, and a note that says where results stop. Uses 10 credits from your plan at any window, the default included. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "Compare an entity's mention volume with the preceding period. Returns the counts, absolute and percentage change, momentum verdict, latest source date, and top shows. Choose a rolling window of 7 to 365 days with `days` (default 30). The preceding period is the same number of days before the window, and the verdict (accelerating, flat, fading, none) reads the absolute change. Pass the window the rest of your answer uses: days=90 for a 90-day answer. The fixed 7, 30 and 90 day counts stay on every card. It counts the shows we index, not the whole internet, and it is a count, not a score. On a Pro+ plan the card also carries paid_vs_organic for the window; otherwise that field is absent and access names the gate. On a plan with a freshness gate, the window ends at the cutoff and the card carries freshness, unlock, and a note that says where results stop. Uses 10 credits from your plan at any window, the default included. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -8683,7 +9150,7 @@
         ],
         "operationId": "get_channel_coverage",
         "summary": "What the index holds for a channel",
-        "description": "How many videos of a YouTube channel are searchable, the newest publish date among them, and the split by transcript source class. Call it when a search or mention lookup came back empty, before telling anyone we do not cover a show, and cite indexed_through as the as-of date for mentions and search_indexed_through for transcript search. It cannot request indexing; channel backfill is not available yet. Free; uses no credits. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "How many videos of a YouTube channel are searchable, the newest publish date among them, and the split by transcript source class. Call it when a search or mention lookup came back empty, before telling anyone we do not cover a show, and cite indexed_through as the as-of date for mentions and search_indexed_through for transcript search. It cannot request indexing; to ask for a channel, send feedback with its channel id. Free; uses no credits. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -8770,7 +9237,7 @@
         ],
         "operationId": "list_channel_videos",
         "summary": "Newest indexed videos of a channel",
-        "description": "The indexed videos of a YouTube channel, newest first, each with its video_id, title, publish date, duration, view count, and watch_url on arcmira.com. Pass next_cursor as cursor to continue. The signed token binds the route, filters, caller and visibility; invalid or old tokens return invalid_cursor. A first-page media ID fence excludes later insertions, including old-date backfills; edits and deletions to existing videos remain live. Call it for the latest or most recent episode of a show, or to list what a show published in a window, then pass a video_id to GET /v1/mentions/counts video_ids for what that episode mentions or to GET /v1/transcripts/{video_id} to read it. indexed_through is the newest date we hold for the channel. An empty list means nothing is indexed; channel backfill is not available yet. Uses 4 credits per video returned past the first 5. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
+        "description": "The indexed videos of a YouTube channel, newest first, each with its video_id, title, publish date, duration, view count, and watch_url on arcmira.com. Pass next_cursor as cursor to continue. The signed token binds the route, filters, caller and visibility; invalid or old tokens return invalid_cursor. A first-page media ID fence excludes later insertions, including old-date backfills; edits and deletions to existing videos remain live. Call it for the latest or most recent episode of a show, or to list what a show published in a window, then pass a video_id to GET /v1/mentions/counts video_ids for what that episode mentions or to GET /v1/transcripts/{video_id} to read it. indexed_through is the newest date we hold for the channel. An empty list means nothing is indexed; this route cannot add a channel. Uses 4 credits per video returned past the first 5. Every gate is a typed error whose error.unlock.url names the plan that lifts it; pass src=mcp-tool only from the Arcmira MCP server.",
         "security": [
           {
             "bearerAuth": []
@@ -9132,7 +9599,7 @@
         ],
         "operationId": "create_monitor",
         "summary": "Create monitor",
-        "description": "Creating with notify_webhook: true and a webhook_url enables HMAC-signed webhook delivery and returns the signing secret (monitor.webhook_secret) in this response. Store it securely. A retry with the original Idempotency-Key recovers the same secret for up to 24 hours while it remains the current secret or the valid previous secret. An expired or displaced secret returns 409 idempotency_result_expired without rotating again. Reads do not expose the secret. All subsequent reads expose only webhook_secret_set and webhook_secret_hint. Creating monitors and trackers is free. Each alert uses 25 credits once, however many channels and recipients deliver it: credits from your plan, then your on-demand budget. When the account is out of credits, alerts wait instead of sending.",
+        "description": "Creating with notify_webhook: true and a webhook_url enables HMAC-signed webhook delivery and returns the signing secret (monitor.webhook_secret) in this response. Store it securely. A retry with the original Idempotency-Key recovers the same secret for up to 24 hours while it remains the current secret or the valid previous secret. An expired or displaced secret returns 409 idempotency_result_expired without rotating again. Reads do not expose the secret. All subsequent reads expose only webhook_secret_set and webhook_secret_hint. Creating monitors and trackers is free. Each alert uses 25 credits once, however many channels and recipients deliver it: credits from your plan, then your on-demand budget. When the account is out of credits, alerts wait instead of sending. A create that sends none of notify_emails, notify_slack, notify_webhook, webhook_url, slack_integration_id or slack_channel_id emails alerts to the caller's own verified address and names it in default_destination. Send notify_emails: [] to create a monitor with no destination; its alerts are then read with GET /v1/monitors/{id}/alerts, and the message says so.",
         "security": [
           {
             "bearerAuth": []
@@ -9169,7 +9636,7 @@
                       "format": "email"
                     },
                     "maxItems": 20,
-                    "description": "Desired email recipients. External recipients must confirm before delivery. Free includes one additional recipient per monitor; paid plans allow up to 20 total. Default []."
+                    "description": "Desired email recipients. External recipients must confirm before delivery. Free includes one additional recipient per monitor; paid plans allow up to 20 total. On create, omitting it along with every Slack and webhook field emails alerts to the caller's own verified address; [] keeps the monitor with no email recipients."
                   },
                   "notify_frequency": {
                     "type": "string",
@@ -9379,7 +9846,7 @@
                       "format": "email"
                     },
                     "maxItems": 20,
-                    "description": "Desired email recipients. External recipients must confirm before delivery. Free includes one additional recipient per monitor; paid plans allow up to 20 total. Default []."
+                    "description": "Desired email recipients. External recipients must confirm before delivery. Free includes one additional recipient per monitor; paid plans allow up to 20 total. On create, omitting it along with every Slack and webhook field emails alerts to the caller's own verified address; [] keeps the monitor with no email recipients."
                   },
                   "notify_frequency": {
                     "type": "string",
@@ -10665,7 +11132,7 @@
         ],
         "operationId": "get_transcript",
         "summary": "Get a video transcript",
-        "description": "Caption reads use 4 credits per started 15 minutes. quality=premium is one read. An owned transcript answers 200 ready at no charge. Otherwise this call starts a Premium transcript of the whole video, 300 credits per started 15 minutes, using credits from the account's plan first and then the account's on-demand budget up to its limit, and answers 202 pending with the job and Retry-After until the transcript is ready. Read again after Retry-After; repeated reads join the same job and never charge twice. When the last Premium transcript for the video failed, the read answers 200 state failed with the job and last_attempt and charges nothing; retry=true starts a new one. When the plan or the budget blocks, 403 paid_plan_required (with unlock) or 402 quota_exceeded or spend_limit_exceeded carries the price in quote and the limit it met in limit, and nothing is charged. A default-premium account with nothing owned reads captions with a note. On captions, start and end set the billed window: 4 credits per started 15 minutes of end minus start. On Premium they only trim the returned content, and the charge is the whole video. language selects caption tracks, timestamps=false returns paragraphs. Premium lines carry speaker and index, and the body carries speakers and revision.",
+        "description": "Caption reads use 4 credits per started 15 minutes. quality=premium is one read. An owned transcript answers 200 ready at no charge. Otherwise this call starts a Premium transcript of the whole video, 300 credits per started 15 minutes, using credits from the account's plan first and then the account's on-demand budget up to its limit, and answers 202 pending with the job and Retry-After until the transcript is ready. Read again after Retry-After; repeated reads join the same job and never charge twice. When the last Premium transcript for the video failed, the read answers 200 state failed with the job and last_attempt and charges nothing; retry=true starts a new one. When the plan or the budget blocks, 403 paid_plan_required (with unlock) or 402 quota_exceeded or spend_limit_exceeded carries the price in quote and the limit it met in limit, and nothing is charged. A default-premium account with nothing owned reads captions with a note. On captions, start and end set the billed window: 4 credits per started 15 minutes of end minus start. On Premium they only trim the returned content, and the charge is the whole video. language selects caption tracks, timestamps=false returns paragraphs. Premium lines carry speaker and index, and the body carries speakers and revision. language picks the language: language= returns the base transcript (base_language), and a language the transcript is not in returns it translated, line for line with the same timestamps and speakers. Captions offer only the languages YouTube makes available for the video (translation_languages), billed as a caption read; any other language is Premium: an owned Premium transcript in another language costs the Premium rate once per account and language.",
         "security": [
           {
             "bearerAuth": []
@@ -10699,10 +11166,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Comma-separated caption language priority list, at most 5, tried in order (e.g. \"de,en\"). Use asr for the first automatic track and asr-<code> for a specific one. Default en. languages[] in the response lists every track the video offers."
+              "description": "The language to read the transcript in, as a code (e.g. \"es\") or a comma-separated priority list of at most 5 (e.g. \"de,en\"); asr picks the first automatic caption track and asr-<code> a specific one. Every transcript has a base language, base_language in the response: the language of the original caption track, or the language a Premium transcript was spoken and transcribed in. language= with no value returns the base transcript; so does a code in the base language. Omitted, the account default applies (en unless changed), falling back to the base transcript. When no code in the list matches, the transcript is translated into the first code, line for line with the same timestamps and speakers. Captions translate only into the languages YouTube makes available for the video (translation_languages in the response, or GET /v1/videos/{video_id}/captions), billed as a caption read of the window, 4 credits per started 15 minutes; any other code answers 400 invalid_query naming the Premium read. On a Premium transcript the account owns, each other language costs the Premium rate, 300 credits per started 15 minutes, once per account and language, and is free after that. While a translation runs the read answers 503 transcript_fetching with Retry-After and progress, and charges nothing. languages[] lists every caption track the video offers."
             },
             "required": false,
-            "description": "Comma-separated caption language priority list, at most 5, tried in order (e.g. \"de,en\"). Use asr for the first automatic track and asr-<code> for a specific one. Default en. languages[] in the response lists every track the video offers.",
+            "description": "The language to read the transcript in, as a code (e.g. \"es\") or a comma-separated priority list of at most 5 (e.g. \"de,en\"); asr picks the first automatic caption track and asr-<code> a specific one. Every transcript has a base language, base_language in the response: the language of the original caption track, or the language a Premium transcript was spoken and transcribed in. language= with no value returns the base transcript; so does a code in the base language. Omitted, the account default applies (en unless changed), falling back to the base transcript. When no code in the list matches, the transcript is translated into the first code, line for line with the same timestamps and speakers. Captions translate only into the languages YouTube makes available for the video (translation_languages in the response, or GET /v1/videos/{video_id}/captions), billed as a caption read of the window, 4 credits per started 15 minutes; any other code answers 400 invalid_query naming the Premium read. On a Premium transcript the account owns, each other language costs the Premium rate, 300 credits per started 15 minutes, once per account and language, and is free after that. While a translation runs the read answers 503 transcript_fetching with Retry-After and progress, and charges nothing. languages[] lists every caption track the video offers.",
             "name": "language",
             "in": "query"
           },
@@ -10780,7 +11247,7 @@
         ],
         "responses": {
           "200": {
-            "description": "state ready: the transcript (video, quality, source, language, languages, lines or paragraphs, speakers and revision on Premium, rows_billed, as_of, note). state failed (Premium only): the last Premium transcript for this video failed; job and last_attempt say why, nothing was charged, and retry=true starts a new one.",
+            "description": "state ready: the transcript (video, quality, source, language, base_language, languages, translation_languages, lines or paragraphs, speakers and revision on Premium, rows_billed, as_of, note). state failed (Premium only): the last Premium transcript for this video failed; job and last_attempt say why, nothing was charged, and retry=true starts a new one.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -10899,7 +11366,7 @@
             "$ref": "#/components/responses/ServerError"
           },
           "503": {
-            "description": "transcript_fetching. The caption track is being fetched now. Retry-After and retry_after_seconds carry the wait; nothing was charged.",
+            "description": "transcript_fetching. The caption track is being fetched, or the transcript translated, now. Retry-After and retry_after_seconds carry the wait; a translation also carries progress (done and total lines). Nothing was charged by this call.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
