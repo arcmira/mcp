@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,5 +22,16 @@ describe('the release check', () => {
     assert.match(marked.stderr, /<date the API refusal is live>/);
     const dated = check('This follows the API change of 2026-11-19 that refuses marked requests. Each line reads `[start] Name: text`, or `Speaker <id>`.');
     assert.equal(dated.status, 0, dated.stderr);
+  });
+
+  it('runs in every workflow that ships a release, which is every workflow but pull request CI', () => {
+    const workflows = new URL('../.github/workflows/', import.meta.url);
+    const releases = readdirSync(workflows).filter((name) => /\.ya?ml$/.test(name) && name !== 'ci.yml');
+    assert.deepEqual(releases.sort(), ['deploy.yml', 'publish.yml', 'tessl-publish.yml']);
+    for (const name of releases) {
+      const text = readFileSync(new URL(name, workflows), 'utf8');
+      assert.match(text, /run: (pnpm release:check|node --experimental-strip-types scripts\/check-release\.ts)\n/, `${name} ships a release without the release check`);
+    }
+    assert.doesNotMatch(readFileSync(new URL('ci.yml', workflows), 'utf8'), /release:check|check-release/, 'pull request CI must pass while the marker is in place');
   });
 });

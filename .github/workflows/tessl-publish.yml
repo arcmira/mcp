@@ -48,6 +48,11 @@ jobs:
         with:
           ref: ${{ steps.release.outputs.sha }}
           persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+      - name: The CHANGELOG holds no unfilled date marker
+        run: node --experimental-strip-types scripts/check-release.ts
       - name: Add Tessl metadata to the released plugin
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
