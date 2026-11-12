@@ -2,7 +2,7 @@
 
 ## 0.10.20: the read tools send the read-only mark
 
-A host may run a tool annotated read-only without asking first. Every API request a read-only tool's call sends now carries `x-arcmira-read-only: 1`. The API refuses a marked request that would use credits beyond the read itself or record a new job. This follows the API change of <date the API refusal is live> that refuses marked requests.
+A host may run a tool annotated read-only without asking first. Every API request a read-only tool's call sends now carries `x-arcmira-read-only: 1`. The API refuses a marked request that would use credits beyond the read itself or record a new job. This follows the API change of 2026-11-12 that refuses marked requests.
 
 - `arcmira_execute_read` is annotated read-only (`readOnlyHint: true`). The outbound marks every request its program sends, from a client method or a raw `fetch()`. A program's access comes from its tool's annotation, so a program in `arcmira_execute_read` always runs with read access. When the API refuses a Premium read that would start a transcript or translation, the program reads `write_tool_required` with "This read would start a Premium transcript or translation, and arcmira_execute_read only reads, so nothing was charged. Run it in arcmira_execute_write. It uses credits from your plan, then your on-demand budget." Any other refusal of a marked request reaches the program as the API sent it.
 - `arcmira_execute_write` starts Premium transcripts and translations, and its requests carry no mark. Its title is "Monitors and Premium transcripts".
