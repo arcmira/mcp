@@ -25,6 +25,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: The CHANGELOG holds no unfilled date marker
+        run: pnpm release:check
       - run: pnpm manifest:check
       - name: Install mcp-publisher
         run: |
