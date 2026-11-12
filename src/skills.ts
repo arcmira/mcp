@@ -273,13 +273,12 @@ return {
 const hits = await arcmira.search({ query: "Anthropic IPO", speakerIds: [id], limit: 5 });
 const moments = [];
 for (const c of hits.chunks.slice(0, 2)) {
-  const moment = { episode: c.video_title, show: c.channel_name, date: c.published_at, url: c.watch_url, speakers: c.speakers_by.map(s => s.name) };
+  const moment = { episode: c.video_title, show: c.channel_name, date: c.published_at, passage_url: c.watch_url, speakers: c.speakers_by.map(s => s.name) };
   try {
     const t = await arcmira.transcript(c.video_id, { start: Math.max(0, c.start_seconds - 10), end: c.start_seconds + 50 });
-    moment.clip = { start: t.lines[0]?.start ?? c.start_seconds, end: t.lines.at(-1)?.end ?? c.start_seconds + 60 };
-    moment.lines = t.lines.map(l => \`[\${Math.round(l.start)}s] \${l.text}\`);
+    moment.context_window = { start: t.lines[0]?.start ?? c.start_seconds, end: t.lines.at(-1)?.end ?? c.start_seconds + 60 };
+    moment.lines = t.lines.map(l => ({ start: l.start, end: l.end, text: l.text, source_url: \`https://www.youtube.com/watch?v=\${c.video_id}&t=\${Math.floor(l.start)}\` }));
   } catch (err) {
-    moment.clip = { start: c.start_seconds, end: c.start_seconds + 60 };
     moment.passage = c.text;
     moment.transcript = err.code;
   }
@@ -291,11 +290,14 @@ return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of
     good: [
       'Names the speaker or show it searched, with the id, and quotes the words exactly as the transcript lines give them, trimmed to whole sentences, never paraphrased inside quotation marks.',
       'Gives the show, the episode title, the date, and the speaker when the chunk or a premium transcript names one.',
-      'Links the `watch_url`, which starts at the moment, and gives a clip start and end in seconds from the transcript lines.',
+      'Links the first selected transcript line with its `source_url`. Gives the exact `start` of that line and `end` of the last selected line as clip boundaries. The retrieved `context_window` can be wider than the selected quote.',
+      'Keeps `passage_url` as the original search passage link. It can start before the selected sentence; do not label it as the sentence start.',
       'Says so when nothing matched, with `as_of`, instead of offering a quote from memory.',
     ],
     traps: [
       '`search` ranks by the words in `query`; put the distinctive words of the phrase there, not a paraphrase.',
+      'Apply any source filter the user requested before the first search. Use `arcmira_describe` to check supported filters.',
+      'Caption timestamps locate cues, not individual words. If a sentence begins inside a cue, link to that cue and keep the timing precision explicit. YouTube links use the returned video id and the cue start rounded down; do not invent Arcmira URL formats.',
       'A chunk found with `speakerIds` can include other people\'s lines. Lines start with "Name: " when the speaker is known. Quote only the speaker\'s lines ("Chamath Palihapitiya: ..."), never the whole passage. When no line names a speaker, the passage still matched that person; say the attribution covers the passage, not each line.',
       'Caption lines are machine text: fix nothing inside the quotation marks. A premium transcript (`quality: "premium"`, paid plans) adds speaker ids into `speakers[]`.',
       'A caption read uses 4 credits per started 15 minutes of its `start`/`end` window, and of the whole episode without one. A Premium read uses credits for the whole video whatever the window.',
