@@ -298,7 +298,7 @@ return { speaker: { id, name: e?.name ?? null, assumed, why }, as_of: hits.as_of
       '`search` ranks by the words in `query`; put the distinctive words of the phrase there, not a paraphrase.',
       'A chunk found with `speakerIds` can include other people\'s lines. Lines start with "Name: " when the speaker is known. Quote only the speaker\'s lines ("Chamath Palihapitiya: ..."), never the whole passage. When no line names a speaker, the passage still matched that person; say the attribution covers the passage, not each line.',
       'Caption lines are machine text: fix nothing inside the quotation marks. A premium transcript (`quality: "premium"`, paid plans) adds speaker ids into `speakers[]`.',
-      'A caption read uses 4 credits per started 15 minutes of its `start`/`end` window, and of the whole episode without one. A Premium read uses credits for the whole video whatever the window.',
+      'A caption read uses 4 credits per started 15 minutes of its `start`/`end` window, and of the whole episode without one. A Premium read the account does not own yet runs in `arcmira_execute_write` and uses credits for the whole video whatever the window.',
       'Some videos have no readable caption track yet (`transcript_unavailable`, `transcript_fetching`); quote the search chunk `text` for those and say the words come from the search passage.',
     ],
   },
@@ -459,7 +459,7 @@ try {
     traps: [
       '`search` ranks by the words in `query`; put the distinctive words of the phrase there, not a paraphrase. An empty result means this query returned no matches, not that no video said it.',
       'A search uses 4 credits per passage it returns past the first 5. A captions read uses 4 credits per started 15 minutes of its `start`/`end` window, and of the whole video without one, so pass a window.',
-      'A Premium read (`quality: "premium"`, paid plans) labels speakers and uses credits for the whole video whatever the window; `arcmira.price(video)` returns that price first and uses no credits.',
+      'A Premium read (`quality: "premium"`, paid plans) labels speakers. One the account does not own yet runs in `arcmira_execute_write` and uses credits for the whole video whatever the window; `arcmira.price(video)` returns that price first and uses no credits.',
       '`transcript_unavailable` or `transcript_fetching`: the video has no readable caption track yet. Answer from the search passage and say the words come from it.',
     ],
   },

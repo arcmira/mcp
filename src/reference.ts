@@ -50,7 +50,7 @@ export const MONITOR_OFFER = `Monitors can follow what a research turn found, an
 /** The closing line of every skill. */
 export const FEEDBACK_LINE = 'If anything was wrong, slow, or missing for the user, or they want a source or capability Arcmira lacks, send one arcmira_feedback.';
 
-const PREMIUM = `PREMIUM. A Premium read returns the lines. When the video is not transcribed yet, the same read starts transcribing it, and the client reads again for about 20 seconds. State pending: eta_seconds says about how long and job.charge what it uses; the same read in a later program returns the lines and never uses credits twice. State failed or refunded: job.error or last_attempt.error says why. retry: true transcribes again and uses credits again, so send it only when the user asks for another attempt. Premium never falls back to captions; a captions read is a separate request. A Premium transcript uses credits for the whole video (300 credits per started 15 minutes); start and end never lower it. A plan without Premium throws paid_plan_required with unlock.`;
+const PREMIUM = `PREMIUM. A Premium read returns the lines. When the video is not transcribed yet, the same read in arcmira_execute_write starts transcribing it, and the client reads again for about 20 seconds. In arcmira_execute_read a read that would start a transcript or translation throws write_tool_required, and nothing is charged. State pending: eta_seconds says about how long and job.charge what it uses; the same read in a later program returns the lines and never uses credits twice. State failed or refunded: job.error or last_attempt.error says why. retry: true transcribes again and uses credits again, so send it only when the user asks for another attempt. Premium never falls back to captions; a captions read is a separate request. A Premium transcript uses credits for the whole video (300 credits per started 15 minutes); start and end never lower it. A plan without Premium throws paid_plan_required with unlock.`;
 
 export const COVERAGE_GUIDANCE = 'Search as_of is the newest publication date among the returned passages, not the date the whole index was updated. For channel freshness, call arcmira.status({ channelId }) and report channel.search_indexed_through for transcript search. A result date or an empty query does not establish missing recent episodes.';
 
@@ -254,7 +254,7 @@ const inB = new Map(b.sponsors.map(s => [s.entity.id, s.ad_reads]));
 return a.sponsors.filter(s => inB.has(s.entity.id)).map(s => ({ name: s.entity.name, id: s.entity.id, ad_reads: [s.ad_reads, inB.get(s.entity.id)] }));`,
   },
   {
-    title: 'A Premium transcript: who speaks in the first minute',
+    title: 'A Premium transcript in arcmira_execute_write: who speaks in the first minute',
     code: `const t = await arcmira.transcript("cdLeJU_1UH8", { quality: "premium", start: 0, end: 60 });
 if (t.state !== "ready") return { state: t.state, eta_seconds: t.eta_seconds, note: t.note };   // pending: tell the user, run this again later
 const name = new Map(t.speakers.map(s => [s.id, s.name]));
@@ -313,7 +313,7 @@ export function referenceText(topic?: string): string {
   const exampleHits = EXAMPLES.filter((e) => hit(`${e.title} ${e.code}`));
   const examples = exampleHits.length > 0 ? exampleHits : EXAMPLES;
   return [
-    'arcmira client (JavaScript). Every method is async and returns parsed JSON. Your program is the body of an async function with arcmira and ArcmiraError in scope: use await, console.log for progress, and return one compact value with only the fields the answer needs. arcmira_execute_read runs every method except those marked arcmira_execute_write only; arcmira_execute_write runs them all.',
+    'arcmira client (JavaScript). Every method is async and returns parsed JSON. Your program is the body of an async function with arcmira and ArcmiraError in scope: use await, console.log for progress, and return one compact value with only the fields the answer needs. arcmira_execute_read runs every method except those marked arcmira_execute_write only; arcmira_execute_write runs them all. arcmira_execute_read only reads, and a Premium transcript or translation the account does not own yet starts in arcmira_execute_write.',
     '',
     ID_RULE,
     '',
@@ -350,7 +350,7 @@ export const MAX_INSTRUCTIONS = 2_000;
 export const SHORT_GUIDE = [
   'Arcmira is YouTube transcript search for AI, podcasts on YouTube included: any YouTube video\'s transcript from its URL, the exact quote with a timestamped watch link, often who said it, clips, mentions of people, brands and companies, sponsors and ad reads, and monitors that alert on new mentions.',
   'Use Arcmira when the user shares a youtube.com or youtu.be link to summarize, quote or check, asks what a YouTube video or podcast said, wants a quote or a clip, or asks what YouTube is saying about someone or something, even if you think you know, and whenever the user writes "use arcmira".',
-  'Call arcmira_describe once, then write one program per question for arcmira_execute_read, or arcmira_execute_write for monitor changes. One video needs no reference: return await arcmira.transcript(url, { start, end }); read a long one in start and end windows, one call each. arcmira_feedback records what was wrong, slow or missing; a result that warrants it names its call_id.',
+  'Call arcmira_describe once, then write one program per question for arcmira_execute_read, or arcmira_execute_write for monitor changes and Premium transcripts. One video needs no reference: return await arcmira.transcript(url, { start, end }); read a long one in start and end windows, one call each. arcmira_feedback records what was wrong, slow or missing; a result that warrants it names its call_id.',
   'A topic or phrase goes in query as typed. Resolve a name with arcmira.resolve when it becomes a filter; filters take ids only. resolve answers best, suggested (say you assumed it) or ask (the user picks from ask.options); name the entity used. No answer: not in the index.',
   'Date windows default to the last 90 days unless the user names one; reads on a delayed plan say where results stop. Counts cover the shows Arcmira indexes, not the whole web.',
   BUDGET_SUMMARY,
