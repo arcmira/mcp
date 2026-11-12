@@ -207,21 +207,20 @@ describe('noKeyError', () => {
 });
 
 describe('the host and the build', () => {
-  it('forwards the host it was told about and remembers the API build that answered', async () => {
-    const client = createApiClient({}, 'arc_sk_fixture');
+  it('forwards the host its call names and remembers the API build that answered', async () => {
+    const call = { id: 'mcpc_1', tool: 'arcmira_youtube_search', readOnly: true };
+    const client = createApiClient({}, 'arc_sk_fixture', { ...call, client: 'claude-ai/1.2.0' });
     assert.equal(client.upstreamBuild(), null);
     let seen: Headers | null = null;
     await withFetch(async (_url, init) => {
       seen = new Headers(init.headers);
       return Response.json({ ok: true }, { headers: { [BUILD_HEADER]: 'v-abc123' } });
     }, async () => {
-      await client.get('/v1/health');
+      await createApiClient({}, 'arc_sk_fixture').get('/v1/health');
       assert.equal(seen?.get(CLIENT_HEADER), null);
-      client.setClient({ name: 'claude-ai', version: '1.2.0' });
       await client.get('/v1/health');
       assert.equal(seen?.get(CLIENT_HEADER), 'claude-ai/1.2.0');
-      client.setClient(undefined);
-      await client.get('/v1/health');
+      await createApiClient({}, 'arc_sk_fixture', { ...call, client: null }).get('/v1/health');
       assert.equal(seen?.get(CLIENT_HEADER), null);
     });
     assert.equal(client.upstreamBuild(), 'v-abc123');

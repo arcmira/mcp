@@ -25,7 +25,7 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 export const RETIRED_TOOLS: Readonly<Record<string, string>> = {
   describe: 'arcmira_describe',
   execute: 'arcmira_execute_read (arcmira_execute_write for monitor changes)',
-  prepare_transcript: 'arcmira.transcript(video, { quality: "premium" }) inside arcmira_execute_read',
+  prepare_transcript: 'arcmira.transcript(video, { quality: "premium" }) inside arcmira_execute_write',
   ...Object.fromEntries(
     [
       'search_transcripts',
@@ -100,9 +100,9 @@ const LIMITS = `Limits: 30 seconds, 40 API calls, and ${OUTPUT_LIMITS}.`;
 export const executeReadTool = tool({
   name: 'arcmira_execute_read',
   title: 'YouTube transcripts and quotes',
-  description: `YouTube video and podcast transcripts for questions about what was said: summarize or read a YouTube video from its URL, find the exact quote and the second it was said with a timestamped watch link, often who said it, clips, mentions of a person, brand or company, sponsors and ad reads, podcasts on YouTube included, and the user's monitors. Use Arcmira when the user shares a youtube.com or youtu.be link, or asks what a YouTube video or podcast said. Runs a JavaScript program against the Arcmira API through the arcmira client; one video: return await arcmira.transcript(url, { start, end }); a phrase: return (await arcmira.search({ query })).chunks. Other methods and examples: arcmira_describe. Input is an async function body with arcmira, ArcmiraError and console in scope. Output is bounded JSON: the result first, then the call count, rate limit, build and capped logs. Filters take entity, channel or video ids. A Premium read of an untranscribed video starts a transcription that uses credits from the account's plan, then its on-demand budget, and reports its charge. ${LIMITS}`,
-  // Not read-only: a Premium read can start a transcription that uses credits. Not destructive: it only adds.
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  description: `YouTube video and podcast transcripts for questions about what was said: summarize or read a YouTube video from its URL, find the exact quote and the second it was said with a timestamped watch link, often who said it, clips, mentions of a person, brand or company, sponsors and ad reads, podcasts on YouTube included, and the user's monitors. Use Arcmira when the user shares a youtube.com or youtu.be link, or asks what a YouTube video or podcast said. Runs a JavaScript program against the Arcmira API through the arcmira client; one video: return await arcmira.transcript(url, { start, end }); a phrase: return (await arcmira.search({ query })).chunks. Other methods and examples: arcmira_describe. Input is an async function body with arcmira, ArcmiraError and console in scope. Output is bounded JSON: the result first, then the call count, rate limit, build and capped logs. Filters take entity, channel or video ids. It only reads. To start a Premium transcript or translation the account does not own yet, run the same program in arcmira_execute_write. ${LIMITS}`,
+  // Read-only. The outbound marks every request read-only, so the API refuses a Premium transcript or translation the account does not own.
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   // Claude Code shows this tool, arcmira_describe and arcmira_feedback in full before any tool search: the reference, the program runner and the way to report a problem. The plain read tools wait behind tool search.
   _meta: { 'anthropic/alwaysLoad': true },
   inputSchema: z.object({ code, intent: intentParam }),
@@ -113,8 +113,8 @@ export const executeReadTool = tool({
 
 export const executeWriteTool = tool({
   name: 'arcmira_execute_write',
-  title: 'YouTube mention monitors',
-  description: `Creates and updates Arcmira monitors that alert by email, Slack or webhook when a person, brand or phrase comes up on YouTube, podcasts on YouTube included. Runs JavaScript like arcmira_execute_read, plus the monitor writes: create, update (including paused), addEntities, addName and attachTrackers. Nothing is deleted. The MONITORS section of arcmira_describe has the fields and results. ${LIMITS}`,
+  title: 'Monitors and Premium transcripts',
+  description: `Creates and updates Arcmira monitors that alert by email, Slack or webhook when a person, brand or phrase comes up on YouTube, podcasts on YouTube included, and starts Premium transcripts. Runs JavaScript like arcmira_execute_read, plus the monitor writes: create, update (including paused), addEntities, addName and attachTrackers. Nothing is deleted. A Premium read of an untranscribed video starts a transcription, and a Premium read in another language starts a translation. Each uses credits from the account's plan, then its on-demand budget, and reports its charge. The MONITORS section of arcmira_describe has the fields and results. ${LIMITS}`,
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,

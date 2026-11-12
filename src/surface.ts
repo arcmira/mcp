@@ -112,7 +112,7 @@ export interface Surface {
   searchMeta(input: SearchMetaInput): Record<string, unknown>;
 }
 
-const START_PREMIUM = 'arcmira_execute_read starts one with arcmira.transcript(video, { quality: "premium" }), and that read uses credits.';
+const START_PREMIUM = 'arcmira_execute_write starts one with arcmira.transcript(video, { quality: "premium" }), and that read uses credits.';
 const NO_PREMIUM = 'These are captions because this account has no Premium transcript of this video.';
 const joined = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(' ');
 

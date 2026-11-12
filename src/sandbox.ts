@@ -135,8 +135,8 @@ export type Access = 'read' | 'write';
 const under = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
 
 /**
- * The routes a sandbox program may call, by tool. Read: any GET under /v1 (a Premium read starts its transcription inside
- * GET /v1/transcripts/{video_id}). Write adds POST and PATCH under /v1/monitors and PATCH under
+ * The routes a sandbox program may call, by tool. Read: any GET under /v1, marked read-only, so the API refuses the
+ * Premium transcription a GET /v1/transcripts/{video_id} would start. Write adds POST and PATCH under /v1/monitors and PATCH under
  * /v1/trackers, never DELETE, and never the webhook secret rotation, which breaks the user's existing
  * webhook verification. A tracker is created inside a monitor, so nothing POSTs under /v1/trackers.
  */

@@ -1,7 +1,7 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { createMcpHandler } from 'agents/mcp/server';
 import pkg from '../package.json' with { type: 'json' };
-import { CALL_HEADER, CLIENT_HEADER, DEFAULT_API_BASE, SRC, TOOL_HEADER, USER_AGENT, apiKeyOf, createApiClient, type Env as ApiEnv } from './api.ts';
+import { CLIENT_HEADER, DEFAULT_API_BASE, apiKeyOf, createApiClient, type Env as ApiEnv } from './api.ts';
 import {
   AuthUnavailable,
   AUTHORIZATION_SERVER_PATH,
@@ -16,7 +16,8 @@ import {
 import { ICON_PATH, SERVER_CARD_PATHS, serverCardResponse } from './card.ts';
 import { OPENAI_APPS_CHALLENGE, OPENAI_APPS_CHALLENGE_PATH } from './openai-challenge.ts';
 import { APPS_PATH, MCP_PATH, SURFACES, createServer, isRetiredTool, retiredToolResult, type CallTag } from './server.ts';
-import { outboundAllowed, type Access, type SandboxHost } from './sandbox.ts';
+import { forward, type OutboundProps } from './outbound.ts';
+import type { Access, SandboxHost } from './sandbox.ts';
 import { toolCallRecorder } from './telemetry.ts';
 import { TOOL_NAMES } from './tools.ts';
 
@@ -25,42 +26,6 @@ import { TOOL_NAMES } from './tools.ts';
 export interface Env extends ApiEnv {
   /** The Worker Loader the execute sandbox runs in. Absent when the binding is not configured. */
   LOADER?: WorkerLoader;
-}
-
-interface OutboundProps {
-  key: string;
-  client: string | null;
-  /** The tool call this program runs for; sent upstream so the API's request events join its span. */
-  call?: { id: string; tool: string };
-  /** Which allowlist applies. Absent means read. */
-  access?: Access;
-}
-
-/** The largest request body a sandbox program may send upstream. Monitor bodies are a few hundred bytes. */
-const OUTBOUND_BODY_CAP = 16_384;
-
-const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,255}$/;
-
-function refused(base: URL, access: Access, method: string, path: string, message?: string): Response {
-  const writable = access === 'read' && outboundAllowed('write', method, path);
-  return Response.json(
-    {
-      error: {
-        type: 'invalid_request_error',
-        code: 'outbound_refused',
-        message:
-          message ??
-          (writable
-            ? `${method} ${path} changes the account; run it in arcmira_execute_write.`
-            : access === 'write'
-              ? `The sandbox reaches only GET ${base.origin}/v1/*, POST or PATCH under /v1/monitors, and PATCH under /v1/trackers. Use the arcmira client methods; there is no other network.`
-              : `The sandbox reaches only GET ${base.origin}/v1/*. Use the arcmira client methods; there is no other network.`),
-        doc_url: 'https://arcmira.com/docs/mcp-server',
-        request_id: `mcp_${crypto.randomUUID()}`,
-      },
-    },
-    { status: 403 },
-  );
 }
 
 const BROWSER_ORIGINS = ['claude.ai', 'chatgpt.com', 'localhost', '127.0.0.1'];
@@ -72,43 +37,7 @@ const BROWSER_ORIGINS = ['claude.ai', 'chatgpt.com', 'localhost', '127.0.0.1'];
  */
 export class ApiOutbound extends WorkerEntrypoint<Env, OutboundProps> {
   async fetch(request: Request): Promise<Response> {
-    const base = new URL(this.env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE);
-    const url = new URL(request.url);
-    const access: Access = this.ctx.props.access === 'write' ? 'write' : 'read';
-    const method = request.method.toUpperCase();
-    if (url.origin !== base.origin || !outboundAllowed(access, method, url.pathname)) return refused(base, access, method, url.pathname);
-    let body: string | undefined;
-    if (method !== 'GET') {
-      body = await request.text();
-      if (body.length > OUTBOUND_BODY_CAP) return refused(base, access, method, url.pathname, `The request body is over ${OUTBOUND_BODY_CAP} characters.`);
-    }
-    url.searchParams.set('src', SRC);
-    const headers = new Headers({ authorization: `Bearer ${this.ctx.props.key}`, accept: 'application/json', 'user-agent': USER_AGENT });
-    if (body !== undefined) headers.set('content-type', 'application/json');
-    const idempotencyKey = request.headers.get('idempotency-key');
-    if (body !== undefined && idempotencyKey !== null && IDEMPOTENCY_KEY.test(idempotencyKey)) headers.set('idempotency-key', idempotencyKey);
-    if (this.ctx.props.client) headers.set(CLIENT_HEADER, this.ctx.props.client);
-    if (this.ctx.props.call) {
-      headers.set(CALL_HEADER, this.ctx.props.call.id);
-      headers.set(TOOL_HEADER, this.ctx.props.call.tool);
-    }
-    const response = await fetch(url, {
-      method,
-      headers,
-      body,
-      redirect: 'manual',
-    });
-    if (response.status >= 300 && response.status < 400)
-      return Response.json(
-        {
-          error: {
-            code: 'redirect_refused',
-            message: 'Authenticated redirect refused; no bearer reached the target.',
-          },
-        },
-        { status: 502 },
-      );
-    return response;
+    return forward(request, this.env, this.ctx.props, (url, init) => fetch(url, init));
   }
 }
 
@@ -200,10 +129,9 @@ export default {
       // The retired names were /mcp tools; /mcp/apps never served them.
       const retired = surface.path === MCP_PATH ? await retiredCall(request) : null;
       if (retired !== null) return retired;
-      const api = createApiClient(env, key);
       const client = request.headers.get(CLIENT_HEADER);
       const record = toolCallRecorder(env, ctx, request, key);
-      return createMcpHandler(() => createServer({ api, sandbox: sandboxFor(env, ctx, key, client), record }, env.CF_VERSION_METADATA?.id ?? null, surface), {
+      return createMcpHandler(() => createServer({ api: (call) => createApiClient(env, key, call), sandbox: sandboxFor(env, ctx, key, client), record }, env.CF_VERSION_METADATA?.id ?? null, surface), {
         route: surface.path,
         allowedOriginHostnames: BROWSER_ORIGINS,
       })(request, env, ctx);

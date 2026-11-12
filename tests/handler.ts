@@ -1,8 +1,9 @@
 import worker from '../src/index.ts';
-import { outboundAllowed, type Access } from '../src/sandbox.ts';
+import type { Env } from '../src/api.ts';
+import { forward, type OutboundProps } from '../src/outbound.ts';
 import { TOOL_CALLS_PATH } from '../src/telemetry.ts';
 
-export function withFetch<T>(handler: (url: URL, init?: RequestInit) => Response, body: () => Promise<T>): Promise<T> {
+export function withFetch<T>(handler: (url: URL, init?: RequestInit) => Response | Promise<Response>, body: () => Promise<T>): Promise<T> {
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     handler(new URL(input instanceof Request ? input.url : String(input)), init)) as typeof fetch;
@@ -19,10 +20,21 @@ export interface ToolReply {
 export async function callTool(
   name: string,
   args: Record<string, unknown>,
-  upstream: (url: URL, init?: RequestInit) => Response,
+  upstream: (url: URL, init?: RequestInit) => Response | Promise<Response>,
   env: Record<string, unknown> = {},
   path = '/mcp',
 ) {
+  return (await callTools([{ name, arguments: args }], upstream, env, path))[0]!;
+}
+
+/** Several tools/call messages in one HTTP request, as a JSON-RPC batch, through the Worker's fetch. The replies come back in the order of the calls. */
+export async function callTools(
+  calls: Array<{ name: string; arguments: Record<string, unknown> }>,
+  upstream: (url: URL, init?: RequestInit) => Response | Promise<Response>,
+  env: Record<string, unknown> = {},
+  path = '/mcp',
+) {
+  const messages = calls.map((params, index) => ({ jsonrpc: '2.0', id: index + 1, method: 'tools/call', params }));
   const request = new Request(`https://mcp.arcmira.com${path}`, {
     method: 'POST',
     headers: {
@@ -30,26 +42,16 @@ export async function callTool(
       accept: 'application/json, text/event-stream',
       authorization: 'Bearer arc_sk_fixture',
     },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: { name, arguments: args },
-    }),
+    body: JSON.stringify(messages.length === 1 ? messages[0] : messages),
   });
   const deferred: Promise<unknown>[] = [];
   /**
-   * The outbound for the access the tool asked for, applying the Worker's allowlist (tests/outbound.test.ts
-   * covers ApiOutbound itself). In node the sandbox shares the parent's global fetch, so the real
-   * outbound's upstream call would be metered as a second program call.
+   * The Worker's own outbound for the access the tool asked for, with the test's upstream in place of
+   * global fetch. In node the sandbox shares the parent's global fetch, so ApiOutbound's upstream call
+   * would be metered as a second program call.
    */
-  const outboundFor = ({ props }: { props: { access?: Access } }) => ({
-    async fetch(request: Request) {
-      const url = new URL(request.url);
-      if (!outboundAllowed(props.access ?? 'read', request.method, url.pathname))
-        return Response.json({ error: { type: 'invalid_request_error', code: 'outbound_refused', message: 'refused' } }, { status: 403 });
-      return upstream(url, { method: request.method, headers: request.headers, body: request.method === 'GET' ? undefined : await request.text() });
-    },
+  const outboundFor = ({ props }: { props: OutboundProps }) => ({
+    fetch: (request: Request) => forward(request, env as Env, props, async (url, init) => upstream(url, init)),
   });
   const ctx = {
     waitUntil: (p: Promise<unknown>) => deferred.push(p),
@@ -65,8 +67,9 @@ export async function callTool(
     await Promise.all(deferred);
     return body;
   });
-  const data = text.split('\n').find((line) => line.startsWith('data:'));
-  return JSON.parse(data ? data.slice(5) : text) as ToolReply;
+  const data = text.split('\n').filter((line) => line.startsWith('data:'));
+  const replies = (data.length > 0 ? data.map((line) => JSON.parse(line.slice(5))) : [JSON.parse(text)]) as Array<ToolReply & { id: number }>;
+  return replies.sort((a, b) => a.id - b.id);
 }
 
 export const textOf = (reply: ToolReply) => reply.result.content.map((c) => c.text).join('\n');

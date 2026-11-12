@@ -280,14 +280,14 @@ describe('arcmira_youtube_transcript', () => {
     assert.deepEqual(linesOf(reply), []);
   });
 
-  it('never starts or waits on a Premium transcription: a pending answer ends the call and names arcmira_execute_read', async () => {
+  it('never starts or waits on a Premium transcription: a pending answer ends the call and names arcmira_execute_write', async () => {
     const api = upstream(() => Response.json({ state: 'pending', video_id: VIDEO, job: { id: 'job_1', state: 'pending', eta_seconds: 300 } }, { status: 202, headers: { 'retry-after': '10' } }));
     const reply = await callTool('arcmira_youtube_transcript', { video: VIDEO }, api.handler);
     assert.equal(reply.result.isError, true);
     const body = reply.result.structuredContent as { error: { code: string }; state: string; note: string };
     assert.equal(body.error.code, 'transcript_unavailable');
     assert.equal(body.state, 'pending');
-    assert.match(body.note, /arcmira_execute_read/);
+    assert.match(body.note, /arcmira_execute_write/);
     assert.equal(api.requests.length, 1, 'no second read');
     assert.equal(api.requests[0]!.searchParams.get('quality'), null);
   });
@@ -299,7 +299,7 @@ describe('arcmira_youtube_transcript', () => {
     const body = JSON.parse(textOf(reply));
     assert.equal(body.error.code, 'transcript_unavailable');
     assert.equal(body.error.message, 'This video has no captions in en.');
-    assert.match(body.note, /arcmira_execute_read/);
+    assert.match(body.note, /arcmira_execute_write/);
     assert.match(body.call_id, /^mcpc_/);
     assert.deepEqual(api.requests.map((url) => url.pathname), [`/v1/transcripts/${VIDEO}`]);
   });
@@ -310,7 +310,7 @@ describe('arcmira_youtube_transcript', () => {
     const note = metadataOf(reply).note as string;
     assert.ok(note.startsWith(CAPTION_NOTE), note);
     assert.doesNotMatch(note, /quality=/);
-    assert.match(note, /no Premium transcript of this video\. arcmira_execute_read starts one/);
+    assert.match(note, /no Premium transcript of this video\. arcmira_execute_write starts one/);
 
     const plain = upstream(() => Response.json({ ...longTranscript(false), note: CAPTION_NOTE }));
     assert.equal(metadataOf(await callTool('arcmira_youtube_transcript', { video: VIDEO }, plain.handler)).note, CAPTION_NOTE);

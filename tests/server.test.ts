@@ -44,7 +44,7 @@ describe('the six tools through the handler', () => {
       Object.fromEntries(tools.map((t) => [t.name, [t.annotations.readOnlyHint, t.annotations.destructiveHint, t.annotations.idempotentHint, t.annotations.openWorldHint]])),
       {
         arcmira_describe: [true, false, true, false],
-        arcmira_execute_read: [false, false, false, true],
+        arcmira_execute_read: [true, false, false, true],
         arcmira_execute_write: [false, true, false, true],
         arcmira_youtube_search: [true, false, true, true],
         arcmira_youtube_transcript: [true, false, true, true],
@@ -196,7 +196,7 @@ describe('bounded outcomes and Premium reads over MCP', () => {
     const seen: string[] = [];
     let reads = 0;
     const reply = await callTool(
-      'arcmira_execute_read',
+      'arcmira_execute_write',
       { code: 'const t = await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" }); return { state: t.state, lines: t.lines.length, speaker: t.speakers[0].entity_id };' },
       (url, init) => {
         seen.push(`${init?.method ?? 'GET'} ${url.pathname}?quality=${url.searchParams.get('quality')}`);
@@ -214,7 +214,7 @@ describe('bounded outcomes and Premium reads over MCP', () => {
   it('a budget refusal reaches the program as an ArcmiraError with its unlock, and the result names its call_id', async () => {
     const refusal = responses.get_transcript_spend_limit_exceeded;
     const reply = await callTool(
-      'arcmira_execute_read',
+      'arcmira_execute_write',
       { code: 'return await arcmira.transcript("dQw4w9WgXcQ", { quality: "premium" });' },
       () => Response.json(refusal.body, { status: refusal.status }),
       { LOADER: fakeLoader() },
