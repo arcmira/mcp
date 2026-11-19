@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.21: a first question in the Claude Code plugin
+
+- The Claude Code plugin adds `/arcmira:try`. It asks a first question through `arcmira_describe` and `arcmira_execute_read`: where people on YouTube disagree about a topic, with three exact quotes, each linked to the second it was said. `/arcmira:try OpenAI Codex` asks about a topic of your own. With no topic, the agent picks one from your work.
+- The command lives in `plugins/arcmira/commands/try.md`. Hosts that do not read plugin commands ignore it.
+- Both READMEs name the command after the Claude Code install steps.
+- Tools, results and the server are unchanged. There are still six tools and eleven skills.
+
 ## 0.10.20: the read tools send the read-only mark
 
 A host may run a tool annotated read-only without asking first. Every API request a read-only tool's call sends now carries `x-arcmira-read-only: 1`. The API refuses a marked request that would use credits beyond the read itself or record a new job. This follows the API change of 2026-11-12 that refuses marked requests.
