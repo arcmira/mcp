@@ -247,6 +247,8 @@ claude plugin marketplace add arcmira/mcp
 claude plugin install arcmira@arcmira
 ```
 
+Then type `/arcmira:try` for a first question, or `/arcmira:try OpenAI Codex` for a topic of your own. Each skill also runs as a command, such as `/arcmira:find-quotes`.
+
 ## Stay up to date
 
 Arcmira ships changes weekly. Keep auto-update on.
