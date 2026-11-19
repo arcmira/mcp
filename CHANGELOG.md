@@ -2,7 +2,7 @@
 
 ## 0.10.21: a first question in the Claude Code plugin
 
-- The Claude Code plugin has one command, `/arcmira:try`. It asks a first question through `arcmira_describe` and `arcmira_execute_read`: where people on YouTube disagree about a topic, with three exact quotes, each linked to the second it was said. `/arcmira:try OpenAI Codex` asks about a topic of your own. With no topic, the agent picks one from your work.
+- The Claude Code plugin adds `/arcmira:try`. It asks a first question through `arcmira_describe` and `arcmira_execute_read`: where people on YouTube disagree about a topic, with three exact quotes, each linked to the second it was said. `/arcmira:try OpenAI Codex` asks about a topic of your own. With no topic, the agent picks one from your work.
 - The command lives in `plugins/arcmira/commands/try.md`. Hosts that do not read plugin commands ignore it.
 - Both READMEs name the command after the Claude Code install steps.
 - Tools, results and the server are unchanged. There are still six tools and eleven skills.
