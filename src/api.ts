@@ -27,6 +27,21 @@ export const TOOL_HEADER = 'x-arcmira-mcp-tool';
  * refuses, with read_only_request, anything that would use credits beyond the read itself or record a new job.
  */
 export const READ_ONLY_HEADER = 'x-arcmira-read-only';
+/** The header v1 reads a listing's source tag from, beside the host. Attribution only. */
+export const LISTING_HEADER = 'x-arcmira-listing';
+/** The query parameter a listing's copy of the server address carries: https://mcp.arcmira.com/mcp?listing=<tag>. */
+export const LISTING_PARAM = 'listing';
+const LISTING_TAG = /^[a-z0-9][a-z0-9-]{0,39}$/;
+
+/**
+ * The source tag on the address a host connected to, or null when the address has none, has several, or the value is
+ * not shaped like a tag. The API decides which tags it knows; this only keeps free text out of a header and a URL.
+ */
+export function listingOf(url: URL): string | null {
+  const values = url.searchParams.getAll(LISTING_PARAM);
+  return values.length === 1 && LISTING_TAG.test(values[0]!) ? values[0]! : null;
+}
+
 /** The header v1 answers with: the deploy id of the API build that served the call. */
 export const BUILD_HEADER = 'x-arcmira-build';
 
@@ -74,7 +89,8 @@ export interface RateLimit {
 
 /**
  * The one tool call a client sends for. Every request carries x-arcmira-mcp-call, x-arcmira-mcp-tool and the host as
- * x-arcmira-client, and the read-only mark when the tool is annotated read-only.
+ * x-arcmira-client, and the read-only mark when the tool is annotated read-only. A client made with a listing sends it
+ * as x-arcmira-listing too.
  */
 export interface ApiCall {
   id: string;
@@ -173,7 +189,7 @@ function legacyErrorMessage(value: unknown): string | null {
  * that admits both. Each tool call gets its own client, so another call in the same HTTP request cannot change
  * what this one sends.
  */
-export function createApiClient(env: Env, apiKey: string, call: ApiCall | null = null): ApiClient {
+export function createApiClient(env: Env, apiKey: string, call: ApiCall | null = null, listing: string | null = null): ApiClient {
   const base = (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
   let latest: RateLimit | null = null;
   let build: string | null = null;
@@ -215,6 +231,7 @@ export function createApiClient(env: Env, apiKey: string, call: ApiCall | null =
         ...(call?.client ? { [CLIENT_HEADER]: call.client.slice(0, 120) } : {}),
         ...(call ? { [CALL_HEADER]: call.id, [TOOL_HEADER]: call.tool } : {}),
         ...(call?.readOnly ? { [READ_ONLY_HEADER]: '1' } : {}),
+        ...(listing ? { [LISTING_HEADER]: listing } : {}),
       },
     }).catch(() =>
       Response.json(
