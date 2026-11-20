@@ -151,8 +151,8 @@ export default {
         route: surface.path,
         allowedOriginHostnames: BROWSER_ORIGINS,
       })(inbound, env, ctx);
-      // The handler read a body that the counter ended. Its own answer would call the cut body bad JSON.
-      if (over()) return tooLarge();
+      // The handler read a body that the counter ended, and its own answer would call the cut body bad JSON. A 403 is its refusal of the Origin, made without reading the body, and it stands.
+      if (over() && response.status !== 403) return tooLarge();
       // A host-load line is written after the handler accepted the request, and never delays or changes the answer.
       if (response.ok) {
         try {

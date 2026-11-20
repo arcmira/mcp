@@ -1,4 +1,4 @@
-/** The largest POST body an MCP endpoint reads, in bytes. The largest call the tools' own input limits allow is under a quarter of it. */
+/** The largest POST body an MCP endpoint accepts, in bytes. */
 export const BODY_LIMIT = 1024 * 1024;
 
 /** The answer to a POST whose body is over the limit, in the shape of the server's other refusals. */
@@ -32,8 +32,8 @@ export interface Counted {
 
 /**
  * The request with its body behind a byte counter, for a body that states no length or a wrong one. Past the limit the
- * counter ends the body with an error and stops reading the caller, so no reader of this request or of a copy of it gets
- * more than the limit.
+ * counter ends the body with an error and stops reading the caller, so no reader of this request or of a copy of it is
+ * handed more than the limit. The counter itself takes the one piece that passes the limit, whatever its size.
  */
 export function counted(request: Request): Counted {
   if (request.body === null) return { request, over: () => false };

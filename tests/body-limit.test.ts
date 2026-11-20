@@ -1,7 +1,7 @@
 import { before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.ts';
-import { BODY_LIMIT } from '../src/body-limit.ts';
+import { BODY_LIMIT, counted } from '../src/body-limit.ts';
 import { listTools, withFetch } from './handler.ts';
 
 const PIECE = 64 * 1024;
@@ -12,26 +12,37 @@ const REFUSAL = {
   error: { code: -32000, message: 'The request body is over the limit of 1048576 bytes.', data: { code: 'request_too_large', limit_bytes: 1048576 } },
 };
 
-/** A tools/list message padded with spaces to `total` bytes, handed out in 64 KiB pieces, that records how much was taken. */
-function body(total: number) {
+/**
+ * A tools/list message padded with spaces to `total` bytes, handed out in pieces, that records how much was taken.
+ * `ended` settles when the body was read to its end or its reader stopped it.
+ */
+function body(total: number, piece = PIECE) {
   const bytes = new TextEncoder().encode(MESSAGE.padEnd(total, ' '));
   let taken = 0;
   let cancelled = false;
+  let end = () => {};
+  const ended = new Promise<void>((resolve) => {
+    end = resolve;
+  });
   const stream = new ReadableStream<Uint8Array>(
     {
       pull(controller) {
-        if (taken >= bytes.byteLength) return controller.close();
-        const piece = bytes.subarray(taken, taken + PIECE);
-        taken += piece.byteLength;
-        controller.enqueue(piece);
+        if (taken >= bytes.byteLength) {
+          end();
+          return controller.close();
+        }
+        const next = bytes.subarray(taken, taken + piece);
+        taken += next.byteLength;
+        controller.enqueue(next);
       },
       cancel() {
         cancelled = true;
+        end();
       },
     },
     { highWaterMark: 0 },
   );
-  return { stream, taken: () => taken, cancelled: () => cancelled };
+  return { stream, ended, taken: () => taken, cancelled: () => cancelled };
 }
 
 interface Sent {
@@ -39,13 +50,15 @@ interface Sent {
   size: number;
   /** The Content-Length header to state, when the request states one. */
   length?: number;
+  /** The size of the pieces the body arrives in. 64 KiB when omitted. */
+  piece?: number;
   origin?: string;
   credential?: boolean;
 }
 
 /** One POST through the Worker's fetch with a streamed body. Waits for the work the Worker left running, then reports what was read. */
-async function post({ path, size, length, origin, credential = true }: Sent) {
-  const source = body(size);
+async function post({ path, size, length, piece, origin, credential = true }: Sent) {
+  const source = body(size, piece);
   const headers: Record<string, string> = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' };
   if (credential) headers.authorization = 'Bearer arc_sk_fixture';
   if (length !== undefined) headers['content-length'] = String(length);
@@ -59,8 +72,8 @@ async function post({ path, size, length, origin, credential = true }: Sent) {
       const response = await worker.fetch(new Request(`https://mcp.arcmira.com${path}`, init), {}, ctx);
       const text = await response.text();
       await Promise.all(deferred);
-      // A copy of the body may still be read after an early answer. Give it time to finish or be stopped.
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // A body that anything began to read is read to its end or stopped. A copy may do that after an early answer.
+      if (source.taken() > 0) await source.ended;
       return { status: response.status, text, taken: source.taken(), cancelled: source.cancelled() };
     },
   );
@@ -121,13 +134,62 @@ describe('a POST body over 1 MiB is refused with 413', () => {
       assert.equal(reply.status, 401);
       assert.equal(reply.taken, 0);
     });
-  }
 
-  it('/mcp/apps: a foreign Origin with a body of 8 MiB is refused, and no more than the limit is read after the answer', async () => {
-    const reply = await post({ path: '/mcp/apps', size: 8 * BODY_LIMIT, origin: 'https://evil.example' });
-    // The handler refuses the Origin without reading. The copy of the body may pass the limit before or after that answer.
-    assert.ok(reply.status === 403 || reply.status === 413, `status ${reply.status}`);
-    assert.ok(reply.taken <= BODY_LIMIT + 3 * PIECE, `${reply.taken} bytes were taken`);
-    assert.ok(reply.cancelled, 'the caller is no longer read');
+    it(`${path}: a body of 8 MiB that arrives as one piece is refused`, async () => {
+      const reply = await post({ path, size: 8 * BODY_LIMIT, piece: 8 * BODY_LIMIT });
+      assert.equal(reply.status, 413);
+      assert.deepEqual(JSON.parse(reply.text), REFUSAL);
+      assert.ok(reply.cancelled, 'the caller is no longer read');
+    });
+
+    it(`${path}: a foreign Origin with a body of 8 MiB that states no length keeps its 403, and the reading stops near the limit`, async () => {
+      const reply = await post({ path, size: 8 * BODY_LIMIT, origin: 'https://evil.example' });
+      assert.equal(reply.status, 403);
+      assert.ok(reply.taken <= BODY_LIMIT + 3 * PIECE, `${reply.taken} bytes were taken`);
+      assert.ok(reply.cancelled, 'the caller is no longer read');
+    });
+
+    it(`${path}: a foreign Origin that states a length over the limit is refused with 413 before any of the body is read`, async () => {
+      const reply = await post({ path, size: 8 * BODY_LIMIT, length: 8 * BODY_LIMIT, origin: 'https://evil.example' });
+      assert.equal(reply.status, 413);
+      assert.equal(reply.taken, 0);
+    });
+  }
+});
+
+describe('the counted request stands in for the original', () => {
+  const original = (signal?: AbortSignal) => {
+    const init: RequestInit & { duplex: 'half' } = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-arcmira-client': 'fixture', 'mcp-session-id': 'abc' },
+      body: body(100).stream,
+      duplex: 'half',
+      signal,
+    };
+    return new Request('https://mcp.arcmira.com/mcp/apps?listing=dir-example', init);
+  };
+
+  it('keeps the method, the address with its query and every header', async () => {
+    const request = original();
+    const sent = [...request.headers];
+    const { request: inbound, over } = counted(request);
+    assert.equal(inbound.method, 'POST');
+    assert.equal(inbound.url, 'https://mcp.arcmira.com/mcp/apps?listing=dir-example');
+    assert.deepEqual([...inbound.headers], sent);
+    assert.equal((await inbound.text()).trim(), MESSAGE);
+    assert.equal(over(), false);
+  });
+
+  it('is aborted when the original is', () => {
+    const controller = new AbortController();
+    const { request: inbound } = counted(original(controller.signal));
+    assert.equal(inbound.signal.aborted, false);
+    controller.abort(new Error('the caller left'));
+    assert.equal(inbound.signal.aborted, true);
+  });
+
+  it('is the original itself when there is no body', () => {
+    const request = new Request('https://mcp.arcmira.com/mcp', { method: 'POST' });
+    assert.equal(counted(request).request, request);
   });
 });
