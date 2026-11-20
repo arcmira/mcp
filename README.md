@@ -218,6 +218,10 @@ Each tool call is logged to Arcmira's product analytics (PostHog), linked to the
 
 Before the record is stored, the API replaces anything that looks like a credential or an email address (`arc_` keys, `Bearer` tokens, `sk-` keys, addresses) with `[redacted]`. Results, transcript text and logs printed by a program are never logged. A call with no valid credential is not logged. The record is sent after the result, so logging never delays or changes an answer; a record that fails to send is dropped.
 
+When a host connects (`initialize`) and when it reads the tool list (`tools/list`), the server writes one line to its own request log. The line holds the server version and the endpoint, and these when the request or its credential check supplied them: the account of an account key, or the person and the registered OAuth client of a sign-in, the host's name and version (at most 120 characters), the first token of its user agent, and the source tag on the address. It holds nothing else from the request. A request with no valid credential, or one the server refuses, writes no line.
+
+A listing can give out the server address with a source tag, `https://mcp.arcmira.com/mcp?listing=<tag>`. The server sends the tag to the API with each call as `x-arcmira-listing`, so we can count the accounts a listing sends. The tag changes nothing else.
+
 ## Upgrading
 
 Upgrade notes for every release, the 0.7 tool renames and the 0.10 field changes included, are in [CHANGELOG.md](CHANGELOG.md).

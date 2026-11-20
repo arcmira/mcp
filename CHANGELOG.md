@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.22: a source tag on the server address, and a log line when a host loads the server
+
+- A listing can give out the server address with a source tag, `https://mcp.arcmira.com/mcp?listing=<tag>`. The server sends the tag to the API as `x-arcmira-listing` on every API read or write a tool call makes, from a plain tool or from a program. The record of the call that the server posts afterwards carries no tag. A program cannot set the header itself. The API decides which tags it knows.
+- A tag is one value of lowercase letters, digits and hyphens, at most 40 characters. An address with any other value, or with two values, is read as the bare address.
+- On `/mcp`, the tag stays on the address through sign-in. The 401 of a tagged address names `/.well-known/oauth-protected-resource?listing=<tag>`, and that document's `resource` is the tagged address. `/mcp/apps` answers with its bare address at sign-in. Its calls still carry the tag.
+- The bare address works as before. Its 401, its document and the headers its calls send are unchanged.
+- When a host sends `initialize` or `tools/list` with a valid credential and the server answers it, the server writes one line to its request log. The README's "What we log" section lists what the line holds.
+- Tools and results are unchanged. There are still six tools.
+
 ## 0.10.21: a first question in the Claude Code plugin
 
 - The Claude Code plugin adds `/arcmira:try`. It asks a first question through `arcmira_describe` and `arcmira_execute_read`: where people on YouTube disagree about a topic, with three exact quotes, each linked to the second it was said. `/arcmira:try OpenAI Codex` asks about a topic of your own. With no topic, the agent picks one from your work.

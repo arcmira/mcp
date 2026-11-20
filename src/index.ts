@@ -1,7 +1,7 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { createMcpHandler } from 'agents/mcp/server';
 import pkg from '../package.json' with { type: 'json' };
-import { CLIENT_HEADER, DEFAULT_API_BASE, apiKeyOf, createApiClient, type Env as ApiEnv } from './api.ts';
+import { CLIENT_HEADER, DEFAULT_API_BASE, apiKeyOf, createApiClient, listingOf, type Env as ApiEnv } from './api.ts';
 import {
   AuthUnavailable,
   AUTHORIZATION_SERVER_PATH,
@@ -10,15 +10,17 @@ import {
   challenge,
   isOAuthBearer,
   keyFailure,
+  ownerOf,
   protectedResourceMetadata,
   tokenIsLive,
 } from './auth.ts';
 import { ICON_PATH, SERVER_CARD_PATHS, serverCardResponse } from './card.ts';
+import { hostLoadLines } from './host-load.ts';
 import { OPENAI_APPS_CHALLENGE, OPENAI_APPS_CHALLENGE_PATH } from './openai-challenge.ts';
 import { APPS_PATH, MCP_PATH, SURFACES, createServer, isRetiredTool, retiredToolResult, type CallTag } from './server.ts';
 import { forward, type OutboundProps } from './outbound.ts';
 import type { Access, SandboxHost } from './sandbox.ts';
-import { toolCallRecorder } from './telemetry.ts';
+import { agentToken, toolCallRecorder } from './telemetry.ts';
 import { TOOL_NAMES } from './tools.ts';
 
 // Every named export of the entry module is an entrypoint to workerd: keep it to the default handler and ApiOutbound.
@@ -60,13 +62,18 @@ function landing(): Response {
   });
 }
 
-/** A tools/call for a retired tool name, so a host with a cached tool list learns the current tools instead of "not found". */
-async function retiredCall(request: Request): Promise<Response | null> {
+/** The JSON body of a POST, read from a copy so the MCP handler still gets the request whole. Null for any other request. */
+async function bodyOf(request: Request): Promise<unknown> {
   if (request.method !== 'POST') return null;
-  const body = (await request
+  return request
     .clone()
     .json()
-    .catch(() => null)) as {
+    .catch(() => null);
+}
+
+/** A tools/call for a retired tool name, so a host with a cached tool list learns the current tools instead of "not found". */
+function retiredCall(message: unknown): Response | null {
+  const body = message as {
     id?: unknown;
     method?: string;
     params?: { name?: string };
@@ -81,7 +88,7 @@ async function retiredCall(request: Request): Promise<Response | null> {
 }
 
 /** One sandbox per tool call, so the outbound tags each upstream request with that call. */
-function sandboxFor(env: Env, ctx: ExecutionContext, key: string, inboundClient: string | null): ((call: CallTag, access: Access) => SandboxHost) | null {
+function sandboxFor(env: Env, ctx: ExecutionContext, key: string, inboundClient: string | null, listing: string | null): ((call: CallTag, access: Access) => SandboxHost) | null {
   const loader = env.LOADER;
   if (!loader) return null;
   const { exports } = ctx as unknown as {
@@ -89,7 +96,7 @@ function sandboxFor(env: Env, ctx: ExecutionContext, key: string, inboundClient:
   };
   return (call, access) => ({
     loader,
-    outbound: exports.ApiOutbound({ props: { key, client: call.client ?? inboundClient, call: { id: call.id, tool: call.tool }, access } }),
+    outbound: exports.ApiOutbound({ props: { key, client: call.client ?? inboundClient, listing, call: { id: call.id, tool: call.tool }, access } }),
     apiBase: env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE,
     access,
   });
@@ -101,7 +108,9 @@ export default {
     const surface = SURFACES.get(url.pathname);
     if (surface !== undefined) {
       const key = apiKeyOf(request);
-      if (key === null) return challenge(url.origin, 'no_credential', surface.path);
+      // The source tag on a listing's copy of the address. It rides to the API on every call and back to the host in the sign-in challenge.
+      const listing = listingOf(url);
+      if (key === null) return challenge(url.origin, 'no_credential', surface.path, listing);
       let failure;
       try {
         failure = isOAuthBearer(key) ? ((await tokenIsLive(key, env)) ? null : 'invalid') : await keyFailure(key, env);
@@ -125,19 +134,39 @@ export default {
           },
         );
       }
-      if (failure !== null) return challenge(url.origin, failure, surface.path);
+      if (failure !== null) return challenge(url.origin, failure, surface.path, listing);
+      // Read from a copy and not awaited here: the MCP handler answers a request it refuses, a forbidden Origin for one, before its body ends.
+      const message = bodyOf(request);
       // The retired names were /mcp tools; /mcp/apps never served them.
-      const retired = surface.path === MCP_PATH ? await retiredCall(request) : null;
+      const retired = surface.path === MCP_PATH ? retiredCall(await message) : null;
       if (retired !== null) return retired;
       const client = request.headers.get(CLIENT_HEADER);
+      const deploy = env.CF_VERSION_METADATA?.id ?? null;
       const record = toolCallRecorder(env, ctx, request, key);
-      return createMcpHandler(() => createServer({ api: (call) => createApiClient(env, key, call), sandbox: sandboxFor(env, ctx, key, client), record }, env.CF_VERSION_METADATA?.id ?? null, surface), {
+      const response = await createMcpHandler(() => createServer({ api: (call) => createApiClient(env, key, call, listing), sandbox: sandboxFor(env, ctx, key, client, listing), record }, deploy, surface), {
         route: surface.path,
         allowedOriginHostnames: BROWSER_ORIGINS,
       })(request, env, ctx);
+      // A host-load line is written after the handler accepted the request, and never delays or changes the answer.
+      if (response.ok) {
+        try {
+          const owner = ownerOf(key) ?? { account_id: null, user_id: null, oauth_client_id: null };
+          const context = { ...owner, client, agent: agentToken(request.headers.get('user-agent')), release: pkg.version, deploy, path: surface.path, listing };
+          ctx.waitUntil(
+            message
+              .then((body) => {
+                for (const line of hostLoadLines(body, context)) console.log(JSON.stringify(line));
+              })
+              .catch(() => undefined),
+          );
+        } catch {
+          // A log line never changes what the host gets.
+        }
+      }
+      return response;
     }
     if (url.pathname === PROTECTED_RESOURCE_PATH || url.pathname === `${PROTECTED_RESOURCE_PATH}${MCP_PATH}`) {
-      return Response.json(protectedResourceMetadata(url.origin, env), { headers: { 'cache-control': 'public, max-age=300' } });
+      return Response.json(protectedResourceMetadata(url.origin, env, MCP_PATH, listingOf(url)), { headers: { 'cache-control': 'public, max-age=300' } });
     }
     if (url.pathname === `${PROTECTED_RESOURCE_PATH}${APPS_PATH}`) {
       return Response.json(protectedResourceMetadata(url.origin, env, APPS_PATH), { headers: { 'cache-control': 'public, max-age=300' } });
