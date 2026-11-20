@@ -45,6 +45,15 @@ function body(total: number, piece = PIECE) {
   return { stream, ended, taken: () => taken, cancelled: () => cancelled };
 }
 
+/** Settles as `promise` does, or fails with `what` when `ms` pass first. */
+function within<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(what)), ms);
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
+
 interface Sent {
   path: string;
   size: number;
@@ -73,7 +82,7 @@ async function post({ path, size, length, piece, origin, credential = true }: Se
       const text = await response.text();
       await Promise.all(deferred);
       // A body that anything began to read is read to its end or stopped. A copy may do that after an early answer.
-      if (source.taken() > 0) await source.ended;
+      if (source.taken() > 0) await within(source.ended, 5000, 'the body was neither read to its end nor stopped');
       return { status: response.status, text, taken: source.taken(), cancelled: source.cancelled() };
     },
   );
