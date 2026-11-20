@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.23: requests over 1 MiB are refused
+
+- A POST to `/mcp` or `/mcp/apps` with a body over 1 MiB is refused with HTTP 413.
+
 ## 0.10.22: a source tag on the server address, and a log line when a host loads the server
 
 - A listing can give out the server address with a source tag, `https://mcp.arcmira.com/mcp?listing=<tag>`. The server sends the tag to the API as `x-arcmira-listing` on every API read or write a tool call makes, from a plain tool or from a program. The record of the call that the server posts afterwards carries no tag. A program cannot set the header itself. The API decides which tags it knows.

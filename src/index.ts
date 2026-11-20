@@ -14,6 +14,7 @@ import {
   protectedResourceMetadata,
   tokenIsLive,
 } from './auth.ts';
+import { counted, declaresTooLarge, tooLarge } from './body-limit.ts';
 import { ICON_PATH, SERVER_CARD_PATHS, serverCardResponse } from './card.ts';
 import { hostLoadLines } from './host-load.ts';
 import { OPENAI_APPS_CHALLENGE, OPENAI_APPS_CHALLENGE_PATH } from './openai-challenge.ts';
@@ -135,8 +136,11 @@ export default {
         );
       }
       if (failure !== null) return challenge(url.origin, failure, surface.path, listing);
+      // A POST that states a length over the limit is refused before any of its body is read. Every other POST body is read through a counter.
+      if (request.method === 'POST' && declaresTooLarge(request)) return tooLarge();
+      const { request: inbound, over } = request.method === 'POST' ? counted(request) : { request, over: () => false };
       // Read from a copy and not awaited here: the MCP handler answers a request it refuses, a forbidden Origin for one, before its body ends.
-      const message = bodyOf(request);
+      const message = bodyOf(inbound);
       // The retired names were /mcp tools; /mcp/apps never served them.
       const retired = surface.path === MCP_PATH ? retiredCall(await message) : null;
       if (retired !== null) return retired;
@@ -146,7 +150,9 @@ export default {
       const response = await createMcpHandler(() => createServer({ api: (call) => createApiClient(env, key, call, listing), sandbox: sandboxFor(env, ctx, key, client, listing), record }, deploy, surface), {
         route: surface.path,
         allowedOriginHostnames: BROWSER_ORIGINS,
-      })(request, env, ctx);
+      })(inbound, env, ctx);
+      // The handler read a body that the counter ended. Its own answer would call the cut body bad JSON.
+      if (over()) return tooLarge();
       // A host-load line is written after the handler accepted the request, and never delays or changes the answer.
       if (response.ok) {
         try {
