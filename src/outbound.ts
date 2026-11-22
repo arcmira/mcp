@@ -1,9 +1,11 @@
-import { CALL_HEADER, CLIENT_HEADER, DEFAULT_API_BASE, READ_ONLY_HEADER, SRC, TOOL_HEADER, USER_AGENT, type Env } from './api.ts';
+import { CALL_HEADER, CLIENT_HEADER, DEFAULT_API_BASE, LISTING_HEADER, READ_ONLY_HEADER, SRC, TOOL_HEADER, USER_AGENT, type Env } from './api.ts';
 import { outboundAllowed, type Access } from './sandbox.ts';
 
 export interface OutboundProps {
   key: string;
   client: string | null;
+  /** The source tag on the address the host connected to, sent upstream beside the host. Absent or null means none. */
+  listing?: string | null;
   /** The tool call this program runs for; sent upstream so the API's request events join its span. */
   call?: { id: string; tool: string };
   /** Which allowlist applies. Absent means read. */
@@ -82,6 +84,7 @@ export async function forward(request: Request, env: Env, props: OutboundProps, 
   const idempotencyKey = request.headers.get('idempotency-key');
   if (body !== undefined && idempotencyKey !== null && IDEMPOTENCY_KEY.test(idempotencyKey)) headers.set('idempotency-key', idempotencyKey);
   if (props.client) headers.set(CLIENT_HEADER, props.client);
+  if (props.listing) headers.set(LISTING_HEADER, props.listing);
   if (props.call) {
     headers.set(CALL_HEADER, props.call.id);
     headers.set(TOOL_HEADER, props.call.tool);

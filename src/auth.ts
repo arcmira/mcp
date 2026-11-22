@@ -1,4 +1,4 @@
-import { DEFAULT_API_BASE, SRC, USER_AGENT, noKeyError, type CredentialFailure, type Env } from './api.ts';
+import { DEFAULT_API_BASE, LISTING_PARAM, SRC, USER_AGENT, noKeyError, type CredentialFailure, type Env } from './api.ts';
 import { MCP_PATH } from './server.ts';
 import { APPS_SURFACE, PROGRAM_SURFACE } from './surface.ts';
 
@@ -40,10 +40,20 @@ export function apiBase(env: Env): string {
   return (env.ARCMIRA_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, '');
 }
 
+/**
+ * A URL of the `/mcp` endpoint with the source tag the host's address carried. RFC 9728 has a client compare the
+ * document's `resource` with the URL it called, so a host that connected to a tagged address reads the same address
+ * back and names it at sign-in, where the API reads the tag. Only `/mcp` keeps the tag: the API accepts a tagged
+ * `resource` for that endpoint alone, so `/mcp/apps` answers with its bare address.
+ */
+function tagged(url: string, path: string, listing: string | null): string {
+  return listing !== null && path === MCP_PATH ? `${url}?${LISTING_PARAM}=${listing}` : url;
+}
+
 /** The protected-resource document for one MCP path; `resource` is that path's own URL, as RFC 9728 requires. */
-export function protectedResourceMetadata(origin: string, env: Env, path: string = MCP_PATH): Record<string, unknown> {
+export function protectedResourceMetadata(origin: string, env: Env, path: string = MCP_PATH, listing: string | null = null): Record<string, unknown> {
   return {
-    resource: `${origin}${path}`,
+    resource: tagged(`${origin}${path}`, path, listing),
     authorization_servers: [apiBase(env)],
     bearer_methods_supported: ['header'],
     scopes_supported: path === MCP_PATH ? SERVER_SCOPES : APPS_SCOPES,
@@ -57,7 +67,7 @@ export function isOAuthBearer(key: string | null): key is string {
 }
 
 /** The 401 that starts the OAuth dance. The body names the sign-up, for a host that cannot run it. */
-export function challenge(origin: string, reason: CredentialFailure = 'no_credential', path: string = MCP_PATH): Response {
+export function challenge(origin: string, reason: CredentialFailure = 'no_credential', path: string = MCP_PATH, listing: string | null = null): Response {
   const error = (path === MCP_PATH ? PROGRAM_SURFACE : APPS_SURFACE).error(noKeyError(reason));
   return Response.json(
     {
@@ -70,7 +80,7 @@ export function challenge(origin: string, reason: CredentialFailure = 'no_creden
       headers: {
         'WWW-Authenticate':
           path === MCP_PATH
-            ? `Bearer resource_metadata="${origin}${PROTECTED_RESOURCE_PATH}"`
+            ? `Bearer resource_metadata="${tagged(`${origin}${PROTECTED_RESOURCE_PATH}`, path, listing)}"`
             : `Bearer resource_metadata="${origin}${PROTECTED_RESOURCE_PATH}${path}", scope="${APPS_SCOPES.join(' ')}"`,
         'Access-Control-Expose-Headers': 'WWW-Authenticate',
       },
@@ -94,18 +104,37 @@ export async function authorizationServerMetadata(env: Env): Promise<Response> {
 }
 
 /**
+ * Whose credential a request carries, as the check that admitted it answered: the account for an account key, the
+ * person and the registered OAuth client for a sign-in. For the host-load log lines only; nothing is decided on it.
+ */
+export interface Owner {
+  account_id: string | null;
+  user_id: string | null;
+  oauth_client_id: string | null;
+}
+
+interface Live {
+  until: number;
+  owner: Owner;
+}
+
+const text = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value.slice(0, 120) : null);
+
+/**
  * Live tokens by value, until the earlier of their own expiry and five minutes, per isolate. A
  * token the backend does not know is not cached, so a fresh one is accepted on its first use.
  */
-const live = new Map<string, number>();
+const live = new Map<string, Live>();
 
 interface SessionRow {
   accessTokenExpiresAt?: string | number;
+  userId?: unknown;
+  clientId?: unknown;
 }
 
 export async function tokenIsLive(token: string, env: Env, now = Date.now()): Promise<boolean> {
   const cached = live.get(token);
-  if (cached !== undefined && cached > now) return true;
+  if (cached !== undefined && cached.until > now) return true;
   live.delete(token);
   const response = await fetch(`${apiBase(env)}${SESSION_PATH}`, {
     redirect: 'manual',
@@ -128,7 +157,7 @@ export async function tokenIsLive(token: string, env: Env, now = Date.now()): Pr
   const expiry = row.accessTokenExpiresAt === undefined ? Number.NaN : new Date(row.accessTokenExpiresAt).getTime();
   const until = Math.min(now + CACHE_TTL_MS, Number.isFinite(expiry) ? expiry : now + CACHE_TTL_MS);
   if (until <= now) return false;
-  live.set(token, until);
+  live.set(token, { until, owner: { account_id: null, user_id: text(row.userId), oauth_client_id: text(row.clientId) } });
   return true;
 }
 
@@ -138,7 +167,7 @@ export async function tokenIsLive(token: string, env: Env, now = Date.now()): Pr
  * lands all mean a real key the API will not serve right now, and answering those with the 401
  * that starts the OAuth dance teaches a host to re-authenticate in a loop that cannot succeed.
  */
-const liveKeys = new Map<string, number>();
+const liveKeys = new Map<string, Live>();
 
 /**
  * Null for a key v1 serves, otherwise why it refused: v1's own `error.reason` when the 401 carries
@@ -147,7 +176,7 @@ const liveKeys = new Map<string, number>();
  */
 export async function keyFailure(key: string, env: Env, now = Date.now()): Promise<CredentialFailure | null> {
   const cached = liveKeys.get(key);
-  if (cached !== undefined && cached > now) return null;
+  if (cached !== undefined && cached.until > now) return null;
   liveKeys.delete(key);
   const response = await fetch(`${apiBase(env)}${ME_PATH}`, {
     redirect: 'manual',
@@ -169,8 +198,15 @@ export async function keyFailure(key: string, env: Env, now = Date.now()): Promi
   if (response.status === 429 || response.status >= 500 || (response.status >= 300 && response.status < 400))
     throw new AuthUnavailable(response.status === 429 ? 429 : 503, response.headers.get('retry-after'));
   if (!response.ok) return null;
-  liveKeys.set(key, now + CACHE_TTL_MS);
+  const me = (await response.json().catch(() => null)) as { account?: { id?: unknown } } | null;
+  liveKeys.set(key, { until: now + CACHE_TTL_MS, owner: { account_id: text(me?.account?.id), user_id: null, oauth_client_id: null } });
   return null;
+}
+
+/** The owner of a credential the last check admitted, while that check is still cached. Null for any other. */
+export function ownerOf(key: string, now = Date.now()): Owner | null {
+  const cached = (isOAuthBearer(key) ? live : liveKeys).get(key);
+  return cached !== undefined && cached.until > now ? cached.owner : null;
 }
 
 /** The src every unlock link carries is the same one v1 sees, so the funnel joins. */
