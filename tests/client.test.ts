@@ -387,3 +387,19 @@ describe('Premium reads in the sandbox client', () => {
     }
   });
 });
+
+describe('the reference notes', () => {
+  it('say the search order, and every client method a note names exists', async () => {
+    const { METHODS } = await import('../src/reference.ts');
+    const search = METHODS.find((m) => m.name === 'search');
+    assert.ok(search?.notes.includes('Chunks are ranked by relevance to query, not by date. For recent passages, pass after, for example arcmira.daysAgo(7). For the newest mentions of a person or brand, call mentions, which lists rows newest first.'));
+    assert.ok(METHODS.some((m) => m.name === 'mentions'), 'mentions is a documented method');
+    const { arcmira } = mod.createArcmira({ base: 'https://api.arcmira.com', fetch: recording().fetch, now: () => new Date('2026-09-30T12:00:00Z') });
+    for (const method of METHODS) {
+      for (const note of method.notes ?? []) {
+        for (const [, name] of note.matchAll(/arcmira\.(\w+)\(/g)) assert.equal(typeof (arcmira as Record<string, unknown>)[name], 'function', `${method.name} notes name arcmira.${name}`);
+      }
+    }
+    assert.equal(arcmira.daysAgo(7), '2026-09-23');
+  });
+});

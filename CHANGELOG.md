@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.24: the search reference says the order
+
+- The `search` reference has a third note: "Chunks are ranked by relevance to query, not by date. For recent passages, pass after, for example arcmira.daysAgo(7). For the newest mentions of a person or brand, call mentions, which lists rows newest first."
+- A test ties the note to the reference and checks that every client method a reference note names exists.
+- Tools, results and the server are unchanged. There are still six tools.
+
 ## 0.10.23: requests over 1 MiB are refused
 
 - A POST to `/mcp` or `/mcp/apps` with a body over 1 MiB is refused with HTTP 413.
